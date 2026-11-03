@@ -52,7 +52,8 @@ NEXT_PUBLIC_SITE_URL=                   # e.g. https://example.com/budget
 - Hosted setup needs a custom SMTP provider: Supabase's built-in mailer only sends to the project's own team members and is heavily rate-limited.
 - Bot protection: set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to show a Cloudflare Turnstile check on sign-in and sign-up (the token also goes with "send the link again"). It only helps when captcha protection is also turned on in the Supabase dashboard (Authentication > Bot and Abuse Protection) with the Turnstile secret; also lower the email rate limit there. Without both, anyone can trigger confirmation emails to any address.
 - Confirmation redirects use `NEXT_PUBLIC_SITE_URL` (not the request's own address, which is internal behind a proxy or in Docker).
-- Not built yet: password reset / forgot-password, account deletion.
+- Password reset: `/[locale]/forgot-password` emails a link (always the same "link is on its way" answer, with the bot check); the link goes through `/auth/confirm` with `type=recovery`, which signs the person in and sends them to `/[locale]/reset-password` to choose a new password. Paste `supabase/templates/recovery.html` into Supabase (Authentication > Emails > Templates > Reset password).
+- Not built yet: account deletion, a "change password" screen in Settings.
 - Later option: passkeys / WebAuthn.
 
 ## 4. Folder structure

@@ -6,7 +6,7 @@ import { refreshSession, supabaseConfigured } from "./lib/supabase/proxy";
 const intl = createIntlMiddleware(routing);
 
 // Pages a signed-out visitor may open. A signed-in one is sent into the app instead.
-const PUBLIC = /^\/(en|ar)\/(sign-in|sign-up|check-email)\/?$/;
+const PUBLIC = /^\/(en|ar)\/(sign-in|sign-up|check-email|forgot-password)\/?$/;
 
 export async function proxy(request: NextRequest) {
   const response = intl(request);
@@ -31,7 +31,7 @@ export async function proxy(request: NextRequest) {
   }
   if (email && PUBLIC.test(pathname)) {
     const url = request.nextUrl.clone();
-    url.pathname = pathname.replace(/\/(sign-in|sign-up|check-email)\/?$/, "");
+    url.pathname = pathname.replace(/\/(sign-in|sign-up|check-email|forgot-password)\/?$/, "");
     return NextResponse.redirect(url);
   }
   return response;

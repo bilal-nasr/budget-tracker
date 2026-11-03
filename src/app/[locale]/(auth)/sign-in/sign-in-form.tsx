@@ -71,6 +71,9 @@ export function SignInForm() {
         required
         dir="ltr"
       />
+      <Link href="/forgot-password" className="-mt-2 inline-flex min-h-11 items-center self-start text-[15px] font-medium text-primary underline underline-offset-4">
+        {t("forgot")}
+      </Link>
       <Captcha key={attempt} />
       {message ? (
         <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">

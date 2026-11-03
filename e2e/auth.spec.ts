@@ -63,3 +63,66 @@ test("the confirm route rejects a missing token and sends people to sign-in", as
   expect(location).toMatch(/\/en\/sign-in\?error=link$/);
   expect(location).not.toContain("evil.com");
 });
+
+test("sign-in links to forgot password", async ({ page }) => {
+  await page.goto("/en/sign-in");
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(page).toHaveURL(/\/en\/forgot-password/);
+  await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+});
+
+test("forgot password asks only for an email, and refuses a bad one", async ({ page }) => {
+  await page.goto("/en/forgot-password");
+  await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", "email");
+  await page.getByLabel("Email").fill("not-an-email");
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText("valid email");
+});
+
+test("a valid reset request without a database says it is not set up", async ({ page }) => {
+  await page.goto("/en/forgot-password");
+  await page.getByLabel("Email").fill("someone@example.test");
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText("not set up");
+});
+
+test("an expired reset link asks for a new one", async ({ page }) => {
+  await page.goto("/en/forgot-password?error=link");
+  await expect(page.locator("form").getByRole("alert")).toContainText("expired or was already used");
+});
+
+test("new password needs two matching passwords of at least 8 characters", async ({ page }) => {
+  await page.goto("/en/reset-password");
+  await expect(page.getByLabel("New password", { exact: true })).toHaveAttribute("autocomplete", "new-password");
+  await page.getByLabel("New password", { exact: true }).fill("short");
+  await page.getByLabel("Repeat the new password").fill("short");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText("at least 8 characters");
+
+  await page.getByLabel("New password", { exact: true }).fill("a-long-enough-password");
+  await page.getByLabel("Repeat the new password").fill("a-different-password");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText("do not match");
+
+  await page.getByLabel("New password", { exact: true }).fill("a-long-enough-password");
+  await page.getByLabel("Repeat the new password").fill("a-long-enough-password");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText("not set up");
+});
+
+test("arabic forgot and reset pages are RTL with LTR fields and no overflow", async ({ page }) => {
+  for (const route of ["forgot-password", "reset-password"]) {
+    await page.goto(`/ar/${route}`);
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    expect(await page.locator("input[name=email], input[name=password]").first().evaluate((el) => getComputedStyle(el).direction)).toBe("ltr");
+    await expectNoHorizontalOverflow(page);
+  }
+});
+
+test("a bad reset link goes back to ask for a new one, never to another site", async ({ request }) => {
+  const res = await request.get("/auth/confirm?type=recovery&next=//evil.com", { maxRedirects: 0 });
+  expect(res.status()).toBe(307);
+  const location = res.headers()["location"];
+  expect(location).toMatch(/\/en\/forgot-password\?error=link$/);
+  expect(location).not.toContain("evil.com");
+});

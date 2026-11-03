@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./support";
 
-const ROUTES = ["", "/activity", "/budgets", "/wallets", "/settings", "/sign-in", "/sign-up", "/check-email", "/onboarding"];
+const ROUTES = ["", "/activity", "/budgets", "/wallets", "/settings", "/sign-in", "/sign-up", "/check-email", "/forgot-password", "/reset-password", "/onboarding"];
 
 for (const locale of ["en", "ar"] as const) {
   for (const route of ROUTES) {

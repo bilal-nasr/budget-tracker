@@ -102,6 +102,7 @@
     "saveFailed": "Could not save. Try again."
   },
   "SignIn": {
+    "forgot": "Forgot password?",
     "errorCaptcha": "Complete the security check, then try again.",
     "title": "Sign in",
     "body": "Your private budget.",
@@ -142,6 +143,37 @@
     "body": "We sent you a link to confirm your account.",
     "help": "Open the link on this device to finish. It can take a minute, and it may be in your spam folder.",
     "toSignIn": "Back to sign in"
+  },
+  "ForgotPassword": {
+    "title": "Reset your password",
+    "body": "We will email you a link to choose a new one.",
+    "email": "Email",
+    "submit": "Send reset link",
+    "submitting": "Sending…",
+    "toSignIn": "Back to sign in",
+    "sent": "If that email has an account, a reset link is on its way.",
+    "sentHelp": "Open the link on this device. It can take a minute, and it may be in your spam folder.",
+    "errorInvalid": "Enter a valid email address.",
+    "errorCaptcha": "Complete the security check, then try again.",
+    "errorNotConfigured": "Password reset is not set up on this server yet.",
+    "errorFailed": "Could not send the link. Try again.",
+    "errorLink": "That link has expired or was already used. Ask for a new one."
+  },
+  "ResetPassword": {
+    "title": "Choose a new password",
+    "body": "Use at least 8 characters.",
+    "password": "New password",
+    "confirm": "Repeat the new password",
+    "passwordHelp": "At least 8 characters.",
+    "showPassword": "Show passwords",
+    "hidePassword": "Hide passwords",
+    "submit": "Save password",
+    "submitting": "Saving…",
+    "errorPassword": "Use a new password of at least 8 characters.",
+    "errorMismatch": "The two passwords do not match.",
+    "errorInvalid": "Enter your new password twice.",
+    "errorNotConfigured": "Password reset is not set up on this server yet.",
+    "errorFailed": "Could not save the password. Ask for a new link and try again."
   },
   "Onboarding": {
     "title": "Welcome",

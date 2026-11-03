@@ -3,7 +3,7 @@ import { safeNext, siteBase } from "@/features/auth/redirect";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * The link in the confirmation email lands here. Verifying the token signs the
+ * The link in the confirmation and password-reset emails lands here. Verifying the token signs the
  * person in, then they continue to `next` (onboarding for a new account).
  * This route sits outside [locale] so the locale proxy does not rewrite it.
  */
@@ -15,11 +15,12 @@ export async function GET(request: NextRequest) {
   const next = safeNext(searchParams.get("next"), origin);
   const locale = next.startsWith("/ar") ? "ar" : "en";
 
-  if (tokenHash && type === "email") {
+  if (tokenHash && (type === "email" || type === "recovery")) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.verifyOtp({ type: "email", token_hash: tokenHash });
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) return NextResponse.redirect(new URL(next, origin));
   }
-  // Expired, reused or malformed link.
-  return NextResponse.redirect(new URL(`/${locale}/sign-in?error=link`, origin));
+  // Expired, reused or malformed link. A reset link goes back to ask for a new one.
+  const retry = type === "recovery" ? "forgot-password" : "sign-in";
+  return NextResponse.redirect(new URL(`/${locale}/${retry}?error=link`, origin));
 }

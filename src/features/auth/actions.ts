@@ -5,6 +5,7 @@ import { siteBase } from "@/features/auth/redirect";
 import { redirect } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { createClient } from "@/lib/supabase/server";
+import { getUserId } from "@/lib/supabase/user";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 
 export type SignInState = {
@@ -13,6 +14,16 @@ export type SignInState = {
 
 export type SignUpState = {
   error: "invalid" | "notConfigured" | "weakPassword" | "captcha" | "failed" | null;
+};
+
+export type ForgotPasswordState = {
+  error: "invalid" | "notConfigured" | "captcha" | "failed" | null;
+  /** True once the request was accepted. Shown for any email, so it reveals nothing. */
+  sent: boolean;
+};
+
+export type ResetPasswordState = {
+  error: "invalid" | "weakPassword" | "mismatch" | "notConfigured" | "failed" | null;
 };
 
 const localeSchema = z.enum(routing.locales);
@@ -106,6 +117,75 @@ export async function signUp(_prev: SignUpState, formData: FormData): Promise<Si
     return { error: "failed" };
   }
   redirect({ href: "/check-email", locale });
+  return { error: null };
+}
+
+/** Where the reset email sends people: our confirm route, then the new-password page. */
+const resetUrl = (locale: string) =>
+  `${siteBase(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000")}/auth/confirm?next=/${locale}/reset-password`;
+
+/**
+ * "Forgot password": emails a reset link. Whether or not the address has an
+ * account the person sees the same "link is on its way" message, so the form
+ * never reveals who has an account.
+ */
+export async function requestPasswordReset(
+  _prev: ForgotPasswordState,
+  formData: FormData,
+): Promise<ForgotPasswordState> {
+  const parsed = z
+    .object({ email: emailSchema, locale: localeSchema })
+    .safeParse({ email: formData.get("email"), locale: formData.get("locale") });
+  if (!parsed.success) return { error: "invalid", sent: false };
+  if (!supabaseConfigured()) return { error: "notConfigured", sent: false };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: resetUrl(parsed.data.locale),
+    captchaToken: captchaTokenOf(formData),
+  });
+  if (error && isCaptchaError(error)) return { error: "captcha", sent: false };
+  // Any other failure (including rate limits) looks the same as success to the visitor.
+  if (error) console.error("[requestPasswordReset]", error.code);
+  return { error: null, sent: true };
+}
+
+const resetSchema = z.object({
+  password: z.string().min(8).max(72),
+  confirm: z.string(),
+  locale: localeSchema,
+});
+
+/**
+ * Sets a new password. Only reachable with a session, which the reset link
+ * creates (and a signed-in person has anyway), so this cannot be used to
+ * change someone else's password.
+ */
+export async function updatePassword(
+  _prev: ResetPasswordState,
+  formData: FormData,
+): Promise<ResetPasswordState> {
+  const locale = localeSchema.catch(routing.defaultLocale).parse(formData.get("locale"));
+  const parsed = resetSchema.safeParse({
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+    locale,
+  });
+  if (!parsed.success) {
+    const weak = parsed.error.issues.some((i) => i.path[0] === "password");
+    return { error: weak ? "weakPassword" : "invalid" };
+  }
+  if (parsed.data.password !== parsed.data.confirm) return { error: "mismatch" };
+  if (!supabaseConfigured()) return { error: "notConfigured" };
+  if (!(await getUserId())) return { error: "failed" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error) {
+    if (error.code === "weak_password" || error.code === "same_password") return { error: "weakPassword" };
+    return { error: "failed" };
+  }
+  redirect({ href: "/", locale });
   return { error: null };
 }
 

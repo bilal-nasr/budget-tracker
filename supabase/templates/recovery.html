@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#eceeea;font-family:Arial,Helvetica,sans-serif;color:#14211f;">
+    <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px;">
+      <h1 style="font-size:20px;margin:0 0 12px;">Reset your Budget Tracker password</h1>
+      <p style="font-size:16px;line-height:1.5;margin:0 0 20px;">
+        Tap the button to choose a new password. The link works once and expires soon.
+      </p>
+      <p style="margin:0 0 24px;">
+        <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery"
+           style="display:inline-block;background:#0f4c4a;color:#f4f7f3;text-decoration:none;font-weight:bold;padding:14px 22px;border-radius:10px;">
+          Choose a new password
+        </a>
+      </p>
+      <p style="font-size:13px;color:#4f625f;margin:0;">If you did not ask for this, you can ignore this email. Your password stays the same.</p>
+
+      <hr style="border:0;border-top:1px solid #d3dad4;margin:24px 0;">
+
+      <div dir="rtl" style="text-align:right;">
+        <h1 style="font-size:20px;margin:0 0 12px;">إعادة تعيين كلمة المرور في متتبع الميزانية</h1>
+        <p style="font-size:16px;line-height:1.5;margin:0 0 20px;">
+          اضغط الزر لاختيار كلمة مرور جديدة. الرابط يعمل مرة واحدة وتنتهي صلاحيته قريباً.
+        </p>
+        <p style="margin:0 0 24px;">
+          <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery"
+             style="display:inline-block;background:#0f4c4a;color:#f4f7f3;text-decoration:none;font-weight:bold;padding:14px 22px;border-radius:10px;">
+            اختيار كلمة مرور جديدة
+          </a>
+        </p>
+        <p style="font-size:13px;color:#4f625f;margin:0;">إذا لم تطلب ذلك، يمكنك تجاهل هذه الرسالة. تبقى كلمة مرورك كما هي.</p>
+      </div>
+    </div>
+  </body>
+</html>
