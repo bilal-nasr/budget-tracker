@@ -33,9 +33,14 @@ const captchaTokenOf = (formData: FormData): string | undefined => {
 const isCaptchaError = (error: { code?: string; message?: string }) =>
   error.code === "captcha_failed" || /captcha/i.test(error.message ?? "");
 
-/** Where the confirmation email sends people: back into the app, onboarding first. */
-const onboardingUrl = (locale: string) =>
-  `${siteBase(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000")}/${locale}/onboarding`;
+/**
+ * The link target for the confirmation email: our own confirm route, with the
+ * page to continue to. The email template appends the token to this URL, so the
+ * link never depends on the project's Site URL setting. It must be on the
+ * Supabase redirect allow-list (https://<domain>/**), or Supabase replaces it.
+ */
+const confirmUrl = (locale: string) =>
+  `${siteBase(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000")}/auth/confirm?next=/${locale}/onboarding`;
 
 /**
  * Sign-in with email and password. A wrong password and an unknown email give
@@ -93,7 +98,7 @@ export async function signUp(_prev: SignUpState, formData: FormData): Promise<Si
   const { error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
-    options: { emailRedirectTo: onboardingUrl(locale), captchaToken: captchaTokenOf(formData) },
+    options: { emailRedirectTo: confirmUrl(locale), captchaToken: captchaTokenOf(formData) },
   });
   if (error) {
     if (isCaptchaError(error)) return { error: "captcha" };
@@ -116,7 +121,7 @@ export async function resendConfirmation(
   await supabase.auth.resend({
     type: "signup",
     email: parsed.data.email,
-    options: { emailRedirectTo: onboardingUrl(parsed.data.locale), captchaToken: captchaToken || undefined },
+    options: { emailRedirectTo: confirmUrl(parsed.data.locale), captchaToken: captchaToken || undefined },
   });
   return { ok: true };
 }

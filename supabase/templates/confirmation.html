@@ -7,7 +7,7 @@
         Tap the button to confirm your email and start tracking.
       </p>
       <p style="margin:0 0 24px;">
-        <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next={{ .RedirectTo }}"
+        <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email"
            style="display:inline-block;background:#0f4c4a;color:#f4f7f3;text-decoration:none;font-weight:bold;padding:14px 22px;border-radius:10px;">
           Confirm email
         </a>
@@ -22,7 +22,7 @@
           اضغط الزر لتأكيد بريدك الإلكتروني والبدء بالتتبع.
         </p>
         <p style="margin:0 0 24px;">
-          <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next={{ .RedirectTo }}"
+          <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email"
              style="display:inline-block;background:#0f4c4a;color:#f4f7f3;text-decoration:none;font-weight:bold;padding:14px 22px;border-radius:10px;">
             تأكيد البريد
           </a>
