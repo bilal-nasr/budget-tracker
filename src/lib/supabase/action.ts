@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./server";
 import { supabaseConfigured } from "./proxy";
 
-export type ActionError = "invalid" | "notConfigured" | "failed" | "hasTransactions";
+export type ActionError = "invalid" | "notConfigured" | "failed" | "hasTransactions" | "inUse";
 export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: ActionError };
 
 /** Signed-in Supabase client for a Server Action, or the reason there is none. */

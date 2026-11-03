@@ -30,7 +30,7 @@ test("navigation matches the screen size and Add opens the sheet", async ({ page
   }
   await expect(page.getByRole("link", { name: "Home" }).filter({ visible: true })).toHaveAttribute("aria-current", "page");
 
-  await page.getByRole("button", { name: "Add" }).filter({ visible: true }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).filter({ visible: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expectNoHorizontalOverflow(page);

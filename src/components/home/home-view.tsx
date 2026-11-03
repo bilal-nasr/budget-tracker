@@ -8,15 +8,25 @@ import { EmptyState } from "@/components/shell/empty-state";
 import { PageBody } from "@/components/shell/page-body";
 import { ScreenHeader } from "@/components/shell/screen-header";
 import { TransactionRow } from "@/components/transactions/transaction-row";
+import { FixedCard } from "@/components/fixed/fixed-card";
 import { SalaryCard } from "@/components/salary/salary-card";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
+import type { FixedExpense } from "@/features/fixed/schema";
 import type { SalaryStatus } from "@/features/salary/schema";
 import type { Transaction } from "@/features/transactions/schema";
 import { totalsByCurrency } from "@/features/wallets/schema";
 import { cn } from "@/lib/utils";
 
-export function HomeView({ recent, salaryStatus }: { recent: Transaction[]; salaryStatus: SalaryStatus }) {
+export function HomeView({
+  recent,
+  salaryStatus,
+  fixed,
+}: {
+  recent: Transaction[];
+  salaryStatus: SalaryStatus;
+  fixed: FixedExpense[];
+}) {
   const t = useTranslations("Home");
   const { wallets } = useAppData();
   const { openDetail, openWallet, openAdd } = useComposer();
@@ -66,6 +76,7 @@ export function HomeView({ recent, salaryStatus }: { recent: Transaction[]; sala
         ) : (
           <>
             <SalaryCard status={salaryStatus} />
+            <FixedCard items={fixed} />
             <section aria-labelledby="h-recent" className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between">
                 <h2 id="h-recent" className="text-[17px] font-semibold">{t("recent")}</h2>
@@ -76,7 +87,7 @@ export function HomeView({ recent, salaryStatus }: { recent: Transaction[]; sala
               {recent.length === 0 ? (
                 <div className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-4">
                   <p className="text-[15px] text-muted-foreground">{t("noActivity")}</p>
-                  <Button onClick={openAdd}>{t("logFirst")}</Button>
+                  <Button onClick={() => openAdd()}>{t("logFirst")}</Button>
                 </div>
               ) : (
                 <ul className="overflow-hidden rounded-xl border border-border bg-card">

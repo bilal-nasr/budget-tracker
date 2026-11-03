@@ -17,7 +17,8 @@ export function groupByDay(rows: readonly Transaction[]): DayGroup[] {
       groups.push(group);
     }
     group.rows.push(row);
-    group.totals[row.currency] += signedMinor(row);
+    // A move between wallets is neither income nor spending.
+    if (row.kind !== "transfer") group.totals[row.currency] += signedMinor(row);
   }
   return groups;
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import type { Category } from "@/features/categories/schema";
+import type { FixedExpense } from "@/features/fixed/schema";
 import type { Wallet } from "@/features/wallets/schema";
 import { addDays, todayIn } from "@/features/transactions/group";
 import type { Cursor, Filters, Page, Transaction } from "@/features/transactions/schema";
@@ -36,6 +37,16 @@ export const DEMO_WALLETS: Wallet[] = [
 /** Demo salary: lands in the demo Bank (USD) wallet. */
 export const DEMO_SALARY = { amountMinor: 180000, walletId: id(2) };
 
+/** Demo fixed expenses. The first one shows as already paid this month. */
+export function demoFixed(): FixedExpense[] {
+  const today = todayIn("Asia/Beirut");
+  return [
+    { id: id(301), name: "Rent share", amountMinor: 40000, walletId: id(2), categoryId: id(106), dueDay: 1, paidOn: today },
+    { id: id(302), name: "Internet", amountMinor: 3000, walletId: id(2), categoryId: id(104), dueDay: 5, paidOn: null },
+    { id: id(303), name: "Generator", amountMinor: 4500, walletId: id(1), categoryId: id(104), dueDay: 10, paidOn: null },
+  ];
+}
+
 type Seed = [daysAgo: number, wallet: number, category: number, amount: number, note: string | null, kind?: "income"];
 const SEEDS: Seed[] = [
   [0, 1, 101, 5420, "Supermarket"], [0, 1, 103, 350, "Coffee"], [0, 3, 102, 400000, "Taxi"],
@@ -52,10 +63,24 @@ const SEEDS: Seed[] = [
   [32, 2, 106, 40000, "Rent share"], [34, 1, 101, 5300, null], [36, 3, 103, 700000, "Falafel"],
 ];
 
+function demoTransfers(today: string): Transaction[] {
+  const base = {
+    kind: "transfer" as const,
+    categoryId: null,
+    note: null,
+  };
+  return [
+    // Bank to Cash, both USD.
+    { ...base, id: id(2000), occurredOn: addDays(today, -1), amountMinor: 20000, currency: "USD", walletId: id(2), toWalletId: id(1), toAmountMinor: 20000, createdAt: `${addDays(today, -1)}T22:00:00+00:00` },
+    // An exchange: $20 became 1,800,000 lira.
+    { ...base, id: id(2001), occurredOn: addDays(today, -6), amountMinor: 2000, currency: "USD", walletId: id(1), toWalletId: id(3), toAmountMinor: 1800000, createdAt: `${addDays(today, -6)}T22:00:00+00:00` },
+  ];
+}
+
 function build(): Transaction[] {
   const today = todayIn("Asia/Beirut");
   const wallets = new Map(DEMO_WALLETS.map((w) => [w.id, w]));
-  return SEEDS.map(([ago, walletN, cat, amount, note, kind], index) => {
+  return [...demoTransfers(today), ...SEEDS.map(([ago, walletN, cat, amount, note, kind], index) => {
     const walletId = id(walletN);
     return {
       id: id(1000 + index),
@@ -66,10 +91,12 @@ function build(): Transaction[] {
       walletId,
       categoryId: id(cat),
       note,
+      toWalletId: null,
+      toAmountMinor: null,
       // Newer rows of the same day sort first.
       createdAt: `${addDays(today, -ago)}T${String(20 - (index % 12)).padStart(2, "0")}:00:00+00:00`,
     } satisfies Transaction;
-  }).sort(
+  })].sort(
     (a, b) =>
       b.occurredOn.localeCompare(a.occurredOn) ||
       b.createdAt.localeCompare(a.createdAt) ||

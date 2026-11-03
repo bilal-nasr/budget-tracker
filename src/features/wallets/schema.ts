@@ -16,6 +16,14 @@ export const walletInputSchema = z.object({
 
 export type WalletInput = z.infer<typeof walletInputSchema>;
 
+/** Take a new wallet's starting balance from an existing wallet instead of creating new money. */
+export const walletFundingSchema = z.object({
+  fromWalletId: z.uuid(),
+  /** What leaves the source wallet, in the source wallet's currency. */
+  takenMinor: z.number().int().min(1).max(MAX_MINOR),
+});
+export type WalletFunding = z.infer<typeof walletFundingSchema>;
+
 export type Wallet = {
   id: string;
   name: string;

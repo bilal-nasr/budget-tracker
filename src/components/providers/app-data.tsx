@@ -44,6 +44,11 @@ export function AppDataProvider({
   return <Context value={value}>{children}</Context>;
 }
 
+/** Like useAppData, but null outside the app shell (for example during onboarding). */
+export function useAppDataOptional(): AppData | null {
+  return useContext(Context);
+}
+
 export function useAppData(): AppData {
   const value = useContext(Context);
   if (!value) throw new Error("useAppData must be used inside AppDataProvider");

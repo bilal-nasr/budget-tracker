@@ -2,19 +2,22 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useLocale } from "next-intl";
-import { TransactionSheet, type ComposerState } from "@/components/add/transaction-sheet";
+import { TransactionSheet, type ComposerPreset, type ComposerState } from "@/components/add/transaction-sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { DetailSheet } from "@/components/transactions/detail-sheet";
+import { FixedSheet, type FixedSheetState } from "@/components/fixed/fixed-sheet";
 import { SalarySheet } from "@/components/salary/salary-sheet";
 import { WalletSheet, type WalletSheetState } from "@/components/wallets/wallet-sheet";
+import type { FixedExpense } from "@/features/fixed/schema";
 import type { Transaction } from "@/features/transactions/schema";
 import type { Wallet } from "@/features/wallets/schema";
 
 type Composer = {
-  openAdd: () => void;
+  openAdd: (preset?: ComposerPreset) => void;
   openDetail: (transaction: Transaction) => void;
   openWallet: (wallet: Wallet | null) => void;
   openSalary: () => void;
+  openFixed: (item: FixedExpense | null) => void;
 };
 
 const Context = createContext<Composer | null>(null);
@@ -29,16 +32,18 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
   const [detail, setDetail] = useState<Transaction | null>(null);
   const [wallet, setWallet] = useState<WalletSheetState | null>(null);
   const [salaryOpen, setSalaryOpen] = useState(false);
+  const [fixed, setFixed] = useState<FixedSheetState | null>(null);
 
-  const openAdd = useCallback(() => setAdd({ mode: "add" }), []);
+  const openAdd = useCallback((preset?: ComposerPreset) => setAdd({ mode: "add", preset }), []);
   const openDetail = useCallback((t: Transaction) => setDetail(t), []);
   const openWallet = useCallback((w: Wallet | null) => setWallet({ wallet: w }), []);
 
   const openSalary = useCallback(() => setSalaryOpen(true), []);
+  const openFixed = useCallback((item: FixedExpense | null) => setFixed({ item }), []);
 
   const value = useMemo(
-    () => ({ openAdd, openDetail, openWallet, openSalary }),
-    [openAdd, openDetail, openWallet, openSalary],
+    () => ({ openAdd, openDetail, openWallet, openSalary, openFixed }),
+    [openAdd, openDetail, openWallet, openSalary, openFixed],
   );
 
   return (
@@ -57,8 +62,16 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
           setAdd({ mode: "add", initial: t });
         }}
       />
-      <WalletSheet state={wallet} onClose={() => setWallet(null)} />
+      <WalletSheet
+        state={wallet}
+        onClose={() => setWallet(null)}
+        onAddMoney={(w) => {
+          setWallet(null);
+          setAdd({ mode: "add", preset: { kind: "income", walletId: w.id } });
+        }}
+      />
       <SalarySheet open={salaryOpen} onClose={() => setSalaryOpen(false)} />
+      <FixedSheet state={fixed} onClose={() => setFixed(null)} />
       <Toaster
         dir={locale === "ar" ? "rtl" : "ltr"}
         position="bottom-center"

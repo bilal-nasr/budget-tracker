@@ -7,16 +7,18 @@ import type { Cursor, Filters, Page, Transaction } from "./schema";
 export const PAGE_SIZE = 30;
 
 const COLUMNS =
-  "id, kind, occurred_on, amount_minor, currency, wallet_id, category_id, note, created_at";
+  "id, kind, occurred_on, amount_minor, currency, wallet_id, category_id, to_wallet_id, to_amount_minor, note, created_at";
 
 type Row = {
   id: string;
-  kind: "expense" | "income";
+  kind: "expense" | "income" | "transfer";
   occurred_on: string;
   amount_minor: number | string;
   currency: "USD" | "LBP";
   wallet_id: string;
-  category_id: string;
+  category_id: string | null;
+  to_wallet_id: string | null;
+  to_amount_minor: number | string | null;
   note: string | null;
   created_at: string;
 };
@@ -29,6 +31,8 @@ const toTransaction = (r: Row): Transaction => ({
   currency: r.currency,
   walletId: r.wallet_id,
   categoryId: r.category_id,
+  toWalletId: r.to_wallet_id,
+  toAmountMinor: r.to_amount_minor === null ? null : Number(r.to_amount_minor),
   note: r.note,
   createdAt: r.created_at,
 });

@@ -67,6 +67,8 @@ Acceptance: only `OWNER_EMAIL` can sign in (test with a second account, which is
 - [ ] SQL tests (need local Supabase or a rollback-only run on the hosted database).
 - [x] Salary (added on request): fixed amount + wallet saved once, **Got salary** button on Home adds it as income with Undo, asks before a second add in the same month, entries tagged `source = salary`. Migration `20261106000000_salary.sql` applied to the hosted project.
 - [x] **Aa** key on the keypad opens the note field for a custom label.
+- [x] Move money between wallets (added on request): Move tab in Add (same currency, or an exchange where you enter exactly what arrived, no guessed rates); "Add money" on a wallet (new money, or taken from another wallet); a new wallet funded from another wallet; moves show in Activity with a Moves filter and never count as income or spending. Migrations `20261109000000_transfer_kind.sql` and `20261109000100_transfers.sql`.
+- [x] Fixed expenses (added on request): monthly templates (name, amount, wallet, category, optional due day) on Home; **Paid** records the expense and deducts it from its wallet, with Undo; shows "left to pay" per currency. Migration `20261108000000_fixed_expenses.sql`.
 - [x] Archived wallets: restore, or delete permanently (only when it has no transactions). Migration `20261107000000_wallet_delete.sql` applied to the hosted project.
 - Deferred: deep-linkable `/transactions/[id]` route, spending-by-usage category order, search over category names.
 

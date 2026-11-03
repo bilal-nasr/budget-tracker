@@ -17,7 +17,7 @@ import { addDays, groupByDay, todayIn } from "@/features/transactions/group";
 import type { Cursor, Filters, Page } from "@/features/transactions/schema";
 import { cn } from "@/lib/utils";
 
-const KINDS = ["all", "expense", "income"] as const;
+const KINDS = ["all", "expense", "income", "transfer"] as const;
 
 function toQuery(filters: Filters): Record<string, string> {
   return Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "")) as Record<string, string>;
@@ -162,7 +162,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
           body={filtered ? t("noResultsBody") : t("emptyBody")}
           action={
             filtered ? undefined : (
-              <Button onClick={openAdd}>{t("addFirst")}</Button>
+              <Button onClick={() => openAdd()}>{t("addFirst")}</Button>
             )
           }
         />

@@ -10,6 +10,8 @@ const tx = (over: Partial<Transaction>): Transaction => ({
   currency: "USD",
   walletId: "00000000-0000-4000-8000-0000000000aa",
   categoryId: "00000000-0000-4000-8000-0000000000bb",
+  toWalletId: null,
+  toAmountMinor: null,
   note: null,
   createdAt: "2026-11-03T10:00:00Z",
   ...over,
@@ -26,6 +28,17 @@ describe("groupByDay", () => {
     expect(groups.map((g) => g.date)).toEqual(["2026-11-03", "2026-11-02"]);
     expect(groups[0].totals).toEqual({ USD: -5420, LBP: -400000 });
     expect(groups[1].totals).toEqual({ USD: 175500, LBP: 0 });
+  });
+});
+
+describe("groupByDay with moves", () => {
+  it("does not count a move between wallets as income or spending", () => {
+    const groups = groupByDay([
+      tx({ kind: "transfer", amountMinor: 20000, categoryId: null, toWalletId: "00000000-0000-4000-8000-0000000000cc", toAmountMinor: 20000 }),
+      tx({ amountMinor: 500 }),
+    ]);
+    expect(groups[0].rows).toHaveLength(2);
+    expect(groups[0].totals).toEqual({ USD: -500, LBP: 0 });
   });
 });
 

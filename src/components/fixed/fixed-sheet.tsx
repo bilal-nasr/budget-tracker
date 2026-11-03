@@ -1,0 +1,189 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useAppData } from "@/components/providers/app-data";
+import { CategoryGlyph } from "@/components/tiles/tile-glyph";
+import { Button } from "@/components/ui/button";
+import { SheetShell } from "@/components/ui/sheet-shell";
+import { TextField } from "@/components/ui/text-field";
+import { useRouter } from "@/i18n/navigation";
+import { categoryName } from "@/features/categories/schema";
+import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from "@/features/fixed/actions";
+import type { FixedExpense } from "@/features/fixed/schema";
+import { parseAmount, toInputText } from "@/lib/money";
+
+export type FixedSheetState = { item: FixedExpense | null };
+
+function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => void }) {
+  const t = useTranslations("Fixed");
+  const locale = useLocale();
+  const router = useRouter();
+  const { wallets, categories, walletById } = useAppData();
+  const [pending, startTransition] = useTransition();
+  const usable = wallets.filter((w) => !w.archived || w.id === item?.walletId);
+  const expenseCategories = categories.filter((c) => c.kind === "expense");
+
+  const [name, setName] = useState(item?.name ?? "");
+  const [walletId, setWalletId] = useState(item?.walletId ?? usable[0]?.id ?? "");
+  const wallet = walletById(walletId);
+  const currency = wallet?.currency ?? "USD";
+  const [amount, setAmount] = useState(item && wallet ? toInputText(item.amountMinor, wallet.currency) : "");
+  const [categoryId, setCategoryId] = useState(item?.categoryId ?? "");
+  const [dueDay, setDueDay] = useState(item?.dueDay ? String(item.dueDay) : "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const minor = amount.trim() === "" ? null : parseAmount(amount, currency);
+  const amountError = amount.trim() !== "" && minor === null ? t("errorAmount") : null;
+  const dayNumber = dueDay.trim() === "" ? null : Number(dueDay);
+  const dayError =
+    dayNumber !== null && (!Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 31) ? t("errorDay") : null;
+  const canSave =
+    name.trim() !== "" && minor !== null && minor > 0 && wallet !== undefined && categoryId !== "" && !dayError;
+
+  const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        setError(result.error === "notConfigured" ? t("errorPreview") : t("errorFailed"));
+        return;
+      }
+      onClose();
+      router.refresh();
+    });
+  };
+
+  if (usable.length === 0) {
+    return <p className="py-6 text-center text-[15px] text-muted-foreground">{t("needWallet")}</p>;
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!canSave || minor === null) return;
+        const input = { name: name.trim(), amountMinor: minor, walletId, categoryId, dueDay: dayNumber };
+        run(() => (item ? updateFixedExpense(item.id, input) : createFixedExpense(input)));
+      }}
+    >
+      <TextField
+        label={t("name")}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        maxLength={60}
+        placeholder={t("namePlaceholder")}
+        autoComplete="off"
+        required
+      />
+      <div className="flex flex-col gap-1.5">
+        <span id="fx-wallet" className="text-sm font-medium">{t("wallet")}</span>
+        <div role="radiogroup" aria-labelledby="fx-wallet" className="flex flex-wrap gap-2">
+          {usable.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              role="radio"
+              aria-checked={w.id === walletId}
+              onClick={() => {
+                setWalletId(w.id);
+                if (w.currency === "LBP") setAmount((v) => v.split(".")[0]);
+              }}
+              className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
+            >
+              <bdi>{w.name}</bdi> · {w.currency}
+            </button>
+          ))}
+        </div>
+        <p className="text-[13px] text-muted-foreground">{t("walletHelp")}</p>
+      </div>
+      <TextField
+        label={t("amount")}
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        inputMode={currency === "USD" ? "decimal" : "numeric"}
+        placeholder="0"
+        autoComplete="off"
+        dir="ltr"
+        error={amountError}
+      />
+      <div className="flex flex-col gap-1.5">
+        <span id="fx-category" className="text-sm font-medium">{t("category")}</span>
+        <div role="radiogroup" aria-labelledby="fx-category" className="grid grid-cols-4 gap-2">
+          {expenseCategories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={c.id === categoryId}
+              onClick={() => setCategoryId(c.id)}
+              className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-0.5 py-1.5 text-xs font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
+            >
+              <CategoryGlyph tile={c.tile} color={c.color} />
+              <span className="max-w-full truncate px-1">
+                <bdi>{categoryName(c, locale)}</bdi>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1">
+        <TextField
+          label={t("dueDay")}
+          value={dueDay}
+          onChange={(e) => setDueDay(e.target.value.replace(/\D/g, "").slice(0, 2))}
+          inputMode="numeric"
+          placeholder="1 - 31"
+          autoComplete="off"
+          dir="ltr"
+          error={dayError}
+        />
+        <p className="text-[13px] text-muted-foreground">{t("dueHelp")}</p>
+      </div>
+
+      {error ? (
+        <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p>
+      ) : null}
+
+      <Button type="submit" size="lg" className="w-full" disabled={pending || !canSave}>
+        {item ? t("saveChanges") : t("save")}
+      </Button>
+
+      {item ? (
+        confirmDelete ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
+            <p className="text-[15px]">{t("deleteConfirm")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>
+                {t("cancel")}
+              </Button>
+              <Button type="button" variant="destructive" disabled={pending} onClick={() => run(() => deleteFixedExpense(item.id))}>
+                {t("delete")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button type="button" variant="ghost" className="text-over" onClick={() => setConfirmDelete(true)}>
+            {t("delete")}
+          </Button>
+        )
+      ) : null}
+    </form>
+  );
+}
+
+export function FixedSheet({ state, onClose }: { state: FixedSheetState | null; onClose: () => void }) {
+  const t = useTranslations("Fixed");
+  return (
+    <SheetShell
+      open={state !== null}
+      onOpenChange={(o) => !o && onClose()}
+      title={state?.item ? t("editTitle") : t("newTitle")}
+    >
+      {state ? <Form key={state.item?.id ?? "new"} item={state.item} onClose={onClose} /> : null}
+    </SheetShell>
+  );
+}

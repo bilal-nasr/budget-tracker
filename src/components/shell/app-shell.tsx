@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Button
           variant="action"
           size="lg"
-          onClick={openAdd}
+          onClick={() => openAdd()}
           aria-label={t("add")}
           className="mb-3 size-12 rounded-xl p-0 lg:h-12 lg:w-full lg:px-4"
         >
@@ -91,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="-mt-7 flex flex-col items-center gap-0.5">
           <Button
             variant="action"
-            onClick={openAdd}
+            onClick={() => openAdd()}
             aria-label={t("add")}
             className="size-[60px] rounded-[20px] p-0 shadow-md"
           >

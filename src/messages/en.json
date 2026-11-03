@@ -150,7 +150,19 @@
     "errorFailed": "Could not save. Try again.",
     "needWallet": "Add a wallet first, then you can log money in and out.",
     "addWalletFirst": "Add a wallet",
-    "text": "Text"
+    "text": "Text",
+    "move": "Move",
+    "from": "From",
+    "to": "To",
+    "fromWallet": "From {wallet}",
+    "received": "You received ({currency})",
+    "receivedHelp": "Enter exactly what arrived. No exchange rate is assumed.",
+    "moveSave": "Move money",
+    "moved": "Money moved",
+    "moveNeedTwo": "You need a second wallet to move money. Add one first.",
+    "topUpNew": "Adding new money to {wallet}, for example income. To take it from another wallet instead, choose Move.",
+    "topUpMove": "Adding money to {wallet}. It is taken from the wallet you choose here.",
+    "errorAmount": "Enter a valid amount."
   },
   "Detail": {
     "title": "Details",
@@ -165,7 +177,11 @@
     "deleted": "Deleted",
     "undo": "Undo",
     "errorPreview": "This is a preview without a database, so nothing can be changed.",
-    "errorFailed": "Could not delete. Try again."
+    "errorFailed": "Could not delete. Try again.",
+    "move": "Move",
+    "moveLine": "Money moved between wallets",
+    "from": "From",
+    "to": "To"
   },
   "Wallets": {
     "emptyTitle": "No wallets yet",
@@ -201,7 +217,17 @@
     "emptyArchived": "You have no active wallets. Add a new one, or restore an archived wallet below.",
     "deleteWallet": "Delete wallet",
     "deleteConfirm": "Delete this wallet permanently? This cannot be undone. Wallets that have transactions cannot be deleted.",
-    "errorHasTransactions": "This wallet has transactions, so it cannot be deleted. Keep it archived instead."
+    "errorHasTransactions": "This wallet has transactions, so it cannot be deleted. Keep it archived instead.",
+    "errorInUse": "A fixed expense still uses this wallet. Change or delete that expense first.",
+    "addMoney": "Add money",
+    "sourceTitle": "Where does this money come from?",
+    "sourceNew": "New money",
+    "sourceWallet": "From another wallet",
+    "sourcePick": "Take it from",
+    "takenFrom": "Amount taken from it ({currency})",
+    "takenHelp": "Enter exactly what left that wallet. No exchange rate is assumed.",
+    "takenSame": "The same amount is taken from that wallet.",
+    "newMoneyHelp": "The starting balance is new money. It is not taken from any wallet."
   },
   "Activity": {
     "search": "Search notes",
@@ -231,7 +257,8 @@
     "dates": "Dates",
     "from": "From",
     "to": "To",
-    "dateOrder": "The start date must be before the end date."
+    "dateOrder": "The start date must be before the end date.",
+    "transfer": "Moves"
   },
   "Salary": {
     "title": "Monthly salary",
@@ -261,5 +288,42 @@
     "remove": "Remove salary",
     "errorAmount": "Enter a valid amount.",
     "needWallet": "Add a wallet first, then set your salary."
+  },
+  "Fixed": {
+    "title": "Fixed expenses",
+    "explain": "Rent, internet, generator: list your monthly costs once. After your salary, tap Paid on each to record it.",
+    "left": "Left to pay",
+    "allPaid": "All paid this month",
+    "add": "Add",
+    "paid": "Paid",
+    "paying": "Saving…",
+    "paidOn": "Paid {date}",
+    "due": "due {day}",
+    "markPaid": "Mark {name} as paid",
+    "editItem": "Edit {name}",
+    "recorded": "{name} recorded",
+    "undo": "Undo",
+    "errorPreview": "This is a preview without a database, so nothing can be saved.",
+    "errorPay": "Could not record it. Check that its wallet is still active.",
+    "errorFailed": "Could not save. Try again.",
+    "newTitle": "New fixed expense",
+    "editTitle": "Edit fixed expense",
+    "name": "Name",
+    "namePlaceholder": "Rent, internet, generator…",
+    "wallet": "Paid from",
+    "walletHelp": "This wallet is reduced each time you press Paid.",
+    "amount": "Amount",
+    "category": "Category",
+    "dueDay": "Due day (optional)",
+    "dueHelp": "A reminder only. Nothing is paid automatically.",
+    "save": "Save",
+    "saveChanges": "Save changes",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "deleteConfirm": "Delete this fixed expense? Payments you already recorded stay in Activity.",
+    "errorAmount": "Enter a valid amount.",
+    "errorDay": "Enter a day from 1 to 31.",
+    "needWallet": "Add a wallet first, then add your fixed expenses.",
+    "addFixed": "Add fixed expense"
   }
 }

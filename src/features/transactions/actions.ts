@@ -8,10 +8,12 @@ import {
   cursorSchema,
   filtersSchema,
   transactionInputSchema,
+  transferInputSchema,
   type Cursor,
   type Filters,
   type Page,
   type TransactionInput,
+  type TransferInput,
 } from "./schema";
 
 const idSchema = z.uuid();
@@ -37,6 +39,37 @@ export async function createTransaction(
   const { data, error } = await ctx.supabase
     .from("transactions")
     .insert({ ...row(parsed.data), currency: "USD" })
+    .select("id")
+    .single();
+  if (error || !data) return { ok: false, error: "failed" };
+  revalidatePath("/", "layout");
+  return { ok: true, id: data.id };
+}
+
+/**
+ * Moves money between two of the owner's wallets. The database checks both
+ * wallets are theirs and active, and that same-currency amounts are equal.
+ */
+export async function createTransfer(input: TransferInput): Promise<ActionResult<{ id: string }>> {
+  const parsed = transferInputSchema.safeParse(input);
+  if (!parsed.success || parsed.data.fromWalletId === parsed.data.toWalletId) {
+    return { ok: false, error: "invalid" };
+  }
+  const ctx = await actionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+
+  const { data, error } = await ctx.supabase
+    .from("transactions")
+    .insert({
+      kind: "transfer",
+      occurred_on: parsed.data.occurredOn,
+      wallet_id: parsed.data.fromWalletId,
+      amount_minor: parsed.data.fromAmountMinor,
+      currency: "USD", // overwritten from the source wallet by the database trigger
+      to_wallet_id: parsed.data.toWalletId,
+      to_amount_minor: parsed.data.toAmountMinor,
+      note: parsed.data.note ? parsed.data.note : null,
+    })
     .select("id")
     .single();
   if (error || !data) return { ok: false, error: "failed" };
