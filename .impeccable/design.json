@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-03T00:00:00Z",
+  "title": "Design System: Budget Tracker",
+  "extensions": {
+    "colorMeta": {
+      "teal-shell": { "role": "primary", "displayName": "Teal Shell", "canonical": "#0f4c4a", "tonalRamp": ["#06201e", "#0a3433", "#0f4c4a", "#2f6e69", "#4f8f86", "#7fb3ab", "#b9d2ce", "#e6f0ed"] },
+      "marigold": { "role": "secondary", "displayName": "Marigold", "canonical": "#f2b632", "tonalRamp": ["#5c4208", "#8a6210", "#b98a1c", "#e0a82b", "#f2b632", "#f6c95e", "#f9dd94", "#fcefc9"] },
+      "oxblood-alert": { "role": "tertiary", "displayName": "Oxblood Alert", "canonical": "#a3302a", "tonalRamp": ["#3a1b19", "#6f1d18", "#8a2822", "#a3302a", "#c4605a", "#e08f89", "#f0b8b4", "#f6e3e1"] },
+      "limestone": { "role": "neutral", "displayName": "Limestone", "canonical": "#eceeea", "tonalRamp": ["#14211f", "#4f625f", "#7e918c", "#b3beb8", "#d3dad4", "#e1e7e1", "#eceeea", "#ffffff"] }
+    },
+    "typographyMeta": {
+      "hero": { "displayName": "Hero", "purpose": "Left-to-spend USD amount on the shell." },
+      "headline": { "displayName": "Headline", "purpose": "LBP amount on the shell." },
+      "title": { "displayName": "Title", "purpose": "Section headings and sheet title." },
+      "body": { "displayName": "Body", "purpose": "Lead text, buttons, alerts, segmented labels." },
+      "label": { "displayName": "Label", "purpose": "Secondary lines and captions." }
+    },
+    "shadows": [
+      { "name": "action-sm", "value": "0 1px 2px rgb(0 0 0 / 0.05)", "purpose": "Only shadow in the system; marigold action button." }
+    ],
+    "motion": [
+      { "name": "cell-fill", "value": "300ms colors", "purpose": "TileBar cell colour change." },
+      { "name": "sheet-slide", "value": "450ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Bottom sheet enter and exit." },
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Defined token for general entrances." },
+      { "name": "reduced-motion", "value": "0.01ms", "purpose": "All animation and transition collapse under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "390px (base)" },
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Primary non-Add action in teal.",
+      "html": "<button class=\"ds-btn\">Save</button>",
+      "css": ".ds-btn{height:44px;padding:0 16px;border:1px solid transparent;border-radius:12px;background:var(--primary,#0f4c4a);color:var(--primary-foreground,#f4f7f3);font:500 15px/1 'Readex Pro',system-ui,sans-serif;cursor:pointer;transition:all .15s}.ds-btn:hover{opacity:.9}.ds-btn:active{transform:translateY(1px)}.ds-btn:focus-visible{outline:2px solid var(--ring,#0f4c4a);outline-offset:2px}"
+    },
+    {
+      "name": "Action Button",
+      "kind": "button",
+      "refersTo": "button-action-lg",
+      "description": "Marigold Add/Save; the only marigold element.",
+      "html": "<button class=\"ds-action\">Add</button>",
+      "css": ".ds-action{height:56px;padding:0 24px;border:0;border-radius:16px;background:var(--action,#f2b632);color:var(--action-foreground,#14211f);font:600 16px/1 'Readex Pro',system-ui,sans-serif;box-shadow:0 1px 2px rgb(0 0 0/.05);cursor:pointer}.ds-action:hover{filter:brightness(.95)}.ds-action:active{transform:translateY(1px)}.ds-action:focus-visible{outline:2px solid var(--ring,#0f4c4a);outline-offset:2px}"
+    },
+    {
+      "name": "Tile Bar",
+      "kind": "custom",
+      "refersTo": "list-row",
+      "description": "16 cells that fill; last two turn oxblood when over.",
+      "html": "<div class=\"ds-bar\" dir=\"ltr\"><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>",
+      "css": ".ds-bar{display:flex;gap:3px;height:14px}.ds-bar i{flex:1;border-radius:3px;background:var(--cell-empty,#d3dad4);transition:background-color .3s}.ds-bar i.on{background:var(--cell-on,#0f4c4a)}"
+    },
+    {
+      "name": "Category Glyph",
+      "kind": "custom",
+      "refersTo": "category-glyph",
+      "description": "Tile motif on a tinted 40px chip.",
+      "html": "<span class=\"ds-glyph\"><svg viewBox=\"0 0 24 24\" width=\"30\" height=\"30\" fill=\"currentColor\"><path fill-rule=\"evenodd\" d=\"M12 2 22 12 12 22 2 12Z M12 7 17 12 12 17 7 12Z\"/></svg></span>",
+      "css": ".ds-glyph{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;color:var(--tile-teal,#0f4c4a);background:color-mix(in srgb,var(--tile-teal,#0f4c4a) 10%,#fff);border:1px solid color-mix(in srgb,var(--tile-teal,#0f4c4a) 28%,#fff)}"
+    },
+    {
+      "name": "List Row",
+      "kind": "card",
+      "refersTo": "list-row",
+      "description": "Glyph, name, sub line, tabular amount.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-g\"></span><div><p class=\"n\">Supermarket</p><p class=\"s\">Groceries, Cash</p></div><bdi dir=\"ltr\" class=\"a\">-$54.20</bdi></div>",
+      "css": ".ds-row{display:flex;align-items:center;gap:12px;min-height:60px;padding:8px 14px;background:#fff;border:1px solid var(--border,#d3dad4);border-radius:16px;font-family:'Readex Pro',system-ui,sans-serif}.ds-row .ds-g{width:40px;height:40px;border-radius:10px;background:#e6f0ed}.ds-row div{flex:1}.ds-row .n{margin:0;font-weight:500}.ds-row .s{margin:0;font-size:13px;color:#4f625f}.ds-row .a{font-weight:600;font-variant-numeric:tabular-nums}"
+    },
+    {
+      "name": "Over-budget Alert",
+      "kind": "custom",
+      "refersTo": "over-alert",
+      "description": "Icon, text and action; the only place oxblood-red appears at strip scale.",
+      "html": "<div class=\"ds-over\" role=\"status\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m21.7 18-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z\"/><path d=\"M12 9v4M12 17h.01\"/></svg><span>Over budget by $40.00</span><button>See budget</button></div>",
+      "css": ".ds-over{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:var(--over-soft,#f6e3e1);color:var(--over-foreground,#6f1d18);font:400 15px 'Readex Pro',system-ui,sans-serif}.ds-over svg{color:var(--over,#a3302a);flex:none}.ds-over button{margin-inline-start:auto;min-height:44px;background:none;border:0;color:inherit;font:600 15px inherit;text-decoration:underline;text-underline-offset:4px;cursor:pointer}.ds-over button:focus-visible{outline:2px solid var(--ring,#0f4c4a)}"
+    },
+    {
+      "name": "Segmented",
+      "kind": "chip",
+      "refersTo": "segmented",
+      "description": "Single-choice radios; selected is teal.",
+      "html": "<div class=\"ds-seg\"><span class=\"sel\">Expense</span><span>Income</span><span>Move</span></div>",
+      "css": ".ds-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:var(--secondary,#e1e7e1);font:500 15px 'Readex Pro',system-ui,sans-serif}.ds-seg span{display:grid;place-items:center;min-height:44px;border-radius:12px;color:var(--muted-foreground,#4f625f)}.ds-seg .sel{background:var(--primary,#0f4c4a);color:var(--primary-foreground,#f4f7f3);font-weight:600}"
+    },
+    {
+      "name": "Keypad",
+      "kind": "custom",
+      "refersTo": "keypad-key",
+      "description": "56px keys, always LTR.",
+      "html": "<div class=\"ds-pad\" dir=\"ltr\"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button><button>6</button></div>",
+      "css": ".ds-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.ds-pad button{height:56px;border:0;border-radius:12px;background:var(--secondary,#e1e7e1);color:var(--foreground,#14211f);font:600 24px 'Readex Pro',system-ui,sans-serif;cursor:pointer}.ds-pad button:active{background:var(--accent,#dce5df)}.ds-pad button:focus-visible{outline:2px solid var(--ring,#0f4c4a)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Encaustic Floor",
+    "overview": "A Lebanese cement-tile floor: a deep teal shell laid over cool limestone, white surfaces set into it like inlays, and tile motifs doing the work other apps give to icon sets and progress bars. Every category owns a geometric tile and a tile colour; every budget is a row of cells that fill.\n\nTwo hues carry meaning and are rationed. Marigold marks the one thing you can do next. Oxblood-red marks over-budget and nothing else, and never travels without an icon and words. English and Arabic share one family (Readex Pro); layout is logical-property only.",
+    "keyCharacteristics": [
+      "Teal shell block at the top of a screen, limestone ground, white card inlays with 1px grout borders.",
+      "Eight tile motifs in three tile colours (teal, oxblood, ochre) as category identity.",
+      "Progress is tile cells (16 per bar), never a smooth fill.",
+      "Flat: depth comes from tonal layering and borders, almost no shadow.",
+      "One typeface, five sizes, tabular figures for money.",
+      "Dark theme exists but is provisional."
+    ],
+    "rules": [
+      { "name": "The One Next Thing Rule", "body": "Marigold appears only on the Add action. Nothing else on a screen may be marigold.", "section": "colors" },
+      { "name": "The Change-Only Alert Rule", "body": "Oxblood-red means over-budget. Never decoration, never a generic error colour, never colour alone: icon plus text every time.", "section": "colors" },
+      { "name": "The Tile Colour Rule", "body": "Teal, oxblood and ochre tiles identify categories. A tile in oxblood does not mean over.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Every amount uses tabular figures; body text does not.", "section": "typography" },
+      { "name": "The Latin Digits Rule", "body": "Digits stay Latin in Arabic.", "section": "typography" },
+      { "name": "The Flat Inlay Rule", "body": "Surfaces are set into the ground with borders and tone, never lifted with shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use logical utilities only (ms-, pe-, start-, text-start).",
+      "Do wrap amounts in Amount and names in <bdi>; keep the keypad and TileBar dir=ltr.",
+      "Do pair every oxblood-red use with the triangle-alert icon and the word \"Over\".",
+      "Do keep targets at 44px or more and inputs at 16px or more.",
+      "Do reach for a tile motif and tile colour to identify a category."
+    ],
+    "donts": [
+      "Don't use marigold anywhere except the Add action and its Save twin.",
+      "Don't use oxblood-red for non-budget errors or decoration, or without icon and text.",
+      "Don't replace the tile bar with a smooth progress bar, or lead with a hero-metric card.",
+      "Don't add or compare USD with LBP in any visual treatment; each currency has its own bar.",
+      "Don't treat the dark tokens as final, or the planned tile-pattern band and tile ornament empty state as built (planned for Phase 2, absent from the build)."
+    ]
+  }
+}

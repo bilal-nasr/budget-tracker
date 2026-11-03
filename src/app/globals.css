@@ -1,0 +1,217 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Encaustic tile world. Teal shell on cool limestone, marigold only on the one
+ * thing you can do next (Add), oxblood only for over-budget (always with an
+ * icon and text). Names follow shadcn so its components work unchanged.
+ */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --background: #eceeea;
+  --foreground: #14211f;
+  --card: #ffffff;
+  --card-foreground: #14211f;
+  --popover: #ffffff;
+  --popover-foreground: #14211f;
+  --primary: #0f4c4a;
+  --primary-foreground: #f4f7f3;
+  --secondary: #e1e7e1;
+  --secondary-foreground: #14211f;
+  --muted: #e1e7e1;
+  --muted-foreground: #4f625f;
+  --accent: #dce5df;
+  --accent-foreground: #14211f;
+  --destructive: #a3302a;
+  --border: #d3dad4;
+  --input: #7e918c;
+  --ring: #0f4c4a;
+  --radius: 0.75rem;
+
+  /* Own tokens */
+  --action: #f2b632;
+  --action-foreground: #14211f;
+  --shell: #0f4c4a;
+  --shell-foreground: #f4f7f3;
+  --shell-muted: #b9d2ce;
+  --over: #a3302a;
+  --over-soft: #f6e3e1;
+  --over-foreground: #6f1d18;
+  --positive: #1f7a4d;
+  --tile-teal: #0f4c4a;
+  --tile-oxblood: #8e2f3a;
+  --tile-ochre: #b07a00;
+  --cell-empty: #d3dad4;
+  --cell-on: #0f4c4a;
+  --shell-cell-empty: rgb(255 255 255 / 0.16);
+  --shell-cell-on: #e6f0ed;
+
+  --chart-1: #0f4c4a;
+  --chart-2: #8e2f3a;
+  --chart-3: #b07a00;
+  --chart-4: #4f8f86;
+  --chart-5: #6b4f7a;
+}
+
+.dark {
+  --background: #0b1514;
+  --foreground: #e8efec;
+  --card: #13211f;
+  --card-foreground: #e8efec;
+  --popover: #13211f;
+  --popover-foreground: #e8efec;
+  --primary: #4fb0a6;
+  --primary-foreground: #06201e;
+  --secondary: #1b2d2a;
+  --secondary-foreground: #e8efec;
+  --muted: #1b2d2a;
+  --muted-foreground: #9db2ad;
+  --accent: #1f3531;
+  --accent-foreground: #e8efec;
+  --destructive: #f0877f;
+  --border: #263836;
+  --input: #5d7873;
+  --ring: #4fb0a6;
+
+  --action: #f2b632;
+  --action-foreground: #14211f;
+  --shell: #0e3f3d;
+  --shell-foreground: #f4f7f3;
+  --shell-muted: #a7c7c2;
+  --over: #f0877f;
+  --over-soft: #3a1b19;
+  --over-foreground: #f7c9c5;
+  --positive: #62c590;
+  --tile-teal: #4fb0a6;
+  --tile-oxblood: #d98591;
+  --tile-ochre: #e0b13a;
+  --cell-empty: #263836;
+  --cell-on: #4fb0a6;
+  --shell-cell-empty: rgb(255 255 255 / 0.14);
+  --shell-cell-on: #d6e8e4;
+
+  --chart-1: #4fb0a6;
+  --chart-2: #d98591;
+  --chart-3: #e0b13a;
+  --chart-4: #7fc4bb;
+  --chart-5: #b79bd0;
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-sans);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-action: var(--action);
+  --color-action-foreground: var(--action-foreground);
+  --color-shell: var(--shell);
+  --color-shell-foreground: var(--shell-foreground);
+  --color-shell-muted: var(--shell-muted);
+  --color-over: var(--over);
+  --color-over-soft: var(--over-soft);
+  --color-over-foreground: var(--over-foreground);
+  --color-positive: var(--positive);
+  --color-tile-teal: var(--tile-teal);
+  --color-tile-oxblood: var(--tile-oxblood);
+  --color-tile-ochre: var(--tile-ochre);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: var(--radius);
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
+  --radius-4xl: 32px;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  accent-color: var(--primary);
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "tnum" 0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans antialiased;
+  }
+  /* Browser surfaces carry the design too. */
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 28%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  input,
+  textarea {
+    caret-color: var(--primary);
+  }
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* iOS must not zoom on focus */
+  }
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

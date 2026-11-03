@@ -1,0 +1,117 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { Amount } from "@/components/money/amount";
+import { useAppData } from "@/components/providers/app-data";
+import { useComposer } from "@/components/shell/composer";
+import { EmptyState } from "@/components/shell/empty-state";
+import { PageBody } from "@/components/shell/page-body";
+import { ScreenHeader } from "@/components/shell/screen-header";
+import { TransactionRow } from "@/components/transactions/transaction-row";
+import { SalaryCard } from "@/components/salary/salary-card";
+import { Button } from "@/components/ui/button";
+import { Link } from "@/i18n/navigation";
+import type { SalaryStatus } from "@/features/salary/schema";
+import type { Transaction } from "@/features/transactions/schema";
+import { totalsByCurrency } from "@/features/wallets/schema";
+import { cn } from "@/lib/utils";
+
+export function HomeView({ recent, salaryStatus }: { recent: Transaction[]; salaryStatus: SalaryStatus }) {
+  const t = useTranslations("Home");
+  const { wallets } = useAppData();
+  const { openDetail, openWallet, openAdd } = useComposer();
+  const active = wallets.filter((w) => !w.archived);
+  const hasArchived = wallets.some((w) => w.archived);
+  const totals = totalsByCurrency(active);
+  const has = (c: "USD" | "LBP") => active.some((w) => w.currency === c);
+
+  return (
+    <>
+      <ScreenHeader>
+        <p className="text-[15px] text-shell-muted">{t("leadLabel")}</p>
+        {active.length === 0 ? (
+          <h1 className="mt-1 text-[28px] leading-tight font-bold tracking-tight">{t("leadEmpty")}</h1>
+        ) : (
+          <>
+            <h1 className="sr-only">{t("leadLabel")}</h1>
+            {has("USD") ? (
+              <p className="mt-1 text-[40px] leading-[1.1] font-bold tracking-tight">
+                <Amount minor={totals.USD} currency="USD" />
+              </p>
+            ) : null}
+            {has("LBP") ? (
+              <p className={cn("font-bold tracking-tight", has("USD") ? "mt-3 text-[28px] leading-tight" : "mt-1 text-[40px] leading-[1.1]")}>
+                <Amount minor={totals.LBP} currency="LBP" />
+              </p>
+            ) : null}
+          </>
+        )}
+      </ScreenHeader>
+      <PageBody>
+        {active.length === 0 ? (
+          <EmptyState
+            title={t("emptyTitle")}
+            body={t("emptyBody")}
+            action={
+              <div className="flex flex-col items-center gap-1">
+                <Button onClick={() => openWallet(null)}>{t("emptyAction")}</Button>
+                {hasArchived ? (
+                  <Link href="/wallets" className="inline-flex min-h-11 items-center text-[14px] text-primary underline underline-offset-4">
+                    {t("restoreArchived")}
+                  </Link>
+                ) : null}
+              </div>
+            }
+          />
+        ) : (
+          <>
+            <SalaryCard status={salaryStatus} />
+            <section aria-labelledby="h-recent" className="flex flex-col gap-2">
+              <div className="flex items-baseline justify-between">
+                <h2 id="h-recent" className="text-[17px] font-semibold">{t("recent")}</h2>
+                <Link href="/activity" className="inline-flex min-h-11 items-center text-[14px] text-muted-foreground underline underline-offset-4">
+                  {t("seeAll")}
+                </Link>
+              </div>
+              {recent.length === 0 ? (
+                <div className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-4">
+                  <p className="text-[15px] text-muted-foreground">{t("noActivity")}</p>
+                  <Button onClick={openAdd}>{t("logFirst")}</Button>
+                </div>
+              ) : (
+                <ul className="overflow-hidden rounded-xl border border-border bg-card">
+                  {recent.map((row) => (
+                    <TransactionRow key={row.id} transaction={row} onOpen={openDetail} />
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section aria-labelledby="h-wallets" className="flex flex-col gap-2">
+              <div className="flex items-baseline justify-between">
+                <h2 id="h-wallets" className="text-[17px] font-semibold">{t("wallets")}</h2>
+                <Link href="/wallets" className="inline-flex min-h-11 items-center text-[14px] text-muted-foreground underline underline-offset-4">
+                  {t("manage")}
+                </Link>
+              </div>
+              <div className="-mx-4 flex snap-x snap-mandatory scroll-ps-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+                {active.map((w) => (
+                  <Link
+                    key={w.id}
+                    href={{ pathname: "/activity", query: { walletId: w.id } }}
+                    className="min-h-[72px] min-w-[140px] snap-start rounded-xl border border-border bg-card px-3.5 py-3"
+                  >
+                    <span className="block truncate text-[13px] text-muted-foreground">
+                      <bdi>{w.name}</bdi> · {w.currency}
+                    </span>
+                    <Amount minor={w.balanceMinor} currency={w.currency} className="text-lg font-semibold" />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+      </PageBody>
+    </>
+  );
+}

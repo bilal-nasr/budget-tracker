@@ -1,0 +1,51 @@
+"use client";
+
+import { createContext, useContext, useMemo } from "react";
+import type { Category } from "@/features/categories/schema";
+import type { Wallet } from "@/features/wallets/schema";
+
+type AppData = {
+  wallets: Wallet[];
+  categories: Category[];
+  timezone: string;
+  salary: { amountMinor: number; walletId: string } | null;
+  walletById: (id: string) => Wallet | undefined;
+  categoryById: (id: string) => Category | undefined;
+};
+
+const Context = createContext<AppData | null>(null);
+
+/** Wallets and categories, loaded once per request by the app layout. */
+export function AppDataProvider({
+  wallets,
+  categories,
+  timezone,
+  salary,
+  children,
+}: {
+  wallets: Wallet[];
+  categories: Category[];
+  timezone: string;
+  salary: { amountMinor: number; walletId: string } | null;
+  children: React.ReactNode;
+}) {
+  const value = useMemo<AppData>(() => {
+    const w = new Map(wallets.map((x) => [x.id, x]));
+    const c = new Map(categories.map((x) => [x.id, x]));
+    return {
+      wallets,
+      categories,
+      timezone,
+      salary,
+      walletById: (id) => w.get(id),
+      categoryById: (id) => c.get(id),
+    };
+  }, [wallets, categories, timezone, salary]);
+  return <Context value={value}>{children}</Context>;
+}
+
+export function useAppData(): AppData {
+  const value = useContext(Context);
+  if (!value) throw new Error("useAppData must be used inside AppDataProvider");
+  return value;
+}
