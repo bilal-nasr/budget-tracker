@@ -9,6 +9,7 @@ type AppData = {
   categories: Category[];
   timezone: string;
   salary: { amountMinor: number; walletId: string } | null;
+  usdLbpRate: number | null;
   walletById: (id: string) => Wallet | undefined;
   categoryById: (id: string) => Category | undefined;
 };
@@ -21,12 +22,14 @@ export function AppDataProvider({
   categories,
   timezone,
   salary,
+  usdLbpRate,
   children,
 }: {
   wallets: Wallet[];
   categories: Category[];
   timezone: string;
   salary: { amountMinor: number; walletId: string } | null;
+  usdLbpRate: number | null;
   children: React.ReactNode;
 }) {
   const value = useMemo<AppData>(() => {
@@ -37,10 +40,11 @@ export function AppDataProvider({
       categories,
       timezone,
       salary,
+      usdLbpRate,
       walletById: (id) => w.get(id),
       categoryById: (id) => c.get(id),
     };
-  }, [wallets, categories, timezone, salary]);
+  }, [wallets, categories, timezone, salary, usdLbpRate]);
   return <Context value={value}>{children}</Context>;
 }
 

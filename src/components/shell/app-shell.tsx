@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { House, List, PieChart, Plus, Settings, Wallet, type LucideIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -31,13 +32,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations("Nav");
   const pathname = usePathname();
   const { openAdd } = useComposer();
+  // Highlight the tapped tab immediately instead of waiting for the new route to commit.
+  const [tapped, setTapped] = useState<{ href: string; from: string } | null>(null);
+  const current = tapped && tapped.from === pathname ? tapped.href : pathname;
 
   const tab = ({ href, key, Icon }: Destination) => {
-    const active = isActive(pathname, href);
+    const active = isActive(current, href);
     return (
       <Link
         key={href}
         href={href}
+        onClick={() => setTapped({ href, from: pathname })}
         aria-current={active ? "page" : undefined}
         className={cn(
           "group flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-lg text-xs font-medium text-shell-muted transition-colors",

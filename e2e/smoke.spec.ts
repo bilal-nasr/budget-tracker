@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./support";
 
-const ROUTES = ["", "/activity", "/budgets", "/wallets", "/settings", "/sign-in", "/onboarding"];
+const ROUTES = ["", "/activity", "/budgets", "/wallets", "/settings", "/sign-in", "/sign-up", "/check-email", "/onboarding"];
 
 for (const locale of ["en", "ar"] as const) {
   for (const route of ROUTES) {
@@ -59,4 +59,15 @@ test("sign-in form has labelled, autofill-friendly fields", async ({ page }) => 
   await page.goto("/en/sign-in");
   await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", "username");
   await expect(page.getByLabel("Password")).toHaveAttribute("autocomplete", "current-password");
+});
+
+test("tab tap marks the new tab current before the page data arrives", async ({ page }) => {
+  await page.goto("/en");
+  // Hold the response for Activity: the tab must still highlight at once.
+  await page.route("**/en/activity**", async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await page.getByRole("link", { name: "Activity" }).filter({ visible: true }).click();
+  await expect(page.getByRole("link", { name: "Activity" }).filter({ visible: true })).toHaveAttribute("aria-current", "page", { timeout: 500 });
 });

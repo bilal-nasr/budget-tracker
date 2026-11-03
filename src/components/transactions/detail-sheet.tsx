@@ -9,7 +9,6 @@ import { useAppData } from "@/components/providers/app-data";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
-import { useRouter } from "@/i18n/navigation";
 import { categoryName } from "@/features/categories/schema";
 import { deleteTransaction, restoreTransaction } from "@/features/transactions/actions";
 import { signedMinor, type Transaction } from "@/features/transactions/schema";
@@ -38,7 +37,6 @@ export function DetailSheet({
 }) {
   const t = useTranslations("Detail");
   const locale = useLocale();
-  const router = useRouter();
   const { categoryById, walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const transfer = transaction?.kind === "transfer";
@@ -56,13 +54,11 @@ export function DetailSheet({
         return;
       }
       onClose();
-      router.refresh();
       toast(t("deleted"), {
         action: {
           label: t("undo"),
           onClick: async () => {
             await restoreTransaction(id);
-            router.refresh();
           },
         },
       });
@@ -144,7 +140,7 @@ export function DetailSheet({
             <dd className="text-end font-medium">{dateLabel(transaction.occurredOn, locale)}</dd>
             {transaction.note ? (
               <>
-                <dt className="text-muted-foreground">{t("note")}</dt>
+                <dt className="text-muted-foreground">{transfer ? t("note") : t("name")}</dt>
                 <dd className="text-end font-medium">
                   <bdi>{transaction.note}</bdi>
                 </dd>

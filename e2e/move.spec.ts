@@ -35,6 +35,9 @@ test("Move tab: moving into another currency asks for exactly what arrived", asy
   const received = dialog.getByLabel("You received (LBP)");
   await expect(received).toBeVisible();
   const save = dialog.getByRole("button", { name: "Move money" });
+  // The saved rate fills the amount; with no rate there is nothing to move until it is typed.
+  await dialog.getByLabel("Exchange rate").fill("");
+  await expect(received).toHaveValue("");
   await expect(save).toBeDisabled();
   await received.fill("1800000");
   await expect(save).toBeEnabled();
@@ -106,5 +109,48 @@ test("arabic move form is RTL and keeps amounts LTR", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await segment(dialog, "نقل").click();
   await expect(dialog.getByRole("button", { name: "انقل المال" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("exchange asks for 1$ = rate, converts, and the result can be edited", async ({ page }) => {
+  await page.goto("/en");
+  await add(page).click();
+  const dialog = page.getByRole("dialog");
+  await segment(dialog, "Move").click();
+  for (const key of ["1", "0", "0"]) await dialog.getByRole("button", { name: key, exact: true }).click();
+  await dialog.getByRole("radiogroup", { name: "To" }).getByRole("radio", { name: "Cash · LBP" }).click();
+  const rate = dialog.getByLabel("Exchange rate");
+  const received = dialog.getByLabel("You received (LBP)");
+  await expect(rate).toHaveValue("89500");
+  await expect(received).toHaveValue("8950000");
+  await rate.fill("90000");
+  await expect(received).toHaveValue("9000000");
+  await received.fill("8900000");
+  await rate.fill("91000");
+  await expect(received).toHaveValue("8900000");
+  await dialog.getByRole("button", { name: "Use rate" }).click();
+  await expect(received).toHaveValue("9100000");
+  await rate.fill("89x");
+  await expect(dialog.getByText("Enter a whole number, e.g. 89500.")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("same-currency move shows no rate", async ({ page }) => {
+  await page.goto("/en");
+  await add(page).click();
+  const dialog = page.getByRole("dialog");
+  await segment(dialog, "Move").click();
+  await expect(dialog.getByLabel("Exchange rate")).toHaveCount(0);
+});
+
+test("arabic exchange rate row reads left to right with no overflow", async ({ page }) => {
+  await page.goto("/ar");
+  await page.getByRole("button", { name: "إضافة", exact: true }).filter({ visible: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("label").filter({ hasText: /^نقل$/ }).click();
+  await dialog.getByRole("button", { name: "5", exact: true }).click();
+  await dialog.getByRole("radiogroup").filter({ hasText: "LBP" }).getByRole("radio", { name: /LBP/ }).first().click();
+  const rate = dialog.getByLabel("سعر الصرف");
+  await expect(rate).toHaveValue("89500");
   await expectNoHorizontalOverflow(page);
 });

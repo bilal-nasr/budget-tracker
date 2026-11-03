@@ -8,6 +8,18 @@
         "value": "nunito",
         "createdAt": "2026-11-03T18:39:34.400Z",
         "reason": "Claude decided: Nunito is used only by world C of docs/mockups/directions.html, the rejected comparison option; the shipped system uses Readex Pro (DESIGN.md)"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "arial",
+        "createdAt": "2026-11-03T22:49:52.240Z",
+        "reason": "Email template: mail clients cannot load web fonts, so a system font is the only reliable choice (my judgement, not user-confirmed)"
+      },
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "createdAt": "2026-11-03T22:56:02.609Z",
+        "reason": "Email template: mail clients cannot load web fonts, so a system font is the only reliable choice (my judgement, not user-confirmed)"
       }
     ]
   }

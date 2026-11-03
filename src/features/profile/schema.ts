@@ -6,6 +6,8 @@ export const profileSchema = z.object({
   theme: z.enum(["system", "light", "dark"]),
   timezone: z.string().min(1),
   onboarded: z.boolean(),
+  /** Last USD to LBP rate used (LBP per 1 USD), or null. */
+  usdLbpRate: z.number().int().min(1).max(10_000_000).nullable(),
   salary: z
     .object({ amountMinor: z.number().int().positive(), walletId: z.uuid() })
     .nullable(),
@@ -26,5 +28,6 @@ export const DEFAULT_PROFILE: Profile = {
   theme: "system",
   timezone: "Asia/Beirut",
   onboarded: true,
+  usdLbpRate: null,
   salary: null,
 };

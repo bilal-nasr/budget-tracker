@@ -19,7 +19,7 @@ Delegated details (chosen by Claude, owner may override): TypeScript, Tailwind C
 
 One primary user: the owner (Bilal), tracking personal money day to day, mostly on a phone, often right after paying for something (in a shop, a taxi, at a counter). The job is "log this in a few seconds, then later see where my month is going." Money is held in both US dollars and Lebanese lira.
 
-Exactly one account in v1: the owner. There is no public sign-up page; the owner's account is created once in Supabase and sign-ups are disabled. Data is still keyed by `user_id` with Row Level Security, so more accounts (or sharing) can be added later without a rewrite.
+Anyone can create an account with email and password; it works once they confirm the email. The owner is the primary user, but each account is private to its own person: data is keyed by `user_id` with Row Level Security, so accounts never see each other's money.
 
 ## Product Purpose
 
@@ -56,10 +56,10 @@ v1 scope:
 Constraints:
 - Money is stored as integer minor units (USD cents, LBP whole lira). Never floats. Never add USD to LBP.
 - All data is private to its owner; Row Level Security on every table.
-- Single account: Supabase sign-ups disabled, plus an `OWNER_EMAIL` allowlist checked on sign-in and in the request proxy. No sign-up, invite, or account-management UI in v1.
+- Open sign-up with email verification (Supabase Auth). No owner allowlist. No account-management UI or password reset yet (see `docs/ARCHITECTURE.md` §3).
 - Every user-visible string ships in English and Arabic in the same change.
 
-Explicitly out of v1 (candidates for later): more accounts / public sign-up, household/shared spaces, envelope "ready to assign" model, loans, recurring bills, savings goals, CSV import/export, bank sync, AI entry.
+Explicitly out of v1 (candidates for later): household/shared spaces, envelope "ready to assign" model, loans, recurring bills, savings goals, CSV import/export, bank sync, AI entry.
 
 Open decisions:
 - Arabic-Indic digits (٠١٢) vs Latin digits in Arabic UI — default Latin, setting to switch (to confirm).

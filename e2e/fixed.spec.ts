@@ -11,7 +11,7 @@ test("fixed expenses card lists each item with its amount, wallet and a Paid but
   await expect(card.getByRole("button", { name: "Mark Internet as paid" })).toBeVisible();
   await expect(card.getByRole("button", { name: "Mark Generator as paid" })).toBeVisible();
   // Already paid this month: shows a check and no Paid button.
-  await expect(card.getByText(/^Paid /)).toBeVisible();
+  await expect(card.getByText(/^Paid [A-Z][a-z]{2} \d/)).toBeVisible();
   await expect(card.getByRole("button", { name: "Mark Rent share as paid" })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
@@ -37,7 +37,8 @@ test("add fixed expense sheet has name, wallet, amount, category and optional du
   await expect(save).toBeDisabled();
   await dialog.getByLabel("Name").fill("Gym");
   await dialog.getByLabel("Amount").fill("20");
-  await dialog.getByRole("radio", { name: "Fun" }).click();
+  await dialog.getByRole("combobox", { name: "Category" }).click();
+  await page.getByRole("option", { name: "Fun" }).click();
   await expect(save).toBeEnabled();
   await dialog.getByLabel("Due day (optional)").fill("45");
   await expect(dialog.getByText("Enter a day from 1 to 31.")).toBeVisible();
@@ -63,5 +64,39 @@ test("arabic fixed expenses: RTL card with a Paid button and LTR amounts", async
   const card = page.getByRole("region", { name: "المصاريف الثابتة" });
   await expect(card.getByRole("button", { name: /^سجّل .* كمدفوع$/ }).first()).toBeVisible();
   expect(await card.locator(".amount").first().evaluate((el) => getComputedStyle(el).direction)).toBe("ltr");
+  await expectNoHorizontalOverflow(page);
+});
+
+test("Paid shows the item as paid at once, and reverts if the save fails", async ({ page }) => {
+  await page.goto("/en");
+  // Hold the Server Action so the optimistic state is observable.
+  await page.route("**/en", async (route) => {
+    if (route.request().method() === "POST") await new Promise((r) => setTimeout(r, 1200));
+    await route.continue();
+  });
+  const card = page.getByRole("region", { name: "Fixed expenses" });
+  await card.getByRole("button", { name: "Mark Internet as paid" }).click();
+  await expect(card.getByText(/^Paid [A-Z][a-z]{2} \d/)).toHaveCount(2, { timeout: 600 });
+  // Preview mode cannot save: the row goes back to a Paid button and says why.
+  await expect(page.getByText(/preview without a database/i)).toBeVisible();
+  await expect(card.getByRole("button", { name: "Mark Internet as paid" })).toBeVisible();
+});
+
+test("fixed card shows total, per-wallet needs and salary after fixed", async ({ page }) => {
+  await page.goto("/en");
+  const card = page.getByRole("region", { name: "Fixed expenses" });
+  await expect(card.getByText("Total fixed").locator("..")).toContainText("$575.00");
+  const perWallet = card.getByRole("list", { name: "Per wallet" });
+  await expect(perWallet.getByRole("listitem").filter({ hasText: "Bank" })).toContainText("$530.00");
+  await expect(perWallet.getByRole("listitem").filter({ hasText: "Cash" })).toContainText("$45.00");
+  await expect(card.getByText("Salary after fixed").locator("..")).toContainText("$1,225.00");
+  await expectNoHorizontalOverflow(page);
+});
+
+test("arabic fixed summary keeps amounts left-to-right", async ({ page }) => {
+  await page.goto("/ar");
+  const card = page.getByRole("region", { name: "المصاريف الثابتة" });
+  await expect(card.getByText("الراتب بعد الثابت").locator("..")).toContainText("$1,225.00");
+  expect(await card.getByRole("list", { name: "حسب المحفظة" }).locator(".amount").first().evaluate((el) => getComputedStyle(el).direction)).toBe("ltr");
   await expectNoHorizontalOverflow(page);
 });

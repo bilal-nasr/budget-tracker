@@ -73,6 +73,11 @@ export async function createTransfer(input: TransferInput): Promise<ActionResult
     .select("id")
     .single();
   if (error || !data) return { ok: false, error: "failed" };
+
+  // Remember the rate for next time. A failure here must not undo the move.
+  if (parsed.data.rate !== undefined) {
+    await ctx.supabase.from("profiles").update({ usd_lbp_rate: parsed.data.rate }).eq("user_id", ctx.userId);
+  }
   revalidatePath("/", "layout");
   return { ok: true, id: data.id };
 }

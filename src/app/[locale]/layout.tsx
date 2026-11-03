@@ -4,6 +4,7 @@ import Script from "next/script";
 import { notFound } from "next/navigation";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { ThemeSync } from "@/components/providers/theme-sync";
 import { isRtl, routing } from "@/i18n/routing";
 import "../globals.css";
 
@@ -57,7 +58,10 @@ export default async function LocaleLayout({
     >
       <body className="min-h-dvh bg-background text-foreground">
         <Script id="theme-init" strategy="beforeInteractive">{themeScript}</Script>
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider>
+          <ThemeSync />
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

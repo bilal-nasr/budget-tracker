@@ -83,7 +83,8 @@ test("add sheet: type an amount, pick a category, Save stays reachable", async (
 
   for (const key of ["5", "4", ".", "2"]) await dialog.getByRole("button", { name: key, exact: true }).click();
   await expect(dialog.getByLabel("Amount")).toContainText("54.2");
-  await dialog.getByRole("radio", { name: "Groceries" }).click();
+  await dialog.getByRole("combobox", { name: "Category" }).click();
+  await page.getByRole("option", { name: "Groceries" }).click();
   await expect(save).toBeEnabled();
 
   // Save is inside the viewport even on short screens.
@@ -144,4 +145,27 @@ test("active wallets have no delete button, only archive", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("button", { name: "Archive wallet" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Delete wallet" })).toHaveCount(0);
+});
+
+test("category is a dropdown and Name is visible in the Add sheet", async ({ page }) => {
+  await page.goto("/en");
+  await addButton(page).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("radio", { name: "Groceries" })).toHaveCount(0);
+  await expect(dialog.getByLabel("Name")).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Category" }).click();
+  await page.getByRole("option", { name: "Health" }).click();
+  await expect(dialog.getByRole("combobox", { name: "Category" })).toContainText("Health");
+  await dialog.getByRole("button", { name: "Text", exact: true }).click();
+  await expect(dialog.getByLabel("Name")).toBeFocused();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("arabic category dropdown lists Arabic names with no overflow", async ({ page }) => {
+  await page.goto("/ar");
+  await page.getByRole("button", { name: "إضافة", exact: true }).filter({ visible: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "الفئة" }).click();
+  await expect(page.getByRole("option", { name: "بقالة" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 });

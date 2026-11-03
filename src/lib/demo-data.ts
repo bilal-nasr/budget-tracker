@@ -1,6 +1,7 @@
 import "server-only";
 import type { Category } from "@/features/categories/schema";
 import type { FixedExpense } from "@/features/fixed/schema";
+import { withProgress, type Installment } from "@/features/installments/schema";
 import type { Wallet } from "@/features/wallets/schema";
 import { addDays, todayIn } from "@/features/transactions/group";
 import type { Cursor, Filters, Page, Transaction } from "@/features/transactions/schema";
@@ -35,6 +36,9 @@ export const DEMO_WALLETS: Wallet[] = [
 ];
 
 /** Demo salary: lands in the demo Bank (USD) wallet. */
+/** Demo USD to LBP rate (LBP per 1 USD). */
+export const DEMO_RATE = 89500;
+
 export const DEMO_SALARY = { amountMinor: 180000, walletId: id(2) };
 
 /** Demo fixed expenses. The first one shows as already paid this month. */
@@ -45,6 +49,60 @@ export function demoFixed(): FixedExpense[] {
     { id: id(302), name: "Internet", amountMinor: 3000, walletId: id(2), categoryId: id(104), dueDay: 5, paidOn: null },
     { id: id(303), name: "Generator", amountMinor: 4500, walletId: id(1), categoryId: id(104), dueDay: 10, paidOn: null },
   ];
+}
+
+/** Demo installments: Laptop has three $100 payments (one this month); Fridge is paid off. */
+export function demoInstallments(): Installment[] {
+  const today = todayIn("Asia/Beirut");
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const payment = (n: number, amountMinor: number, occurredOn: string) => ({
+    transactionId: id(400 + n), amountMinor, occurredOn, walletId: id(2),
+  });
+  const laptop = [payment(1, 10000, today), payment(2, 10000, addDays(monthStart, -20)), payment(3, 10000, addDays(monthStart, -50))];
+  const fridge = [0, 1, 2, 3].map((n) => payment(10 + n, 15000, addDays(monthStart, -60 - n * 30)));
+  return [
+    withProgress(
+      { id: id(501), name: "Laptop", currency: "USD", walletId: id(2), categoryId: id(108), totalMinor: 120000, paidBeforeMinor: 0, monthlyMinor: 10000, dueDay: 15 },
+      laptop,
+      monthStart,
+    ),
+    withProgress(
+      { id: id(502), name: "Fridge", currency: "USD", walletId: id(2), categoryId: id(108), totalMinor: 60000, paidBeforeMinor: 0, monthlyMinor: 15000, dueDay: null },
+      fridge,
+      monthStart,
+    ),
+  ];
+}
+
+/**
+ * Demo budgets and spending for a month (YYYY-MM). Limits start two months back,
+ * so earlier months are empty. Spending is fixed so layouts are predictable:
+ * Groceries and Eating out are over budget, Fun has spending but no budget.
+ */
+export function demoBudgetData(month: string): {
+  budgets: { categoryId: string; currency: "USD" | "LBP"; limitMinor: number }[];
+  spend: { categoryId: string; currency: "USD" | "LBP"; spentMinor: number }[];
+} {
+  const now = todayIn("Asia/Beirut").slice(0, 7);
+  const [y, m] = now.split("-").map(Number);
+  const start = new Date(Date.UTC(y, m - 3, 1)).toISOString().slice(0, 7);
+  if (month < start) return { budgets: [], spend: [] };
+  return {
+    budgets: [
+      { categoryId: id(101), currency: "USD", limitMinor: 30000 },
+      { categoryId: id(103), currency: "USD", limitMinor: 8000 },
+      { categoryId: id(102), currency: "USD", limitMinor: 12000 },
+      { categoryId: id(105), currency: "USD", limitMinor: 6000 },
+      { categoryId: id(102), currency: "LBP", limitMinor: 1000000 },
+    ],
+    spend: [
+      { categoryId: id(101), currency: "USD", spentMinor: 34000 },
+      { categoryId: id(103), currency: "USD", spentMinor: 9500 },
+      { categoryId: id(102), currency: "USD", spentMinor: 4200 },
+      { categoryId: id(107), currency: "USD", spentMinor: 1500 },
+      { categoryId: id(102), currency: "LBP", spentMinor: 700000 },
+    ],
+  };
 }
 
 type Seed = [daysAgo: number, wallet: number, category: number, amount: number, note: string | null, kind?: "income"];

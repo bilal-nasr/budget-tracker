@@ -9,8 +9,7 @@ export const supabaseConfigured = () =>
 
 /**
  * Refreshes the session cookie on `response` and returns the signed-in
- * owner's email (or null). Any session whose email is not OWNER_EMAIL is
- * signed out.
+ * user's email (or null).
  */
 export async function refreshSession(
   request: NextRequest,
@@ -32,13 +31,9 @@ export async function refreshSession(
     },
   );
 
-  const { data } = await supabase.auth.getUser();
-  const email = data.user?.email?.toLowerCase() ?? null;
-  const owner = process.env.OWNER_EMAIL?.toLowerCase();
-
-  if (email && (!owner || email !== owner)) {
-    await supabase.auth.signOut();
-    return { email: null };
-  }
+  // getClaims refreshes an expired session and verifies the JWT locally.
+  const { data } = await supabase.auth.getClaims();
+  const claimEmail = data?.claims.email;
+  const email = typeof claimEmail === "string" ? claimEmail.toLowerCase() : null;
   return { email };
 }

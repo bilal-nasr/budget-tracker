@@ -13,14 +13,32 @@ test("salary card shows the fixed amount, wallet and a Got salary button", async
   await expectNoHorizontalOverflow(page);
 });
 
-test("Got salary asks before adding a second time in the same month, then reports preview mode", async ({ page }) => {
+test("Got salary opens a confirmation with the amount and wallet, Cancel adds nothing", async ({ page }) => {
   await page.goto("/en");
-  const card = page.getByRole("region", { name: "Monthly salary" });
-  await card.getByRole("button", { name: "Got salary" }).click();
-  const again = card.getByRole("button", { name: "Add again" });
-  if (await again.isVisible()) await again.click();
-  // Preview mode cannot write, and says so instead of silently doing nothing.
+  await page.getByRole("region", { name: "Monthly salary" }).getByRole("button", { name: "Got salary" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add this month's salary?" });
+  await expect(dialog).toContainText("$1,800.00");
+  await expect(dialog).toContainText("Bank");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText(/preview without a database/i)).toHaveCount(0);
+});
+
+test("confirming calls the action (preview mode says it cannot save)", async ({ page }) => {
+  await page.goto("/en");
+  await page.getByRole("region", { name: "Monthly salary" }).getByRole("button", { name: "Got salary" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Add salary" }).click();
   await expect(page.getByText(/preview without a database/i)).toBeVisible();
+});
+
+test("arabic confirmation is RTL with an LTR amount and no overflow", async ({ page }) => {
+  await page.goto("/ar");
+  await page.getByRole("region", { name: "الراتب الشهري" }).getByRole("button", { name: "استلمت الراتب" }).click();
+  const dialog = page.getByRole("dialog", { name: "إضافة راتب هذا الشهر؟" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("$1,800.00");
+  expect(await dialog.evaluate((el) => getComputedStyle(el).direction)).toBe("rtl");
+  await expectNoHorizontalOverflow(page);
 });
 
 test("salary sheet: edit amount and pick the wallet it goes to", async ({ page }) => {
@@ -50,9 +68,9 @@ test("Aa key opens the text field for a custom label and focuses it", async ({ p
   await page.getByRole("button", { name: "Add", exact: true }).filter({ visible: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Text", exact: true }).click();
-  const note = dialog.getByLabel("Note");
-  await expect(note).toBeFocused();
-  await note.fill("Gift for mum");
-  await expect(dialog.getByText(/Gift for mum/).first()).toBeVisible();
+  const name = dialog.getByLabel("Name");
+  await expect(name).toBeFocused();
+  await name.fill("Gift for mum");
+  await expect(name).toHaveValue("Gift for mum");
   await expectNoHorizontalOverflow(page);
 });

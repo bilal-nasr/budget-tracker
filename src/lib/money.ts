@@ -65,3 +65,28 @@ export function groupTyped(typed: string): string {
   const grouped = (whole || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return fraction === undefined ? grouped : `${grouped}.${fraction}`;
 }
+
+export const MAX_RATE = 10_000_000; // LBP per 1 USD
+
+/** Parses a typed rate ("89,500", "٨٩٥٠٠") into whole LBP per dollar, 1..MAX_RATE. Null if invalid. */
+export function parseRate(input: string): number | null {
+  const text = normalizeDigits(input.trim());
+  if (!/^\d{1,8}$/.test(text)) return null;
+  const rate = Number(text);
+  return rate >= 1 && rate <= MAX_RATE ? rate : null;
+}
+
+/**
+ * Converts between USD and LBP at a rate of LBP per 1 USD, rounding half up.
+ * USD to LBP: cents × rate ÷ 100. LBP to USD: lira × 100 ÷ rate. Integer math
+ * only (BigInt), so large lira amounts keep every digit. Null if the result is
+ * above MAX_MINOR. The same currency comes back unchanged.
+ */
+export function convertAtRate(minor: number, from: Currency, to: Currency, lbpPerUsd: number): number | null {
+  if (from === to) return minor;
+  const m = BigInt(minor);
+  const r = BigInt(lbpPerUsd);
+  const [num, den] = from === "USD" ? [m * r, BigInt(100)] : [m * BigInt(100), r];
+  const result = (BigInt(2) * num + den) / (BigInt(2) * den);
+  return result <= BigInt(MAX_MINOR) ? Number(result) : null;
+}

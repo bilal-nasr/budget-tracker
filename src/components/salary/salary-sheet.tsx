@@ -6,13 +6,11 @@ import { useAppData } from "@/components/providers/app-data";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
-import { useRouter } from "@/i18n/navigation";
 import { clearSalary, saveSalary } from "@/features/salary/actions";
 import { parseAmount, toInputText } from "@/lib/money";
 
 function Form({ onClose }: { onClose: () => void }) {
   const t = useTranslations("Salary");
-  const router = useRouter();
   const { wallets, salary, walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const usable = wallets.filter((w) => !w.archived);
@@ -40,7 +38,6 @@ function Form({ onClose }: { onClose: () => void }) {
         return;
       }
       onClose();
-      router.refresh();
     });
   };
 

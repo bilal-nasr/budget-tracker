@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Budgets mockup · 390px · EN + AR</title>
+<style>
+  :root {
+    --background:#eceeea; --foreground:#14211f; --card:#fff; --primary:#0f4c4a; --primary-foreground:#f4f7f3;
+    --secondary:#e1e7e1; --muted-foreground:#4f625f; --accent:#dce5df; --border:#d3dad4; --input:#7e918c;
+    --action:#f2b632; --action-foreground:#14211f; --shell:#0f4c4a; --shell-foreground:#f4f7f3; --shell-muted:#b9d2ce;
+    --over:#a3302a; --over-soft:#f6e3e1; --over-foreground:#6f1d18; --positive:#1f7a4d;
+    --cell-empty:#d3dad4; --cell-on:#0f4c4a;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px; background:#cfd5d0; font-family:"Readex Pro", system-ui, sans-serif; color:var(--foreground); }
+  h1 { font-size:18px; margin:0 0 4px; }
+  p.note { margin:0 0 20px; color:#33403d; font-size:14px; max-width:70ch; }
+  .row { display:flex; gap:24px; flex-wrap:wrap; margin-bottom:32px; align-items:flex-start; }
+  .label { font-size:12px; font-weight:600; margin:0 0 6px; color:#33403d; }
+  .phone { width:390px; min-height:780px; background:var(--background); border-radius:28px; overflow:hidden; position:relative; box-shadow:0 8px 30px rgb(0 0 0 / .18); }
+  .shell { background:var(--shell); color:var(--shell-foreground); padding:14px 16px 0; }
+  .shell .top { display:flex; align-items:center; justify-content:space-between; min-height:44px; }
+  .month { display:flex; align-items:center; gap:4px; font-size:18px; font-weight:600; }
+  .month button { all:unset; width:44px; height:44px; display:grid; place-items:center; border-radius:10px; }
+  .summary { padding:6px 0 18px; }
+  .summary .k { font-size:15px; color:var(--shell-muted); }
+  .summary .big { font-size:34px; font-weight:700; letter-spacing:-.02em; margin-top:2px; }
+  .summary .sub { font-size:15px; color:var(--shell-muted); margin-top:2px; }
+  .band { height:16px; margin:0 -16px; background:
+     repeating-linear-gradient(90deg, rgb(255 255 255 / .12) 0 8px, transparent 8px 24px); opacity:.9; }
+  .body { padding:16px; display:flex; flex-direction:column; gap:14px; }
+  .seg { display:grid; grid-template-columns:1fr 1fr; gap:4px; background:var(--secondary); padding:4px; border-radius:12px; }
+  .seg span { min-height:44px; display:grid; place-items:center; border-radius:9px; font-weight:500; color:var(--muted-foreground); }
+  .seg span.on { background:var(--primary); color:var(--primary-foreground); font-weight:600; }
+  .list { background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  .item { display:flex; flex-direction:column; gap:8px; padding:12px 14px; border-top:1px solid var(--border); min-height:76px; }
+  .item:first-child { border-top:0; }
+  .item .l1 { display:flex; align-items:center; gap:12px; }
+  .glyph { width:40px; height:40px; border-radius:8px; flex:none; display:grid; place-items:center; color:#fff; font-size:18px; }
+  .name { flex:1; font-weight:500; min-width:0; }
+  .name small { display:block; font-weight:400; font-size:13px; color:var(--muted-foreground); }
+  .plus { all:unset; width:44px; height:44px; display:grid; place-items:center; border-radius:10px; color:var(--primary); font-size:22px; }
+  .bar { display:flex; gap:3px; height:14px; direction:ltr; }
+  .bar i { flex:1; background:var(--cell-empty); border-radius:2px; }
+  .bar i.on { background:var(--cell-on); }
+  .bar.over i.on { background:var(--over); }
+  .tag-over { display:inline-flex; align-items:center; gap:4px; color:var(--over); font-weight:600; font-size:13px; }
+  .tag-left { color:var(--muted-foreground); font-size:13px; }
+  .amt { direction:ltr; unicode-bidi:isolate; font-variant-numeric:tabular-nums; }
+  .group-h { font-size:15px; font-weight:600; margin:6px 0 -4px; }
+  .callout { background:var(--over-soft); color:var(--over-foreground); border-radius:12px; padding:12px 14px; display:flex; gap:10px; font-size:15px; }
+  .btn { all:unset; min-height:48px; display:grid; place-items:center; border-radius:12px; font-weight:600; background:var(--primary); color:var(--primary-foreground); }
+  .btn.action { background:var(--action); color:var(--action-foreground); }
+  .btn.ghost { background:transparent; color:var(--primary); border:1px solid var(--border); }
+  .tabs { position:absolute; inset-inline:0; bottom:0; height:64px; background:var(--shell); display:flex; justify-content:space-around; align-items:center; color:var(--shell-muted); font-size:12px; }
+  .tabs .cur { color:#fff; font-weight:700; }
+  .sheet { position:absolute; inset-inline:0; bottom:0; top:92px; background:var(--card); border-radius:24px 24px 0 0; box-shadow:0 -10px 40px rgb(0 0 0 / .25); display:flex; flex-direction:column; }
+  .scrim { position:absolute; inset:0; background:rgb(0 0 0 / .3); }
+  .sheet h2 { font-size:17px; margin:0; padding:18px 16px 4px; }
+  .sheet .copy { padding:0 16px 8px; font-size:14px; color:var(--muted-foreground); }
+  .sheet .rows { flex:1; overflow:hidden; padding:0 16px; }
+  .field { display:flex; align-items:center; gap:12px; min-height:60px; border-top:1px solid var(--border); }
+  .field .nm { flex:1; font-weight:500; }
+  .field .in { width:128px; height:48px; border:1px solid var(--input); border-radius:10px; padding:0 12px; display:flex; align-items:center; justify-content:flex-end; font-size:16px; background:#fff; }
+  .field .in.empty { color:var(--muted-foreground); border-color:var(--border); }
+  .foot { border-top:1px solid var(--border); padding:12px 16px 22px; display:flex; flex-direction:column; gap:10px; background:var(--card); }
+  .foot .t { display:flex; justify-content:space-between; font-size:15px; }
+  .foot .t b { font-weight:700; }
+  .empty { text-align:center; padding:48px 24px; display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .empty .orn { width:72px; height:72px; border-radius:16px; background:var(--accent); display:grid; place-items:center; color:var(--primary); font-size:32px; }
+  .empty h3 { margin:0; font-size:18px; } .empty p { margin:0; color:var(--muted-foreground); max-width:30ch; }
+  [dir=rtl] .flip { transform:scaleX(-1); }
+</style>
+</head>
+<body>
+<h1>Budgets · 390px · English and Arabic</h1>
+<p class="note">Static mockup for approval. Encaustic tile world: teal shell, rows of tile cells that fill, oxblood only for over-budget (always with an icon and the word "Over"). Amounts never mirror. Demo numbers only.</p>
+<div id="root"></div>
+
+<script>
+const T = (en, ar, rtl) => rtl ? ar : en;
+const cells = (v, n = 16) => {
+  const on = Math.min(n, Math.round(v * n));
+  return `<div class="bar ${v > 1 ? 'over' : ''}">${Array.from({length:n},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div>`;
+};
+const warn = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>`;
+const tabs = (r, cur) => `<nav class="tabs">${[
+  ['Home','الرئيسية'],['Activity','النشاط'],['Budgets','الميزانيات'],['Wallets','المحافظ']
+].map((x,i)=>`<span class="${i===cur?'cur':''}">${T(x[0],x[1],r)}</span>`).join('')}</nav>`;
+const header = (r, month, big, sub) => `
+  <header class="shell"><div class="top">
+    <div class="month"><button>${r?'›':'‹'}</button><span>${month}</span><button>${r?'‹':'›'}</button></div>
+    <span style="font-size:13px;color:var(--shell-muted)">${T('Edit','تعديل',r)}</span></div>
+    <div class="summary"><div class="k">${T('Spent this month','المصروف هذا الشهر',r)}</div>
+    <div class="big amt">${big}</div><div class="sub">${sub}</div></div><div class="band"></div></header>`;
+const row = (r, color, icon, name, spent, limit, ratio) => {
+  const over = ratio > 1; const left = limit - spent;
+  return `<div class="item"><div class="l1"><div class="glyph" style="background:${color}">${icon}</div>
+    <div class="name"><bdi>${name}</bdi><small class="amt">$${spent.toFixed(2)} ${T('of','من',r)} $${limit.toFixed(2)}</small></div>
+    ${over ? `<span class="tag-over">${warn}${T('Over by','تجاوز بمبلغ',r)} <bdi class="amt">$${(-left).toFixed(2)}</bdi></span>`
+           : `<span class="tag-left"><bdi class="amt">$${left.toFixed(2)}</bdi> ${T('left','متبقي',r)}</span>`}
+    <button class="plus" aria-label="${T('Add','إضافة',r)}">+</button></div>${cells(ratio)}</div>`;
+};
+const list = (r) => `
+  <div class="seg"><span class="on">USD</span><span>LBP</span></div>
+  <div class="callout">${warn}<span>${T('2 categories are over budget','فئتان تجاوزتا الميزانية',r)}</span></div>
+  <div class="list">
+    ${row(r,'#0f4c4a','▦',T('Groceries','بقالة',r),340,300,340/300)}
+    ${row(r,'#8e2f3a','◈',T('Eating out','مطاعم',r),95,80,95/80)}
+    ${row(r,'#b07a00','◇',T('Transport','مواصلات',r),42,120,42/120)}
+    ${row(r,'#0f4c4a','✚',T('Health','صحة',r),0,60,0)}
+  </div>
+  <div class="group-h">${T('Not budgeted','بدون ميزانية',r)}</div>
+  <div class="list"><div class="item"><div class="l1"><div class="glyph" style="background:#6b4f7a">◐</div>
+    <div class="name"><bdi>${T('Fun','ترفيه',r)}</bdi></div><span class="tag-left"><bdi class="amt">$15.00</bdi> ${T('spent','مصروف',r)}</span></div></div></div>`;
+const phone = (r, inner, curTab = 2) => `<div class="phone" dir="${r?'rtl':'ltr'}">${inner}${tabs(r,curTab)}</div>`;
+const listScreen = (r) => phone(r, header(r, T('November 2026','تشرين الثاني 2026',r), '$476.00', `${T('of','من',r)} <span class="amt">$560.00</span> · <span class="amt">$84.00</span> ${T('left','متبقي',r)}`) + `<main class="body">${list(r)}</main>`);
+const sheetScreen = (r) => phone(r, header(r, T('November 2026','تشرين الثاني 2026',r), '$476.00', '') + `<main class="body" style="opacity:.4">${list(r).slice(0,600)}</main><div class="scrim"></div>
+  <section class="sheet"><h2>${T('Edit budgets','تعديل الميزانيات',r)}</h2>
+  <p class="copy">${T('Applies to November 2026 and the months after. Leave empty for no budget.','ينطبق على تشرين الثاني 2026 والأشهر التالية. اترك الحقل فارغاً لعدم وجود ميزانية.',r)}</p>
+  <div class="rows">
+    ${[['Groceries','بقالة','300.00'],['Eating out','مطاعم','80.00'],['Transport','مواصلات','120.00'],['Health','صحة','60.00'],['Fun','ترفيه','']].map(x=>
+      `<div class="field"><div class="glyph" style="background:#0f4c4a;width:36px;height:36px">▦</div><span class="nm"><bdi>${T(x[0],x[1],r)}</bdi></span>
+       <span class="in amt ${x[2]?'':'empty'}">${x[2]?'$'+x[2]:T('No budget','بدون',r)}</span></div>`).join('')}
+  </div>
+  <div class="foot"><div class="t"><span>${T('Total budgets','مجموع الميزانيات',r)}</span><b class="amt">$560.00</b></div>
+    <div class="t" style="color:var(--muted-foreground)"><span>${T('Salary after fixed','الراتب بعد الثابت',r)}</span><span class="amt">$1,225.00</span></div>
+    <div class="t" style="color:var(--muted-foreground)"><span>${T('Not budgeted yet','غير مخصص بعد',r)}</span><span class="amt">$665.00</span></div>
+    <span class="btn action">${T('Save budgets','احفظ الميزانيات',r)}</span></div></section>`, 2);
+const emptyScreen = (r) => phone(r, header(r, T('October 2026','تشرين الأول 2026',r), '$0.00', T('No budgets this month','لا ميزانيات هذا الشهر',r)) +
+  `<main class="body"><div class="empty"><div class="orn">▦</div><h3>${T('No budgets yet','لا توجد ميزانيات بعد',r)}</h3>
+   <p>${T('Set a monthly limit per category and see how much is left.','حدّد حدّاً شهرياً لكل فئة وانظر كم تبقّى.',r)}</p>
+   <span class="btn" style="padding:0 24px">${T('Set budgets','حدّد الميزانيات',r)}</span></div></main>`);
+const root = document.getElementById('root');
+[['List (one category over, one not budgeted)', listScreen], ['Edit budgets sheet with running total', sheetScreen], ['Empty month', emptyScreen]].forEach(([title, fn]) => {
+  root.insertAdjacentHTML('beforeend', `<p class="label">${title}</p><div class="row"><div>${fn(false)}</div><div>${fn(true)}</div></div>`);
+});
+</script>
+</body>
+</html>

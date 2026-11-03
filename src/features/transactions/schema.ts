@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_MINOR, type Currency } from "@/lib/money";
+import { MAX_MINOR, MAX_RATE, type Currency } from "@/lib/money";
 
 /** Kinds a person enters through the Add sheet's category flow. */
 export const txnKindSchema = z.enum(["expense", "income"]);
@@ -32,6 +32,8 @@ export const transferInputSchema = z.object({
   toWalletId: z.uuid(),
   fromAmountMinor: z.number().int().min(1).max(MAX_MINOR),
   toAmountMinor: z.number().int().min(1).max(MAX_MINOR),
+  /** The USD to LBP rate used (LBP per 1 USD); saved so the next exchange starts from it. */
+  rate: z.number().int().min(1).max(MAX_RATE).optional(),
   note: z.string().trim().max(140).optional(),
 });
 

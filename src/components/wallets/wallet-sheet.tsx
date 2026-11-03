@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
-import { useRouter } from "@/i18n/navigation";
 import { archiveWallet, createWallet, deleteWallet, unarchiveWallet, updateWallet } from "@/features/wallets/actions";
 import type { Wallet, WalletKind } from "@/features/wallets/schema";
 import { parseAmount, toInputText, type Currency } from "@/lib/money";
@@ -27,7 +26,6 @@ export function WalletForm({
   onAddMoney?: (wallet: Wallet) => void;
 }) {
   const t = useTranslations("Wallets");
-  const router = useRouter();
   const app = useAppDataOptional();
   const sources = (app?.wallets ?? []).filter((w) => !w.archived);
   const [pending, startTransition] = useTransition();
@@ -74,7 +72,6 @@ export function WalletForm({
         return;
       }
       onDone();
-      router.refresh();
     });
   };
 

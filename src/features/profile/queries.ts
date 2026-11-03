@@ -1,8 +1,9 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getUserId } from "@/lib/supabase/user";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
-import { DEMO_SALARY } from "@/lib/demo-data";
+import { DEMO_RATE, DEMO_SALARY } from "@/lib/demo-data";
 import { DEFAULT_PROFILE, profileSchema, type Profile } from "./schema";
 
 type ProfileRow = {
@@ -13,31 +14,30 @@ type ProfileRow = {
   onboarded_at: string | null;
   salary_amount_minor?: number | string | null;
   salary_wallet_id?: string | null;
+  usd_lbp_rate?: number | null;
 };
 
 /** The signed-in owner's profile. Falls back to defaults when Supabase is not configured. */
 export const getProfile = cache(async (): Promise<Profile> => {
-  if (!supabaseConfigured()) return { ...DEFAULT_PROFILE, salary: DEMO_SALARY };
+  if (!supabaseConfigured()) return { ...DEFAULT_PROFILE, salary: DEMO_SALARY, usdLbpRate: DEMO_RATE };
 
+  const userId = await getUserId();
+  if (!userId) return DEFAULT_PROFILE;
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return DEFAULT_PROFILE;
 
-  const primary = await supabase
-    .from("profiles")
-    .select("locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_wallet_id")
-    .eq("user_id", auth.user.id)
-    .maybeSingle();
-  let data: ProfileRow | null = primary.data;
-  if (primary.error) {
-    // The salary columns come from a later migration; read the base columns if it is not applied yet.
-    data = (
-      await supabase
-        .from("profiles")
-        .select("locale, digits, theme, timezone, onboarded_at")
-        .eq("user_id", auth.user.id)
-        .maybeSingle()
-    ).data;
+  // Newer columns come from later migrations; fall back to older column sets if one is not applied yet.
+  const columnSets = [
+    "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_wallet_id, usd_lbp_rate",
+    "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_wallet_id",
+    "locale, digits, theme, timezone, onboarded_at",
+  ];
+  let data: ProfileRow | null = null;
+  for (const columns of columnSets) {
+    const result = await supabase.from("profiles").select(columns).eq("user_id", userId).maybeSingle();
+    if (!result.error) {
+      data = result.data as ProfileRow | null;
+      break;
+    }
   }
   if (!data) return { ...DEFAULT_PROFILE, onboarded: false };
 
@@ -47,6 +47,7 @@ export const getProfile = cache(async (): Promise<Profile> => {
     theme: data.theme,
     timezone: data.timezone,
     onboarded: data.onboarded_at !== null,
+    usdLbpRate: data.usd_lbp_rate ?? null,
     salary:
       data.salary_amount_minor != null && data.salary_wallet_id != null
         ? { amountMinor: Number(data.salary_amount_minor), walletId: data.salary_wallet_id }

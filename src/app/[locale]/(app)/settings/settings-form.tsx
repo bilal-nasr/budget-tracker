@@ -2,23 +2,16 @@
 
 import { useState, useSyncExternalStore, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { updateProfile } from "@/features/profile/actions";
+import { saveLocale, updateProfile } from "@/features/profile/actions";
+import { applyTheme } from "@/lib/theme";
 import { signOut } from "@/features/auth/actions";
 import type { Profile } from "@/features/profile/schema";
 
 type Theme = Profile["theme"];
-
-function applyTheme(theme: Theme) {
-  const dark =
-    theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", dark);
-  try {
-    localStorage.setItem("theme", theme);
-  } catch {}
-}
 
 const subscribeNoop = () => () => {};
 
@@ -27,6 +20,7 @@ export function SettingsForm({ profile }: { profile: Profile }) {
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [digits, setDigits] = useState(profile.digits);
   const [theme, setTheme] = useState<Theme>(profile.theme);
@@ -39,7 +33,6 @@ export function SettingsForm({ profile }: { profile: Profile }) {
     startTransition(async () => {
       const result = await updateProfile(patch);
       if (!result.ok && result.error !== "notConfigured") setMessage(t("saveFailed"));
-      router.refresh();
     });
   };
 
@@ -51,8 +44,10 @@ export function SettingsForm({ profile }: { profile: Profile }) {
           label={t("language")}
           value={locale as "en" | "ar"}
           onChange={(next) => {
-            save({ locale: next });
-            router.replace(pathname, { locale: next });
+            void saveLocale(next);
+            startTransition(() => {
+              router.replace({ pathname, query: Object.fromEntries(searchParams) }, { locale: next });
+            });
           }}
           options={[
             { value: "en", label: "English" },

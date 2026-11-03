@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useAppData } from "@/components/providers/app-data";
-import { CategoryGlyph } from "@/components/tiles/tile-glyph";
+import { CategorySelect } from "@/components/categories/category-select";
+import { InstallmentForm } from "@/components/installments/installment-sheet";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
-import { useRouter } from "@/i18n/navigation";
-import { categoryName } from "@/features/categories/schema";
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from "@/features/fixed/actions";
 import type { FixedExpense } from "@/features/fixed/schema";
 import { parseAmount, toInputText } from "@/lib/money";
@@ -17,8 +17,7 @@ export type FixedSheetState = { item: FixedExpense | null };
 
 function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => void }) {
   const t = useTranslations("Fixed");
-  const locale = useLocale();
-  const router = useRouter();
+  const tAdd = useTranslations("Add");
   const { wallets, categories, walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const usable = wallets.filter((w) => !w.archived || w.id === item?.walletId);
@@ -51,7 +50,6 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         return;
       }
       onClose();
-      router.refresh();
     });
   };
 
@@ -110,26 +108,13 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         dir="ltr"
         error={amountError}
       />
-      <div className="flex flex-col gap-1.5">
-        <span id="fx-category" className="text-sm font-medium">{t("category")}</span>
-        <div role="radiogroup" aria-labelledby="fx-category" className="grid grid-cols-4 gap-2">
-          {expenseCategories.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              role="radio"
-              aria-checked={c.id === categoryId}
-              onClick={() => setCategoryId(c.id)}
-              className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-0.5 py-1.5 text-xs font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
-            >
-              <CategoryGlyph tile={c.tile} color={c.color} />
-              <span className="max-w-full truncate px-1">
-                <bdi>{categoryName(c, locale)}</bdi>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <CategorySelect
+        categories={expenseCategories}
+        value={categoryId}
+        onChange={setCategoryId}
+        label={t("category")}
+        placeholder={tAdd("categoryPlaceholder")}
+      />
       <div className="flex flex-col gap-1">
         <TextField
           label={t("dueDay")}
@@ -175,6 +160,27 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
   );
 }
 
+/** New items can be a monthly expense or an installment; editing keeps the monthly form. */
+function Body({ item, onClose }: { item: FixedExpense | null; onClose: () => void }) {
+  const t = useTranslations("Installments");
+  const [kind, setKind] = useState<"monthly" | "installment">("monthly");
+  if (item) return <Form item={item} onClose={onClose} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <Segmented
+        label={t("kind")}
+        value={kind}
+        onChange={setKind}
+        options={[
+          { value: "monthly", label: t("monthly") },
+          { value: "installment", label: t("installment") },
+        ]}
+      />
+      {kind === "monthly" ? <Form item={null} onClose={onClose} /> : <InstallmentForm item={null} onClose={onClose} />}
+    </div>
+  );
+}
+
 export function FixedSheet({ state, onClose }: { state: FixedSheetState | null; onClose: () => void }) {
   const t = useTranslations("Fixed");
   return (
@@ -183,7 +189,7 @@ export function FixedSheet({ state, onClose }: { state: FixedSheetState | null; 
       onOpenChange={(o) => !o && onClose()}
       title={state?.item ? t("editTitle") : t("newTitle")}
     >
-      {state ? <Form key={state.item?.id ?? "new"} item={state.item} onClose={onClose} /> : null}
+      {state ? <Body key={state.item?.id ?? "new"} item={state.item} onClose={onClose} /> : null}
     </SheetShell>
   );
 }

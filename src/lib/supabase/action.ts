@@ -2,8 +2,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./server";
 import { supabaseConfigured } from "./proxy";
+import { getUserId } from "./user";
 
-export type ActionError = "invalid" | "notConfigured" | "failed" | "hasTransactions" | "inUse";
+export type ActionError = "invalid" | "notConfigured" | "failed" | "hasTransactions" | "inUse" | "exceedsRemaining" | "totalBelowPaid";
 export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: ActionError };
 
 /** Signed-in Supabase client for a Server Action, or the reason there is none. */
@@ -13,8 +14,7 @@ type Ctx =
 
 export async function actionClient(): Promise<Ctx> {
   if (!supabaseConfigured()) return { error: "notConfigured" };
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return { error: "failed" };
-  return { supabase, userId: data.user.id };
+  const userId = await getUserId();
+  if (!userId) return { error: "failed" };
+  return { supabase: await createClient(), userId };
 }

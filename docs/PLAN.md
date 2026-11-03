@@ -76,14 +76,28 @@ Notes: content column is 800px on desktop for now (was 1120) so amounts sit near
 
 Acceptance: log an expense in 4 taps plus amount on a real phone; balances match the database; 100+ seeded transactions scroll smoothly; Add works with the keyboard open on iOS Safari and Android Chrome.
 
-## Phase 4: Categories & budgets ☐
+## Phase 3b: Owner feedback round 2 ☐
+
+Ten notes from the owner (2026-11-03), planned task by task in [`docs/plans/`](plans/README.md).
+
+- [x] [01 Speed](plans/01-performance.md): loading skeletons, one round trip per write, local JWT checks, optimistic Paid / Got salary.
+- [x] [02 Language and theme](plans/02-language-and-theme.md): one navigation per language tap; theme kept on switch.
+- [x] [03 Confirm Got salary](plans/03-salary-confirm.md): confirmation sheet every time.
+- [x] [04 Add sheet](plans/04-add-sheet-name-and-category.md): visible Name field; category dropdown (also in the fixed-expense sheet).
+- [x] [05 Fixed totals](plans/05-fixed-totals.md): per-wallet needs, total fixed, salary after fixed.
+- [x] [06 Exchange rate](plans/06-exchange-rate-move.md): `1 $ = [ ] LBP` in Move, editable result, rate saved on the profile (also serves as Phase 5's reference rate).
+- [x] [07 Installments](plans/07-installments.md): total, what is left, payment history, default wallet with per-payment override.
+- [x] [08 Budgets](plans/08-budgets.md): implements the budget items of Phase 4 below.
+- [x] [09 Sign-up](plans/09-signup.md): open sign-up with email verification. Changes the single-owner rule; needs an SMTP provider first.
+
+## Phase 4: Categories & budgets ☐ (budget items planned in [plans/08](plans/08-budgets.md))
 
 - [ ] Categories manager (Settings): bilingual names, icon, colour, one subcategory level, archive, reorder.
-- [ ] Migration: `budgets`, `month_category_spend`, `month_summary`, carry-forward logic; SQL tests.
-- [ ] Budgets screen: month switcher, currency segment, category rows with progress and over-limit state, category month detail.
-- [ ] Edit budgets sheet with running total.
-- [ ] Home v2: "Left to spend this month" per currency + over-budget callout.
-- [ ] Add from a budget row pre-selects the category.
+- [x] Migration `20261110000200_budgets.sql` (`budgets`, `month_budgets`, `month_category_spend`, carry-forward) + `supabase/tests/budgets.test.sql`. Not yet applied or run.
+- [x] Budgets screen: month switcher, currency segment, category rows with progress and over-limit state, category month detail.
+- [x] Edit budgets sheet with running total.
+- [x] Home v2: "Left to spend this month" per currency + over-budget callout.
+- [x] Add from a budget row pre-selects the category.
 
 Acceptance: budgets carry into a new month automatically; over-budget is shown with icon + text; Home answers "how am I doing" above the fold at 390 × 844.
 

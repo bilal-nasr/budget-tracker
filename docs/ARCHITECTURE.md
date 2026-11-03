@@ -36,20 +36,24 @@ Environment variables (`.env.example` is committed, `.env.local` is not):
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=   # sb_publishable_… (anon role)
 SUPABASE_SECRET_KEY=                    # sb_secret_… — server only, used by seed/admin scripts, never in the app bundle
-OWNER_EMAIL=                            # the only email allowed to sign in
+OWNER_EMAIL=                            # only for `pnpm owner:create`; not used for sign-in
 NEXT_PUBLIC_BASE_PATH=                  # optional, e.g. /budget
 NEXT_PUBLIC_SITE_URL=                   # e.g. https://example.com/budget
 ```
 
-## 3. Authentication (single owner)
+## 3. Authentication (open sign-up, email verification)
 
-- Supabase Auth, **email + password**. Sign-ups disabled in the Supabase project (`[auth] enable_signup = false` locally, the same toggle in the dashboard for production).
-- The owner account is created once: `pnpm owner:create` (a script using `SUPABASE_SECRET_KEY`) or by hand in the dashboard.
-- Defence in depth: the sign-in Server Action rejects any email ≠ `OWNER_EMAIL` before calling Supabase, and the proxy signs out any session whose email ≠ `OWNER_EMAIL`.
-- Sessions are long-lived (refresh token rotation) so the installed PWA rarely asks to sign in again.
-- `proxy.ts` (Next.js's request proxy, formerly `middleware.ts`) refreshes the session cookie on every request and redirects unauthenticated visitors to `/[locale]/sign-in`.
-- No sign-up, forgot-password or account screens in v1. Password reset happens in the Supabase dashboard.
-- Later option: passkeys / WebAuthn for one-tap sign-in on the phone.
+- Supabase Auth, **email + password**. Sign-ups are enabled and **email confirmations are required** (`[auth] enable_signup = true`, `[auth.email] enable_confirmations = true` locally; the same toggles in the hosted dashboard).
+- Sign-up (`signUp` Server Action) always lands on `/[locale]/check-email`, whether or not the email already had an account, so the form never reveals who has an account. The confirmation email (bilingual template in `supabase/templates/confirmation.html`) links to `/auth/confirm?token_hash=...&type=email&next=...`.
+- `/auth/confirm` (a Route Handler outside `[locale]`) verifies the token, which signs the person in, and redirects to `next`. `next` is untrusted: `safeNext` only honours same-site `/en` or `/ar` paths, otherwise `/en`.
+- Signing in before confirming returns `email_not_confirmed`; the sign-in form says so and offers to resend the link. A wrong password and an unknown email give the same message.
+- Accounts are isolated by RLS (`user_id = (select auth.uid())` on every table); `supabase/tests/isolation.test.sql` checks that one account cannot read or write another's data. A bootstrap trigger gives each new user a profile and starter categories.
+- `proxy.ts` refreshes the session on every request (`getClaims`, verified locally) and redirects signed-out visitors to `/[locale]/sign-in`; sign-in, sign-up and check-email are public.
+- Hosted setup needs a custom SMTP provider: Supabase's built-in mailer only sends to the project's own team members and is heavily rate-limited.
+- Bot protection: set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to show a Cloudflare Turnstile check on sign-in and sign-up (the token also goes with "send the link again"). It only helps when captcha protection is also turned on in the Supabase dashboard (Authentication > Bot and Abuse Protection) with the Turnstile secret; also lower the email rate limit there. Without both, anyone can trigger confirmation emails to any address.
+- Confirmation redirects use `NEXT_PUBLIC_SITE_URL` (not the request's own address, which is internal behind a proxy or in Docker).
+- Not built yet: password reset / forgot-password, account deletion.
+- Later option: passkeys / WebAuthn.
 
 ## 4. Folder structure
 

@@ -29,5 +29,5 @@ COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/public ./public
 USER app
 EXPOSE 3000
-# OWNER_EMAIL is a runtime variable (read by the proxy), pass it with -e / env_file.
+# NEXT_PUBLIC_SITE_URL is the public address used in confirmation emails; pass runtime variables with -e / env_file.
 CMD ["node", "server.js"]

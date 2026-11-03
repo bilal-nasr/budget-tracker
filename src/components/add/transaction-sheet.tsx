@@ -2,17 +2,16 @@
 
 import { useRef, useState, useTransition } from "react";
 import { ChevronDown } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { AmountKeypad } from "@/components/add/amount-keypad";
 import { useAppData } from "@/components/providers/app-data";
-import { CategoryGlyph } from "@/components/tiles/tile-glyph";
+import { CategorySelect } from "@/components/categories/category-select";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { useRouter } from "@/i18n/navigation";
-import { categoryName } from "@/features/categories/schema";
 import { addDays, todayIn } from "@/features/transactions/group";
 import {
   createTransaction,
@@ -21,20 +20,19 @@ import {
   updateTransaction,
 } from "@/features/transactions/actions";
 import type { Transaction } from "@/features/transactions/schema";
-import { groupTyped, parseAmount, toInputText, type Currency } from "@/lib/money";
+import { convertAtRate, groupTyped, parseAmount, parseRate, toInputText, type Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 type Mode = "expense" | "income" | "move";
 
 /** Where the sheet was opened from. `walletId` is a wallet the user is adding money to. */
-export type ComposerPreset = { kind?: Mode; walletId?: string };
+export type ComposerPreset = { kind?: Mode; walletId?: string; categoryId?: string };
 
 export type ComposerState =
   | { mode: "add"; initial?: Transaction; preset?: ComposerPreset }
   | { mode: "edit"; initial: Transaction };
 
 const LAST_WALLET_KEY = "lastWalletId";
-const VISIBLE_CATEGORIES = 7;
 
 /** "54." is a valid half-typed amount; parseAmount wants digits after the dot. */
 const parseTyped = (typed: string, currency: Currency) =>
@@ -45,9 +43,8 @@ const chipClass =
 
 function Form({ state, onClose }: { state: ComposerState; onClose: () => void }) {
   const t = useTranslations("Add");
-  const locale = useLocale();
   const router = useRouter();
-  const { wallets, categories, timezone, walletById } = useAppData();
+  const { wallets, categories, timezone, walletById, usdLbpRate } = useAppData();
   const [pending, startTransition] = useTransition();
   const initial = state.initial;
   const preset = state.mode === "add" ? state.preset : undefined;
@@ -74,24 +71,37 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
   const exchange = mode === "move" && toWallet !== undefined && wallet !== undefined && toWallet.currency !== wallet.currency;
 
   const [typed, setTyped] = useState(initial ? toInputText(initial.amountMinor, initial.currency) : "");
+  // Rate is LBP per 1 USD. Received follows amount × rate until the owner edits it.
+  const [rateText, setRateText] = useState(usdLbpRate ? String(usdLbpRate) : "");
   const [receivedText, setReceivedText] = useState("");
-  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
+  const [receivedEdited, setReceivedEdited] = useState(false);
+  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? preset?.categoryId ?? "");
   const [date, setDate] = useState(() => (state.mode === "edit" && initial ? initial.occurredOn : todayIn(timezone)));
   const [note, setNote] = useState(initial?.note ?? "");
   const [pickWallet, setPickWallet] = useState(false);
   const [details, setDetails] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const noteInput = useRef<HTMLInputElement>(null);
 
   const today = todayIn(timezone);
   const list = categories.filter((c) => c.kind === mode);
-  const crowded = list.length > VISIBLE_CATEGORIES + 1;
-  const shown = showAll || !crowded ? list : list.slice(0, VISIBLE_CATEGORIES);
   const minor = parseTyped(typed, currency);
+  const rate = parseRate(rateText);
+  const rateError = exchange && rateText.trim() !== "" && rate === null ? t("errorRate") : null;
+  const converted =
+    exchange && toWallet && minor !== null && rate !== null
+      ? convertAtRate(minor, currency, toWallet.currency, rate)
+      : null;
+  const receivedValue = receivedEdited ? receivedText : converted === null ? "" : toInputText(converted, toWallet?.currency ?? "USD");
   const receivedMinor =
-    !exchange || !toWallet ? minor : receivedText.trim() === "" ? null : parseAmount(receivedText, toWallet.currency);
-  const receivedError = exchange && receivedText.trim() !== "" && receivedMinor === null ? t("errorAmount") : null;
+    !exchange || !toWallet ? minor : receivedValue.trim() === "" ? null : parseAmount(receivedValue, toWallet.currency);
+  const tooSmall = exchange && !receivedEdited && converted === 0;
+  const receivedError =
+    exchange && receivedEdited && receivedText.trim() !== "" && receivedMinor === null
+      ? t("errorAmount")
+      : tooSmall
+        ? t("errorTooSmall")
+        : null;
   const canSave =
     minor !== null && minor > 0 && wallet !== undefined && date !== "" &&
     (mode === "move"
@@ -105,7 +115,6 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
   const changeMode = (next: Mode) => {
     setMode(next);
     setCategoryId("");
-    setShowAll(false);
     setError(null);
     if (next === "move") {
       if (topUpId && walletId === topUpId) {
@@ -136,7 +145,6 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
       localStorage.setItem(LAST_WALLET_KEY, walletId);
     } catch {}
     onClose();
-    router.refresh();
   };
   const undoToast = (label: string, id: string) =>
     toast(label, {
@@ -144,7 +152,6 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
         label: t("undo"),
         onClick: async () => {
           await deleteTransaction(id);
-          router.refresh();
         },
       },
     });
@@ -161,6 +168,7 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
           toWalletId,
           fromAmountMinor: minor,
           toAmountMinor: receivedMinor,
+          rate: exchange && !receivedEdited && rate !== null ? rate : undefined,
           note: note.trim() || undefined,
         });
         if (!result.ok) return fail(result.error);
@@ -302,49 +310,76 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
                 </div>
               </div>
               {exchange && toWallet ? (
-                <div className="flex flex-col gap-1">
-                  <TextField
-                    label={t("received", { currency: toWallet.currency })}
-                    value={receivedText}
-                    onChange={(e) => setReceivedText(e.target.value)}
-                    inputMode={toWallet.currency === "USD" ? "decimal" : "numeric"}
-                    placeholder="0"
-                    autoComplete="off"
-                    dir="ltr"
-                    error={receivedError}
-                  />
-                  <p className="text-[13px] text-muted-foreground">{t("receivedHelp")}</p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="move-rate" className="text-sm font-medium">{t("rate")}</label>
+                    <div dir="ltr" className="flex items-center gap-2">
+                      <span className="shrink-0 text-base font-semibold">{t("rateUsd")}</span>
+                      <input
+                        id="move-rate"
+                        value={rateText}
+                        onChange={(e) => setRateText(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="89500"
+                        autoComplete="off"
+                        aria-invalid={rateError ? true : undefined}
+                        className="h-12 min-w-0 flex-1 rounded-lg border border-input bg-card px-3.5 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 aria-invalid:border-over"
+                      />
+                      <span className="shrink-0 text-base text-muted-foreground">{t("rateLbp")}</span>
+                    </div>
+                    {rateError ? <p role="alert" className="text-sm text-over">{rateError}</p> : null}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <TextField
+                      label={t("received", { currency: toWallet.currency })}
+                      value={receivedValue}
+                      onChange={(e) => {
+                        setReceivedText(e.target.value);
+                        setReceivedEdited(true);
+                      }}
+                      inputMode={toWallet.currency === "USD" ? "decimal" : "numeric"}
+                      placeholder="0"
+                      autoComplete="off"
+                      dir="ltr"
+                      error={receivedError}
+                    />
+                    {receivedEdited ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="self-start"
+                        onClick={() => setReceivedEdited(false)}
+                      >
+                        {t("useRate")}
+                      </Button>
+                    ) : (
+                      <p className="text-[13px] text-muted-foreground">{t("rateHelp")}</p>
+                    )}
+                  </div>
                 </div>
               ) : null}
             </>
           )}
         </div>
       ) : (
-        <div role="radiogroup" aria-label={t("category")} className="grid grid-cols-4 gap-2">
-          {shown.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              role="radio"
-              aria-checked={c.id === categoryId}
-              onClick={() => setCategoryId(c.id)}
-              className="flex min-h-[78px] [@media(max-height:700px)]:min-h-[66px] flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-0.5 py-1.5 text-xs font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
-            >
-              <CategoryGlyph tile={c.tile} color={c.color} />
-              <span className="max-w-full truncate px-1">
-                <bdi>{categoryName(c, locale)}</bdi>
-              </span>
-            </button>
-          ))}
-          {crowded && !showAll ? (
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className="flex min-h-[78px] items-center justify-center rounded-xl border border-dashed border-input bg-card text-xs font-medium"
-            >
-              {t("more")}
-            </button>
-          ) : null}
+        <div className="flex flex-col gap-3">
+          <TextField
+            label={t("name")}
+            ref={noteInput}
+            value={note}
+            maxLength={140}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t("namePlaceholder")}
+            enterKeyHint="done"
+            autoComplete="off"
+          />
+          <CategorySelect
+            categories={list}
+            value={categoryId}
+            onChange={setCategoryId}
+            label={t("category")}
+            placeholder={t("categoryPlaceholder")}
+          />
         </div>
       )}
 
@@ -355,8 +390,7 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
         className="mt-1.5 flex min-h-12 items-center justify-between text-start text-sm text-muted-foreground"
       >
         <span>
-          {dayLabel}
-          {note ? ` · ${note}` : ` · ${t("addNote")}`}
+          {mode === "move" ? (note ? `${dayLabel} · ${note}` : `${dayLabel} · ${t("addNote")}`) : dayLabel}
         </span>
         <ChevronDown aria-hidden className={cn("size-4 transition-transform", details && "rotate-180")} />
       </button>
@@ -374,6 +408,7 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
               className="h-12 rounded-lg border border-input bg-card px-3.5 text-base font-normal"
             />
           </label>
+          {mode === "move" ? (
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             {t("note")}
             <input
@@ -387,6 +422,7 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
               className="h-12 rounded-lg border border-input bg-card px-3.5 text-base font-normal"
             />
           </label>
+          ) : null}
         </div>
       ) : null}
 
@@ -398,7 +434,7 @@ function Form({ state, onClose }: { state: ComposerState; onClose: () => void })
         backspaceLabel={t("backspace")}
         textLabel={t("text")}
         onText={() => {
-          setDetails(true);
+          if (mode === "move") setDetails(true);
           // Wait for the field to render, then focus it so the phone keyboard opens.
           requestAnimationFrame(() => {
             noteInput.current?.focus();
@@ -451,7 +487,7 @@ export function TransactionSheet({
       title={state?.mode === "edit" ? t("editTitle") : t("title")}
     >
       {state ? (
-        <Form key={state.mode + (state.initial?.id ?? "new") + (state.mode === "add" ? (state.preset?.walletId ?? "") + (state.preset?.kind ?? "") : "")} state={state} onClose={onClose} />
+        <Form key={state.mode + (state.initial?.id ?? "new") + (state.mode === "add" ? (state.preset?.walletId ?? "") + (state.preset?.kind ?? "") + (state.preset?.categoryId ?? "") : "")} state={state} onClose={onClose} />
       ) : null}
     </SheetShell>
   );

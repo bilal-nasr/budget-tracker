@@ -13,19 +13,27 @@ import { SalaryCard } from "@/components/salary/salary-card";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import type { FixedExpense } from "@/features/fixed/schema";
+import type { Installment } from "@/features/installments/schema";
+import type { MonthBudgets } from "@/features/budgets/schema";
+import { isOver } from "@/features/budgets/rows";
 import type { SalaryStatus } from "@/features/salary/schema";
 import type { Transaction } from "@/features/transactions/schema";
 import { totalsByCurrency } from "@/features/wallets/schema";
+import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function HomeView({
   recent,
   salaryStatus,
   fixed,
+  installments,
+  budgets,
 }: {
   recent: Transaction[];
   salaryStatus: SalaryStatus;
   fixed: FixedExpense[];
+  installments: Installment[];
+  budgets: MonthBudgets[];
 }) {
   const t = useTranslations("Home");
   const { wallets } = useAppData();
@@ -34,6 +42,8 @@ export function HomeView({
   const hasArchived = wallets.some((w) => w.archived);
   const totals = totalsByCurrency(active);
   const has = (c: "USD" | "LBP") => active.some((w) => w.currency === c);
+  const tb = useTranslations("Budgets");
+  const overCount = budgets.reduce((n, b) => n + b.rows.filter(isOver).length, 0);
 
   return (
     <>
@@ -53,6 +63,25 @@ export function HomeView({
               <p className={cn("font-bold tracking-tight", has("USD") ? "mt-3 text-[28px] leading-tight" : "mt-1 text-[40px] leading-[1.1]")}>
                 <Amount minor={totals.LBP} currency="LBP" />
               </p>
+            ) : null}
+            {budgets.length > 0 ? (
+              <div className="mt-3 flex flex-col gap-1 text-[15px]">
+                {budgets.map((b) => {
+                  const left = b.totalLimitMinor - b.totalSpentMinor;
+                  return (
+                    <p key={b.currency} className="text-shell-muted">
+                      {left >= 0 ? t("leftToSpend") : t("overBudget")}{" "}
+                      <Amount minor={Math.abs(left)} currency={b.currency} className="font-semibold text-shell-foreground" />
+                    </p>
+                  );
+                })}
+                {overCount > 0 ? (
+                  <Link href="/budgets" className="inline-flex min-h-11 items-center gap-2 font-medium text-shell-foreground underline underline-offset-4">
+                    <TriangleAlert aria-hidden className="size-4" />
+                    {tb("overCount", { count: overCount })}
+                  </Link>
+                ) : null}
+              </div>
             ) : null}
           </>
         )}
@@ -76,7 +105,7 @@ export function HomeView({
         ) : (
           <>
             <SalaryCard status={salaryStatus} />
-            <FixedCard items={fixed} />
+            <FixedCard items={fixed} installments={installments} />
             <section aria-labelledby="h-recent" className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between">
                 <h2 id="h-recent" className="text-[17px] font-semibold">{t("recent")}</h2>

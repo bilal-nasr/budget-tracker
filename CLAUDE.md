@@ -1,6 +1,6 @@
 # Budget Tracker: Claude Code instructions
 
-Personal, mobile-first budget tracker. Next.js (App Router) + Supabase, English + Arabic (RTL), USD + LBP, single owner account, self-hosted.
+Personal, mobile-first budget tracker. Next.js (App Router) + Supabase, English + Arabic (RTL), USD + LBP, open sign-up with email verification, self-hosted.
 
 ## Read first
 
@@ -26,7 +26,7 @@ pnpm test:e2e       # Playwright (mobile-small, iphone, android, desktop × en/a
 pnpm db:start       # supabase start (local stack, Docker)
 pnpm db:reset       # re-apply migrations + seed
 pnpm db:types       # supabase gen types → src/lib/supabase/database.types.ts
-pnpm owner:create   # create the single owner account (needs SUPABASE_SECRET_KEY)
+pnpm owner:create   # create a confirmed account without email (needs SUPABASE_SECRET_KEY)
 ```
 
 (Scripts are added in Phase 0; keep this list in sync with `package.json`.)
@@ -52,7 +52,7 @@ pnpm owner:create   # create the single owner account (needs SUPABASE_SECRET_KEY
 - Schema changes only through `supabase/migrations/`, with SQL tests.
 - RLS on every table (`user_id = (select auth.uid())`). App code uses the publishable key + user session; the secret key is for scripts only and never imported under `src/`.
 - Reads in Server Components; writes in Server Actions validated with zod.
-- Single owner: sign-ups stay disabled; `OWNER_EMAIL` is enforced in the sign-in action and `proxy.ts`.
+- Open sign-up with email verification: an account works only after its confirmation link is opened (`/auth/confirm`). RLS on `user_id` isolates accounts; `supabase/tests/isolation.test.sql` pins it. There is no owner allowlist.
 
 **UI process**
 - Use the `impeccable` skill before any UI work (global rule). New screens get a mockup/screenshot for the owner before full build.
