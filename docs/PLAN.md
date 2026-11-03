@@ -67,6 +67,7 @@ Acceptance: only `OWNER_EMAIL` can sign in (test with a second account, which is
 - [ ] SQL tests (need local Supabase or a rollback-only run on the hosted database).
 - [x] Salary (added on request): fixed amount + wallet saved once, **Got salary** button on Home adds it as income with Undo, asks before a second add in the same month, entries tagged `source = salary`. Migration `20261106000000_salary.sql` applied to the hosted project.
 - [x] **Aa** key on the keypad opens the note field for a custom label.
+- [x] Archived wallets: restore, or delete permanently (only when it has no transactions). Migration `20261107000000_wallet_delete.sql` applied to the hosted project.
 - Deferred: deep-linkable `/transactions/[id]` route, spending-by-usage category order, search over category names.
 
 Notes: content column is 800px on desktop for now (was 1120) so amounts sit near their titles. iOS Safari ignores the `interactive-widget` viewport hint, so keyboard behaviour in sheets needs a real-iPhone check.

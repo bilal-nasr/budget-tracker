@@ -126,3 +126,22 @@ test("archived wallets are listed separately and can be restored", async ({ page
   // Archived wallets never count toward totals or the Add wallet picker.
   await expect(page.getByRole("dialog").getByRole("button", { name: "Archive wallet" })).toHaveCount(0);
 });
+
+test("archived wallet can be deleted after a confirmation (preview reports it cannot save)", async ({ page }) => {
+  await page.goto("/en/wallets");
+  await page.getByRole("button", { name: "Archived wallets (1)" }).click();
+  await page.getByRole("button", { name: /Old savings/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Delete wallet" }).click();
+  await expect(dialog.getByText(/cannot be undone/i)).toBeVisible();
+  await dialog.getByRole("button", { name: "Delete wallet" }).click();
+  await expect(dialog.getByText(/preview without a database/i)).toBeVisible();
+});
+
+test("active wallets have no delete button, only archive", async ({ page }) => {
+  await page.goto("/en/wallets");
+  await page.getByRole("button", { name: /^Cash/ }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Archive wallet" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Delete wallet" })).toHaveCount(0);
+});

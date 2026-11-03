@@ -70,3 +70,33 @@ export async function unarchiveWallet(id: string): Promise<ActionResult> {
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/**
+ * Permanently deletes an archived wallet that has no transactions. If it was
+ * the salary wallet, the salary setting is cleared first (it needs a wallet).
+ */
+export async function deleteWallet(id: string): Promise<ActionResult> {
+  if (!z.uuid().safeParse(id).success) return { ok: false, error: "invalid" };
+  const ctx = await actionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+
+  const { data: wallet } = await ctx.supabase.from("wallets").select("archived_at").eq("id", id).maybeSingle();
+  if (!wallet || wallet.archived_at === null) return { ok: false, error: "invalid" };
+
+  const { count } = await ctx.supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("wallet_id", id);
+  if (count === null || count > 0) return { ok: false, error: "hasTransactions" };
+
+  await ctx.supabase
+    .from("profiles")
+    .update({ salary_amount_minor: null, salary_wallet_id: null })
+    .eq("user_id", ctx.userId)
+    .eq("salary_wallet_id", id);
+
+  const { error } = await ctx.supabase.from("wallets").delete().eq("id", id);
+  if (error) return { ok: false, error: "failed" };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

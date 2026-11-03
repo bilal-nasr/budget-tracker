@@ -7,7 +7,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { useRouter } from "@/i18n/navigation";
-import { archiveWallet, createWallet, unarchiveWallet, updateWallet } from "@/features/wallets/actions";
+import { archiveWallet, createWallet, deleteWallet, unarchiveWallet, updateWallet } from "@/features/wallets/actions";
 import type { Wallet, WalletKind } from "@/features/wallets/schema";
 import { parseAmount, toInputText, type Currency } from "@/lib/money";
 
@@ -33,6 +33,7 @@ export function WalletForm({
     wallet ? toInputText(wallet.openingBalanceMinor, wallet.currency) : "",
   );
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const parsedAmount = amount.trim() === "" ? 0 : parseAmount(amount, currency);
@@ -44,7 +45,13 @@ export function WalletForm({
     startTransition(async () => {
       const result = await action();
       if (!result.ok) {
-        setError(result.error === "notConfigured" ? t("errorPreview") : t("errorFailed"));
+        setError(
+          result.error === "notConfigured"
+            ? t("errorPreview")
+            : result.error === "hasTransactions"
+              ? t("errorHasTransactions")
+              : t("errorFailed"),
+        );
         return;
       }
       onDone();
@@ -138,9 +145,28 @@ export function WalletForm({
       </Button>
 
       {wallet?.archived ? (
-        <Button type="button" variant="outline" disabled={pending} onClick={() => run(() => unarchiveWallet(wallet.id))}>
-          {t("restore")}
-        </Button>
+        <>
+          <Button type="button" variant="outline" disabled={pending} onClick={() => run(() => unarchiveWallet(wallet.id))}>
+            {t("restore")}
+          </Button>
+          {confirmDelete ? (
+            <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
+              <p className="text-[15px]">{t("deleteConfirm")}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>
+                  {t("cancel")}
+                </Button>
+                <Button type="button" variant="destructive" disabled={pending} onClick={() => run(() => deleteWallet(wallet.id))}>
+                  {t("deleteWallet")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button type="button" variant="ghost" className="text-over" onClick={() => setConfirmDelete(true)}>
+              {t("deleteWallet")}
+            </Button>
+          )}
+        </>
       ) : wallet ? (
         confirmArchive ? (
           <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">

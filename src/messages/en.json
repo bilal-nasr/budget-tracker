@@ -198,7 +198,10 @@
     "archivedTitle": "Archived wallets ({count})",
     "archivedHelp": "Tap a wallet to restore it.",
     "restore": "Restore wallet",
-    "emptyArchived": "You have no active wallets. Add a new one, or restore an archived wallet below."
+    "emptyArchived": "You have no active wallets. Add a new one, or restore an archived wallet below.",
+    "deleteWallet": "Delete wallet",
+    "deleteConfirm": "Delete this wallet permanently? This cannot be undone. Wallets that have transactions cannot be deleted.",
+    "errorHasTransactions": "This wallet has transactions, so it cannot be deleted. Keep it archived instead."
   },
   "Activity": {
     "search": "Search notes",
