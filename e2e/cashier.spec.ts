@@ -41,8 +41,12 @@ for (const locale of ["en", "ar"] as const) {
     // Cross-currency change takes the actual amounts; no quote is asked for.
     await expect(dialog.getByLabel(m.Cashier.rate, { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("checkbox", { name: m.Cashier.confirmRate })).toHaveCount(0);
+    await expect(dialog.getByText(m.Cashier.crossChangeHelp, { exact: true })).toBeVisible();
+    await expect(dialog.getByText(m.Cashier.rateHelp, { exact: true })).toHaveCount(0);
     const save = dialog.getByRole("button", { name: m.Add.save, exact: true });
     await expect(save).toBeEnabled();
+    await dialog.getByText(m.Cashier.crossChangeHelp, { exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath(`cross-change-${locale}.png`), animations: "disabled" });
     // Change in another currency still needs cash paid above the purchase cost.
     await dialog.getByLabel(m.Cashier.tender).fill("12.50");
     await expect(save).toBeDisabled();

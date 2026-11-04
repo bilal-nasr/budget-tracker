@@ -481,7 +481,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
             <CashSettlementFields draft={cashDraft} payCurrency={currency} costMinor={minor} wallets={wallets}
               editContext={cashEditContext}
               labels={settlementLabels} onChange={setCashDraft} onCreateWallet={() => onCreateWallet?.()} disabled={pending || unresolved} />
-            {cashDraft.enabled && cashDraft.changeCurrency !== currency ? <p className="text-[13px] text-muted-foreground">{ts("rateHelp")}</p> : null}
+            {cashDraft.enabled && cashDraft.changeCurrency !== currency ? <p className="text-[13px] text-muted-foreground">{ts("crossChangeHelp")}</p> : null}
           </> : null}
           {currencyLocked ? <p className="text-[13px] text-muted-foreground">{tb("removeBeforeCurrencyChange")}</p> : null}
         </div>
