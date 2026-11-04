@@ -74,5 +74,5 @@ it("rolls back optimistic restore when the request rejects", async () => {
   fireEvent.click(screen.getByText("Archived categories (1)"));
   fireEvent.click(screen.getByRole("button", { name: "Restore Food" }));
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("could not be saved"));
-  expect(screen.getByRole("button", { name: "Restore Food" })).toBeTruthy();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Restore Food" })).toBeTruthy());
 });

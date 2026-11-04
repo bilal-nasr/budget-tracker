@@ -52,7 +52,7 @@ export function demoLoans(): Loan[] {
   const base: Loan = { id: id(7001), name: "Workshop loan", direction: "borrowed", currency: "USD", walletId: id(1), feeCategoryId: id(112),
     openedOn: "2026-01-01", creationMode: "existing", principalMinor: 100000, feeBps: 725, feeMinor: 7250, totalDueMinor: 107250,
     principalPaidBeforeMinor: 40000, feePaidBeforeMinor: 0, principalPaidMinor: 40000, feePaidMinor: 0,
-    principalRemainingMinor: 60000, feeRemainingMinor: 7250, remainingMinor: 67250, archivedAt: null, deletedAt: null, events: [] };
+    principalRemainingMinor: 60000, feeRemainingMinor: 7250, remainingMinor: 67250, monthlyPaymentMinor: null, paymentCount: null, finalPaymentMinor: null, archivedAt: null, deletedAt: null, events: [] };
   const event = (loanId: string, n: number, amountMinor: number, principalMinor: number, feeMinor: number, flow: "in" | "out", overrides: Partial<LoanEvent> = {}): LoanEvent => ({
     transactionId: id(n), revision: 1, loanId, event: "repayment", flow, sequence: 1, walletId: id(8), occurredOn: today,
     amountMinor, principalMinor, feeMinor, categoryId: flow === "out" ? id(112) : id(202), deletedAt: null, ...overrides,
@@ -75,6 +75,9 @@ export function demoLoans(): Loan[] {
       events: [event(id(7006), 7106, 10000, 10000, 0, "in", { event: "disbursement", categoryId: null, sequence: 0 })] },
     { ...base, id: id(7007), name: "SYP loan demo", currency: "SYP", walletId: id(6), principalMinor: 1250, feeMinor: 91, totalDueMinor: 1341,
       principalPaidBeforeMinor: 0, principalPaidMinor: 0, principalRemainingMinor: 1250, feeRemainingMinor: 91, remainingMinor: 1341 },
+    { ...base, id: id(7008), name: "Monthly repayment demo", principalMinor: 200000, feeBps: 0, feeMinor: 0, totalDueMinor: 200000,
+      principalPaidBeforeMinor: 0, principalPaidMinor: 0, principalRemainingMinor: 200000, feeRemainingMinor: 0, remainingMinor: 200000,
+      monthlyPaymentMinor: 28500, paymentCount: 7, finalPaymentMinor: 29000 },
   ];
 }
 

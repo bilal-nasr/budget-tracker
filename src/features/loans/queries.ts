@@ -3,6 +3,7 @@ import { isCurrency, MAX_MINOR } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { demoLoans } from "./demo";
+import { calculateLoanPaymentPlan } from "./calculations";
 import type { Loan, LoanEvent } from "./schema";
 
 const amount = (value: unknown): number => {
@@ -48,12 +49,18 @@ export async function getLoans(): Promise<Loan[]> {
   }
   return items.map((r) => {
     if (!isCurrency(r.currency)) throw new Error("loansUnavailable");
+    const monthlyPaymentMinor = r.monthly_payment_minor == null ? null : amount(r.monthly_payment_minor);
+    const paymentCount = r.payment_count == null ? null : amount(r.payment_count);
+    const plan = monthlyPaymentMinor !== null && paymentCount !== null ? calculateLoanPaymentPlan(amount(r.total_due_minor), monthlyPaymentMinor, paymentCount) : null;
+    if ((monthlyPaymentMinor !== null || paymentCount !== null) && !plan) throw new Error("loansUnavailable");
+    const finalPaymentMinor = plan?.finalPaymentMinor ?? null;
     return { id: r.id, name: r.name, direction: r.direction, currency: r.currency,
       walletId: r.wallet_id, feeCategoryId: r.fee_category_id, openedOn: r.opened_on, creationMode: r.creation_mode,
       principalMinor: amount(r.principal_minor), feeBps: amount(r.fee_bps), feeMinor: amount(r.fee_minor), totalDueMinor: amount(r.total_due_minor),
       principalPaidBeforeMinor: amount(r.principal_paid_before_minor), feePaidBeforeMinor: amount(r.fee_paid_before_minor),
       principalPaidMinor: amount(r.principal_paid_minor), feePaidMinor: amount(r.fee_paid_minor),
       principalRemainingMinor: amount(r.principal_remaining_minor), feeRemainingMinor: amount(r.fee_remaining_minor), remainingMinor: amount(r.remaining_minor),
+      monthlyPaymentMinor, paymentCount, finalPaymentMinor,
       archivedAt: r.archived_at, deletedAt: r.deleted_at, events: histories.get(r.id) ?? [] };
   });
 }

@@ -20,10 +20,28 @@ const item: Loan = {
   id: "aaaaaaaa-0000-4000-8000-000000000003", name: "Synthetic", direction: "borrowed", currency: "USD", walletId: "aaaaaaaa-0000-4000-8000-000000000001",
   feeCategoryId: "aaaaaaaa-0000-4000-8000-000000000004", openedOn: "2026-01-01", creationMode: "existing", principalMinor: 10000, feeBps: 500, feeMinor: 500,
   totalDueMinor: 10500, principalPaidBeforeMinor: 0, feePaidBeforeMinor: 0, principalPaidMinor: 0, feePaidMinor: 0,
-  principalRemainingMinor: 10000, feeRemainingMinor: 500, remainingMinor: 10500, archivedAt: null, deletedAt: null, events: [],
+  principalRemainingMinor: 10000, feeRemainingMinor: 500, remainingMinor: 10500, monthlyPaymentMinor: null, paymentCount: null, finalPaymentMinor: null, archivedAt: null, deletedAt: null, events: [],
 };
 beforeEach(() => { model.wallets = [{ id: item.walletId, name: "USD wallet", currency: "USD", archived: false }, { id: "aaaaaaaa-0000-4000-8000-000000000002", name: "LBP wallet", currency: "LBP", archived: false }]; });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
+it.each(["en", "ar"] as const)("%s: suggests the monthly payment and allows a smaller manual amount", async (locale) => {
+  const messages = locale === "ar" ? ar : en;
+  action.mockResolvedValue({ ok: false, error: "notConfigured" });
+  const loan = { ...item, monthlyPaymentMinor: 3000, paymentCount: 3, finalPaymentMinor: 4500 };
+  render(<NextIntlClientProvider locale={locale} messages={{ Loans: messages.Loans }}><LoanPaymentSheet item={loan} onClose={vi.fn()} /></NextIntlClientProvider>);
+  const input = screen.getByLabelText(messages.Loans.amount) as HTMLInputElement;
+  expect(input.value).toBe("30");
+  expect(screen.getByText(messages.Loans.suggestMonthly)).toBeTruthy();
+  fireEvent.change(input, { target: { value: locale === "ar" ? "١٠" : "10" } });
+  fireEvent.click(screen.getByRole("button", { name: messages.Loans.recordPayment }));
+  await waitFor(() => expect(action).toHaveBeenCalledOnce());
+  expect(action.mock.calls[0][0].amountMinor).toBe(1000);
+});
+it("suggests the actual final remainder after extra payments, never the larger planned amount", () => {
+  render(<NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanPaymentSheet item={{ ...item, monthlyPaymentMinor: 3000, paymentCount: 3, finalPaymentMinor: 4500, principalRemainingMinor: 1000, feeRemainingMinor: 500, remainingMinor: 1500 }} onClose={vi.fn()} /></NextIntlClientProvider>);
+  expect((screen.getByLabelText(en.Loans.amount) as HTMLInputElement).value).toBe("15");
+  expect(screen.getByText(en.Loans.suggestFinal)).toBeTruthy();
+});
 it("shows only same-currency wallets and rejects overpaying before a write", () => {
   render(<NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanPaymentSheet item={item} onClose={vi.fn()} /></NextIntlClientProvider>);
   expect(screen.queryByText("LBP wallet")).toBeNull();

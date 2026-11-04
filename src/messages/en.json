@@ -666,6 +666,15 @@
     "summary": "Cash settlement"
   },
   "Loans": {
+    "monthlyPayment": "Monthly payment (optional)",
+    "paymentCount": "Number of payments",
+    "countHelp": "Include the final payment. Enter 1 to 1,200 payments.",
+    "finalPayment": "Calculated final payment",
+    "planHelp": "Calculated from the original total including the fee. Payments are recorded manually; extra or partial payments can change the last balance. Clear both fields to remove the plan.",
+    "invalidPlan": "Enter a monthly amount and 1–1,200 payments that leave a positive final balance.",
+    "suggestMonthly": "Monthly amount suggested. You can change it for this payment.",
+    "suggestFinal": "Final balance suggested. You can change it for this payment.",
+
     "title": "Loans",
     "add": "Add loan",
     "borrowed": "I borrowed",

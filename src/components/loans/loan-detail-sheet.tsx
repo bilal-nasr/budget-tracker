@@ -48,6 +48,14 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
             ["principalLeft", item.principalRemainingMinor], ["feeLeft", item.feeRemainingMinor],
           ] as const).map(([label, value]) => <div key={label} className="contents"><dt className="text-muted-foreground">{t(label)}</dt><dd className="text-end">{money(value)}</dd></div>)}
         </dl>
+        {item.monthlyPaymentMinor !== null && item.finalPaymentMinor !== null ? <div className="flex flex-col gap-3 border-y border-border py-4">
+          <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-sm">
+            <dt>{t("monthlyPayment")}</dt><dd className="text-end">{money(item.monthlyPaymentMinor)}</dd>
+            <dt>{t("paymentCount")}</dt><dd className="text-end"><bdi>{item.paymentCount}</bdi></dd>
+            <dt>{t("finalPayment")}</dt><dd className="text-end">{money(item.finalPaymentMinor)}</dd>
+          </dl>
+          <p className="text-[13px] text-muted-foreground">{t("planHelp")}</p>
+        </div> : null}
         <section aria-label={t("history")} className="flex flex-col gap-2">
           <h2 className="text-[17px] font-semibold">{t("history")}</h2>
           {!item.events.length ? <p className="text-sm text-muted-foreground">{t("noHistory")}</p> : <ol className="divide-y divide-border">

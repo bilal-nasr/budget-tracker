@@ -3,6 +3,30 @@ import { normalizeNumericDigits } from "@/lib/numeric-text";
 
 const bounded = (value: number, min = 0) => Number.isSafeInteger(value) && value >= min && value <= MAX_MINOR;
 
+/** Count includes the last payment; the original debt includes the one-time fee. */
+export function calculateLoanPaymentPlan(totalDueMinor: number, monthlyPaymentMinor: number, paymentCount: number): { finalPaymentMinor: number } | null {
+  if (!bounded(totalDueMinor, 1) || !bounded(monthlyPaymentMinor, 1) || !Number.isInteger(paymentCount) || paymentCount < 1 || paymentCount > 1200) return null;
+  const final = BigInt(totalDueMinor) - BigInt(monthlyPaymentMinor) * BigInt(paymentCount - 1);
+  return final > BigInt(0) && final <= BigInt(MAX_MINOR) ? { finalPaymentMinor: Number(final) } : null;
+}
+
+export function parseLoanPaymentCount(input: string): number | null {
+  const text = normalizeNumericDigits(input.trim());
+  if (!/^\d{1,4}$/.test(text)) return null;
+  const count = Number(text);
+  return count >= 1 && count <= 1200 ? count : null;
+}
+
+/** Repayment preferences suggest a manual payment; they never increase the debt. */
+export function suggestLoanPayment(remainingMinor: number, monthlyPaymentMinor: number | null, finalPaymentMinor: number | null): { amountMinor: number; isFinal: boolean } | null {
+  if (!bounded(remainingMinor) || (monthlyPaymentMinor !== null && !bounded(monthlyPaymentMinor, 1)) ||
+      (finalPaymentMinor !== null && (!bounded(finalPaymentMinor, 1) || monthlyPaymentMinor === null))) return null;
+  if (monthlyPaymentMinor === null) return { amountMinor: remainingMinor, isFinal: true };
+  const final = remainingMinor <= (finalPaymentMinor ?? monthlyPaymentMinor);
+  const amountMinor = final ? remainingMinor : Math.min(monthlyPaymentMinor, remainingMinor);
+  return { amountMinor, isFinal: amountMinor === remainingMinor };
+}
+
 /** Percentages are fixed-point basis points; grouping separators are deliberately invalid. */
 export function parsePercentBps(input: string): number | null {
   const text = normalizeNumericDigits(input.trim()).replace(/٫/g, ".");

@@ -16,6 +16,14 @@ const row = {
 };
 beforeEach(() => { state.configured = true; state.error = false; state.items = [{ ...row }]; state.events = []; });
 describe("loan query decoding", () => {
+  it("derives the final payment from the original total, including fee, rather than the paid-down balance", async () => {
+    state.items = [{ ...row, monthly_payment_minor: "30000", payment_count: 3 }];
+    expect((await getLoans())[0]).toMatchObject({ monthlyPaymentMinor: 30000, paymentCount: 3, finalPaymentMinor: 47250 });
+    for (const plan of [{ monthly_payment_minor: "30000", payment_count: null }, { monthly_payment_minor: "30000", payment_count: 5 }, { monthly_payment_minor: null, payment_count: 2 }]) {
+      state.items = [{ ...row, ...plan }];
+      await expect(getLoans()).rejects.toThrow("loansUnavailable");
+    }
+  });
   it("decodes exact SQL strings and retains voided event revision/history", async () => {
     state.events = [{ id: "pay", revision: 3, loan_id: "loan-a", loan_event: "repayment", loan_flow: "out", loan_event_seq: 1,
       wallet_id: "wallet", occurred_on: "2026-01-02", amount_minor: "100", loan_principal_minor: "100", loan_fee_minor: "0", category_id: "category", deleted_at: "2026-01-03T00:00:00Z" }];

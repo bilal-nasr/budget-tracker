@@ -7,7 +7,7 @@ import { useAppData } from "@/components/providers/app-data";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
-import { allocateRepayment } from "@/features/loans/calculations";
+import { allocateRepayment, suggestLoanPayment } from "@/features/loans/calculations";
 import { recordLoanPayment, voidLoanPayment } from "@/features/loans/actions";
 import { loanPaymentSchema, type Loan, type LoanPaymentInput } from "@/features/loans/schema";
 import { useRouter } from "@/i18n/navigation";
@@ -24,7 +24,8 @@ export function LoanPaymentSheet({ item, onClose }: { item: Loan; onClose: () =>
   const [requestId] = useState(() => crypto.randomUUID());
   const formId = useId();
   const [walletId, setWalletId] = useState(usable.find((w) => w.id === item.walletId)?.id ?? usable[0]?.id ?? "");
-  const [text, setText] = useState(toInputText(item.remainingMinor, item.currency));
+  const suggested = suggestLoanPayment(item.remainingMinor, item.monthlyPaymentMinor, item.finalPaymentMinor);
+  const [text, setText] = useState(toInputText(suggested?.amountMinor ?? item.remainingMinor, item.currency));
   const [date, setDate] = useState(todayIn(timezone));
   const submission = useLoanSubmission<LoanPaymentInput, { id: string; revision: number }>(recordLoanPayment, (result) => {
     onClose();
@@ -47,6 +48,7 @@ export function LoanPaymentSheet({ item, onClose }: { item: Loan; onClose: () =>
     <form id={formId} onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex flex-col gap-4" noValidate>
       <fieldset disabled={submission.frozen} className="flex min-w-0 flex-col gap-4 border-0 p-0">
       <p className="text-sm text-muted-foreground">{t("splitHelp")}</p>
+      {item.monthlyPaymentMinor !== null ? <p className="text-sm text-muted-foreground">{t(suggested?.isFinal ? "suggestFinal" : "suggestMonthly")}</p> : null}
       <TextField label={t("amount")} value={text} onChange={(e) => setText(e.target.value)} dir="ltr" inputMode={CURRENCY_DECIMALS[item.currency] === 0 ? "numeric" : "decimal"}
         error={minor !== null && minor > item.remainingMinor ? t("tooMuch") : text.trim() && (minor === null || minor === 0) ? t("invalidAmount") : null} />
       <fieldset className="flex flex-col gap-2"><legend className="mb-2 text-sm font-medium">{t("wallet")}</legend>
