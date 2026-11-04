@@ -103,7 +103,7 @@ Implementation plans and integrated verification are recorded in [round 3](plans
 - Borrowed/lent loans with a one-time percentage fee and fee-only reporting.
 - Shared Arabic numeric input direction, touch-selection and raw-draft handling.
 
-Round-3 migrations are included in source and tested locally; this work does not apply them to production. Hosted Auth timebox configuration and a physical-iPhone native-keyboard check remain deployment/device verification steps.
+Round-3 migrations were applied to production on 2026-11-04 after an application-data/schema backup. All 18 migration records now match the repository. The populated PostgreSQL 17 rehearsal covers legacy payment backfill, and production financial records/balances were verified unchanged. See the [production follow-up](plans/round-3/README.md#production-follow-up--2026-11-04) for history alignment and the deferred-trigger fix. Hosted Auth timebox configuration and a physical-iPhone native-keyboard check remain separate verification steps.
 
 ## Phase 4: Categories & budgets ◐
 

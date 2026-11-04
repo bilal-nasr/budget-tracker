@@ -109,3 +109,15 @@ All eight features and the additional Move UX request are implemented on `codex/
 - Independent SQL and frontend reviews found material edge cases in exact rounding, create replay generations, reference locking, atomic wallet deletion, archived receiver edits, conflict/unknown-outcome recovery and loan pagination. All findings were fixed, regression-tested and source-reviewed again; no material review blocker remains.
 
 Deployment/device verification remains explicit: apply the included migrations through the normal production deployment process, configure hosted Auth's supported 720-hour session timebox, and test the native Arabic number keyboard on a physical iPhone. Desktop WebKit touch/caret automation does not prove physical-keyboard behavior. Production data, hosted settings and billing were untouched.
+
+## Production follow-up — 2026-11-04
+
+The owner subsequently authorized production migration, merging all feature branches into `main`, and branch cleanup. A custom-format backup of the application schema/data and migration history was saved locally under the ignored `.impeccable/build/` directory before changes.
+
+- Three existing migrations had earlier production IDs: `20261103230921` (`profile_rate`), `20261103230937` (`installments`), and `20261103230953` (`budgets`). Their recorded SQL matched the corresponding repository migrations after ignoring comments/formatting while preserving quoted text. A guarded, atomic history-only update aligned them to `20261110000000`, `20261110000100`, and `20261110000200`; their SQL was not replayed.
+- The eight `20261111` migrations were applied. The first attempt rolled back migration `20261111000500`: updating existing installment payments queued deferred breakdown/cashier checks, preventing subsequent index creation. An explicit constraint validation point now drains those queues after backfill and restores deferred behavior before DDL.
+- `scripts/test-installment-cycle-migration.mjs` reproduces the original failure and passes with the fix on populated PostgreSQL 17. It covers live/deleted salary receipts, backdated installment payments, descriptive items and an ordinary cashier purchase, preserving financial fields and balances through the full chain. It refuses non-disposable targets and reads no application credentials.
+- Final production dry run reports no pending migrations; all 18 history records align. Read-only fingerprints confirm existing ledger financial fields, wallet balances, profiles, categories, wallets, templates, installments and budgets are unchanged. Only intended cycle associations/revision metadata are excluded from the ledger comparison. Production schema/API checks verify new tables, RPCs and RLS.
+- The merge retained the verified feature tree, and all 475 application tests passed on local `main`. The migration fix passed its populated rehearsal, scoped lint and focused independent review.
+
+Hosted Auth's 720-hour timebox and physical-iPhone native-keyboard verification remain separate from database migrations; this follow-up did not change hosted Auth settings or billing.

@@ -36,6 +36,14 @@ set salary_cycle_id = (
 )
 where p.installment_id is not null;
 
+-- Existing payments queue the preceding breakdown/cashier constraint triggers.
+-- PostgreSQL refuses index/trigger DDL on a table with pending trigger events.
+-- Validate the completed backfill before continuing with the cycle schema.
+set constraints public.expense_items_valid, public.transactions_breakdown_valid,
+  public.transactions_cashier_check immediate;
+set constraints public.expense_items_valid, public.transactions_breakdown_valid,
+  public.transactions_cashier_check deferred;
+
 create index transactions_salary_recorded_idx
   on public.transactions(user_id,created_at desc,id desc) where source = 'salary';
 create index transactions_installment_cycle_idx
