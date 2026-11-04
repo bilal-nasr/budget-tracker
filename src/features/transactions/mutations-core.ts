@@ -16,6 +16,10 @@ const mutationRowsSchema = z.array(z.strictObject({
 })).length(1);
 
 const errorMessages = new Map<string, ActionError>([
+  ["pending.exceedsRemaining", "exceedsRemaining"],
+  ["pending.walletUnavailable", "walletUnavailable"],
+  ["pending.conflict", "conflict"],
+  ["pending.invalid", "invalid"],
   ["breakdown exceeds total", "breakdownExceedsTotal"],
   ["breakdown currency locked", "breakdownCurrencyLocked"],
   ["transaction conflict", "conflict"],

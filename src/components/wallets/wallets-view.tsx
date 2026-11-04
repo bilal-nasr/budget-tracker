@@ -18,6 +18,7 @@ const ICON = { cash: Banknote, bank: Landmark, card: CreditCard } as const;
 export function WalletsView() {
   const t = useTranslations("Wallets");
   const loans = useTranslations("Loans");
+  const payments = useTranslations("PendingPayments");
   const { wallets } = useAppData();
   const { openWallet } = useComposer();
   const active = wallets.filter((w) => !w.archived);
@@ -57,6 +58,7 @@ export function WalletsView() {
   if (active.length === 0) {
     return (
       <div className="flex flex-col gap-6">
+        <Link href="/pending-payments" className="inline-flex min-h-11 items-center self-start text-primary underline underline-offset-4">{payments("title")}</Link>
         <Link href="/loans" className="inline-flex min-h-11 items-center self-start text-primary underline underline-offset-4">{loans("title")}</Link>
         <EmptyState
           title={t("emptyTitle")}
@@ -70,6 +72,7 @@ export function WalletsView() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Link href="/pending-payments" className="inline-flex min-h-11 items-center self-start text-primary underline underline-offset-4">{payments("title")}</Link>
       {groups.map(({ currency, items }) => (
         <section key={currency} aria-labelledby={`w-${currency}`} className="flex flex-col gap-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">

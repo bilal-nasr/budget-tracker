@@ -16,6 +16,7 @@ Built with Next.js (App Router) and Supabase. Open sign-up with email verificati
 - Optional cashier tender/change records purchase cost once while applying the actual payment and returned change to their wallets. A different-currency return requires an active wallet in that currency.
 - Activity with day groups, search, filters and paging.
 - Monthly salary: set the amount and wallet once, then press **Got salary**.
+- Pending freelance payments from **Wallets → Pending payments**: track client/project totals and due dates, record partial receipts, and see the remaining amount by currency. Only received money enters wallets and income; receipt edits/deletion in Activity update the amount still owed.
 - Installment progress follows actual salary receipts, with an explicit **Pay again** action for another payment in the same cycle.
 - Borrowed and lent loans with a one-time percentage fee, partial repayments and separate principal/fee tracking. Existing loans can be recorded without moving cash again.
 - Per-currency monthly budgets, fixed expenses and payment summaries.
@@ -25,6 +26,8 @@ Built with Next.js (App Router) and Supabase. Open sign-up with email verificati
 When upgrading an existing database to whole-pound SYP, stop app writes and apply `20261112000100_syp_whole_pounds.sql` before starting the updated app. The migration divides existing SYP qirsh amounts by 100, including historical transfers, loan replay payloads and archived records. Any fractional-pound amount aborts the entire migration without rounding; resolve it explicitly before retrying. Direct exchange-rate quotes remain in major currency units.
 
 Without Supabase keys the app shows synthetic demo data (read-only) so you can look around.
+
+For pending payments on an existing database, apply `supabase/migrations/20261115000000_pending_payments.sql` after the preceding migrations. The feature requires its tables, ledger links and atomic receipt functions; deploying app code alone does not update Supabase. Database checks can run with `node scripts/test-pending-payments.mjs` against the disposable container documented at the top of that script.
 
 ## Docs
 
