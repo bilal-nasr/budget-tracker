@@ -4,10 +4,11 @@ import { useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { TileBar } from "@/components/budget/tile-bar";
+import { Amount } from "@/components/money/amount";
 import { useDisplayPrefs } from "@/components/providers/display-prefs";
 import { useComposer } from "@/components/shell/composer";
 import { Button } from "@/components/ui/button";
-import type { Installment } from "@/features/installments/schema";
+import { dueThisCycle, type Installment } from "@/features/installments/schema";
 import { formatAmount } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -29,9 +30,15 @@ function Row({ item }: { item: Installment }) {
           <span className="block truncate font-medium">
             <bdi>{item.name}</bdi>
           </span>
-          <span className="block truncate text-[13px] text-muted-foreground">
-            {t("leftOf", { left: money(Math.max(0, item.remainingMinor)), total: money(item.totalMinor) })}
+          <span className="block text-[13px] text-muted-foreground">
+            {t.rich("leftOf", { left: () => <Amount minor={Math.max(0,item.remainingMinor)} currency={item.currency} />,
+              total: () => <Amount minor={item.totalMinor} currency={item.currency} /> })}
           </span>
+          {!paidOff && item.cyclePaymentCount > 0 ? <span className="mt-1 flex flex-wrap items-center gap-1 text-[13px]">
+            <Check aria-hidden className="size-4 shrink-0 text-positive" />
+            {item.cycleStatus === "partial" ? <>{t("partPaid")} · <Amount minor={item.paidThisCycleMinor} currency={item.currency} /> / <Amount minor={dueThisCycle(item)} currency={item.currency} /></>
+              : t(item.salaryCycleId === null ? "paidInitial" : "paidCycle")}
+          </span> : null}
         </button>
         {paidOff ? (
           <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-positive">
@@ -39,8 +46,10 @@ function Row({ item }: { item: Installment }) {
             {t("paidOff")}
           </span>
         ) : (
-          <Button className="shrink-0" aria-label={t("payItem", { name: item.name })} onClick={() => openInstallmentPay(item)}>
-            {t("pay")}
+          <Button variant={item.cyclePaymentCount > 0 ? "outline" : "default"} className="shrink-0"
+            aria-label={t(item.cyclePaymentCount > 0 ? "payAgainItem" : "payItem", { name: item.name })}
+            onClick={() => openInstallmentPay(item, item.cyclePaymentCount > 0 ? "again" : "normal")}>
+            {t(item.cyclePaymentCount > 0 ? "payAgain" : "pay")}
           </Button>
         )}
       </div>

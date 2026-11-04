@@ -6,6 +6,11 @@ import { expectNoHorizontalOverflow } from "./support";
 // The segmented control's radios are visually hidden; people click the visible label.
 const segment = (scope: Locator | Page, name: string) => scope.locator("label").filter({ hasText: new RegExp(`^${name}$`) });
 
+const pickWallet = async (page: Page, label: string, name: string) => {
+  await page.getByRole("dialog").getByRole("combobox", { name: new RegExp(`^${label}`) }).click();
+  await page.getByRole("option", { name, exact: true }).click();
+};
+
 const add = (page: Page) => page.getByRole("button", { name: "Add", exact: true }).filter({ visible: true });
 
 test("Move tab: same currency needs only a destination and an amount", async ({ page }) => {
@@ -31,7 +36,7 @@ test("Move tab: moving into another currency asks for exactly what arrived", asy
   const dialog = page.getByRole("dialog");
   await segment(dialog, "Move").click();
   for (const key of ["2", "0"]) await dialog.getByRole("button", { name: key, exact: true }).click();
-  await dialog.getByRole("radiogroup", { name: "To" }).getByRole("radio", { name: "Cash · LBP" }).click();
+  await pickWallet(page, "To", "Cash LBP");
   const received = dialog.getByLabel("You received (LBP)");
   await expect(received).toBeVisible();
   const save = dialog.getByRole("button", { name: "Move money" });
@@ -39,6 +44,7 @@ test("Move tab: moving into another currency asks for exactly what arrived", asy
   await dialog.getByLabel("Exchange rate").fill("");
   await expect(received).toHaveValue("");
   await expect(save).toBeDisabled();
+  await dialog.getByRole("button", { name: "Edit received amount" }).click();
   await received.fill("1800000");
   await expect(save).toBeEnabled();
   await received.fill("1x");
@@ -56,9 +62,12 @@ test("Add money on a wallet starts as new money and can switch to taking it from
   await segment(dialog, "Move").click();
   await expect(dialog.getByText(/Adding money to Bank/)).toBeVisible();
   // Bank is the destination (checked), and the source is another wallet, so it is not offered as a destination.
-  const to = dialog.getByRole("radiogroup", { name: "To" });
-  await expect(to.getByRole("radio", { name: "Bank · USD" })).toHaveAttribute("aria-checked", "true");
-  await expect(to.getByRole("radio", { name: "Cash · USD" })).toHaveCount(0);
+  const to = dialog.getByRole("combobox", { name: /^To/ });
+  await expect(to).toContainText("Bank");
+  await expect(to).toContainText("USD");
+  await to.click();
+  await expect(page.getByRole("option", { name: "Cash USD", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expectNoHorizontalOverflow(page);
 });
 
@@ -118,13 +127,14 @@ test("exchange asks for 1$ = rate, converts, and the result can be edited", asyn
   const dialog = page.getByRole("dialog");
   await segment(dialog, "Move").click();
   for (const key of ["1", "0", "0"]) await dialog.getByRole("button", { name: key, exact: true }).click();
-  await dialog.getByRole("radiogroup", { name: "To" }).getByRole("radio", { name: "Cash · LBP" }).click();
+  await pickWallet(page, "To", "Cash LBP");
   const rate = dialog.getByLabel("Exchange rate");
   const received = dialog.getByLabel("You received (LBP)");
   await expect(rate).toHaveValue("89500");
   await expect(received).toHaveValue("8950000");
   await rate.fill("90000");
   await expect(received).toHaveValue("9000000");
+  await dialog.getByRole("button", { name: "Edit received amount" }).click();
   await received.fill("8900000");
   await rate.fill("91000");
   await expect(received).toHaveValue("8900000");
@@ -149,7 +159,7 @@ test("arabic exchange rate row reads left to right with no overflow", async ({ p
   const dialog = page.getByRole("dialog");
   await dialog.locator("label").filter({ hasText: /^نقل$/ }).click();
   await dialog.getByRole("button", { name: "5", exact: true }).click();
-  await dialog.getByRole("radiogroup").filter({ hasText: "LBP" }).getByRole("radio", { name: /LBP/ }).first().click();
+  await pickWallet(page, "إلى", "Cash LBP");
   const rate = dialog.getByLabel("سعر الصرف");
   await expect(rate).toHaveValue("89500");
   await expectNoHorizontalOverflow(page);

@@ -23,7 +23,7 @@ Anyone can create an account with email and password; it works once they confirm
 
 ## Product Purpose
 
-A personal budget tracker that makes logging income and expenses fast on a phone and shows, per month, how much was spent per category against a simple monthly limit, separately for USD and LBP.
+A personal budget tracker that makes logging income and expenses fast on a phone and shows, per month, how much was spent per category against a simple monthly limit, separately for USD, LBP and SYP.
 
 Success means:
 - Logging an expense takes under 10 seconds from opening the app.
@@ -32,7 +32,7 @@ Success means:
 
 ## Positioning
 
-A calm, fast, bilingual (English/Arabic) tracker built for a dual-currency life: every wallet holds one currency (USD or LBP), totals are never silently mixed, and an optional reference rate gives clearly-labelled "≈" equivalents. Simpler than envelope budgeting apps (YNAB-style "give every dollar a job"); deliberately so.
+A calm, fast, bilingual (English/Arabic) tracker built for life with multiple currencies: every wallet holds one currency (USD, LBP or SYP), totals are never silently mixed, and supported reference conversions are clearly labelled. Simpler than envelope budgeting apps (YNAB-style "give every dollar a job"); deliberately so.
 
 ## Operating Context
 
@@ -44,9 +44,13 @@ A calm, fast, bilingual (English/Arabic) tracker built for a dual-currency life:
 ## Capabilities and Constraints
 
 v1 scope:
-- Wallets (cash, bank, card), each in exactly one currency: USD or LBP. Opening balance; derived current balance.
-- Transactions: expense, income, transfer between same-currency wallets, exchange between a USD and an LBP wallet (two amounts, one event).
-- Categories (income/expense), seeded with bilingual defaults, editable, optional one level of subcategory.
+- Wallets (cash, bank, card), each in exactly one currency: USD, LBP or SYP. Opening balance; derived current balance.
+- Transactions: expense, income and transfers with actual sent/received amounts. Automatic Move calculations are restricted to USD/LBP; SYP exchanges use explicit actual amounts.
+- Categories (income/expense), seeded with editable bilingual defaults. Archive used categories to retain history, delete unused ones, and reassign live templates before removal. Existing category hierarchy is protected; hierarchy editing/reordering remains future scope.
+- Optional one-level expense items describe a parent payment without another debit or category allocation. An unitemized remainder is allowed.
+- Optional cashier payment/change uses purchase cost for spending and actual tender/returned change for wallet balances. Cross-currency change requires an active receiving wallet and a confirmed exact rate snapshot.
+- Installment paid status follows actual salary receipt cycles, with an explicit repeat-payment action. Principal progress remains lifetime progress.
+- Borrowed and lent loans with one additive, one-time percentage fee, principal-first repayments, fee-only income/spending and an explicit existing-loan entry that does not move cash.
 - Monthly budgets: a limit per expense category per currency; carry forward to the next month by default.
 - Home: this month's spending vs budget, per currency; recent activity.
 - Reports: spending by category and month-over-month trend.
@@ -54,16 +58,16 @@ v1 scope:
 - Installable PWA with an "Add expense" shortcut.
 
 Constraints:
-- Money is stored as integer minor units (USD cents, LBP whole lira). Never floats. Never add USD to LBP.
+- Money is stored as integer minor units (USD cents, LBP whole lira, current/new SYP qirsh). Never floats. Never add different currencies. No automatic old/new SYP redenomination.
 - All data is private to its owner; Row Level Security on every table.
-- Open sign-up with email verification (Supabase Auth). No owner allowlist. No account-management UI or password reset yet (see `docs/ARCHITECTURE.md` §3).
+- Open sign-up with email verification and password recovery (Supabase Auth). No owner allowlist. Persistent login uses a 30-day absolute session policy where configured; hosted Auth must be configured separately (see `docs/ARCHITECTURE.md` §3).
 - Every user-visible string ships in English and Arabic in the same change.
 
-Explicitly out of v1 (candidates for later): household/shared spaces, envelope "ready to assign" model, loans, recurring bills, savings goals, CSV import/export, bank sync, AI entry.
+Explicitly out of v1 (candidates for later): household/shared spaces, envelope "ready to assign" model, recurring/compounding loan interest, automated recurring transactions, savings goals, CSV import/export, bank sync, AI entry.
 
-Open decisions:
-- Arabic-Indic digits (٠١٢) vs Latin digits in Arabic UI — default Latin, setting to switch (to confirm).
-- Custom in-sheet numeric keypad vs native keyboard for amount entry — to settle during design mockups.
+Input conventions:
+- Latin digits by default, with an Arabic-Indic display setting; numeric parsing accepts keyboard digit scripts independently of UI locale.
+- Main Add uses an in-sheet keypad; other amount fields use native text inputs with numeric/decimal keyboard hints, LTR editing and native caret selection.
 
 ## Brand Commitments
 
@@ -77,7 +81,7 @@ No real user data, testimonials, or assets. Do not fabricate any. Demo/seed data
 
 1. **Ten-second logging.** The add flow is the product. Every screen has a way to it within one tap.
 2. **One question per screen.** Each screen leads with one answer (e.g. "left to spend this month") and reveals detail on request — the reference app's main failure was showing everything at once.
-3. **Currencies stay honest.** USD and LBP are always shown separately; conversions are optional, labelled approximations.
+3. **Currencies stay honest.** USD, LBP and SYP are always shown separately; reference conversions never combine ledger totals.
 4. **Plain words.** "Spent", "Left", "Budget", "Move money" — no accounting or envelope jargon.
 5. **Phone first, always.** A feature is not done until it works at 360px wide, one-handed, in Arabic.
 

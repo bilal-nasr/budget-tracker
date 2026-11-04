@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -12,6 +12,10 @@ import { SheetShell } from "@/components/ui/sheet-shell";
 import { categoryName } from "@/features/categories/schema";
 import { deleteTransaction, restoreTransaction } from "@/features/transactions/actions";
 import { signedMinor, type Transaction } from "@/features/transactions/schema";
+import { ExpenseBreakdown } from "./expense-breakdown";
+import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-fields";
+import { Link } from "@/i18n/navigation";
+import { CashSettlementSummary } from "./cash-settlement-summary";
 
 function dateLabel(date: string, locale: string): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -29,28 +33,45 @@ export function DetailSheet({
   onClose,
   onEdit,
   onDuplicate,
+  onReload = () => window.location.reload(),
 }: {
   transaction: Transaction | null;
   onClose: () => void;
   onEdit: (transaction: Transaction) => void;
   onDuplicate: (transaction: Transaction) => void;
+  onReload?: () => void;
 }) {
   const t = useTranslations("Detail");
+  const tb = useTranslations("Breakdown");
+  const ts = useTranslations("Cashier");
+  const ti = useTranslations("Installments");
+  const tl = useTranslations("Loans");
+  const breakdownLabels = useExpenseBreakdownLabels();
   const locale = useLocale();
   const { categoryById, walletById } = useAppData();
   const [pending, startTransition] = useTransition();
+  const [conflictSnapshot, setConflictSnapshot] = useState<{ id: string; revision: number } | null>(null);
+  const conflicted = Boolean(transaction && conflictSnapshot
+    && transaction.id === conflictSnapshot.id && transaction.revision === conflictSnapshot.revision);
+  const [reloading, setReloading] = useState(false);
+  const reloadLatest = () => {
+    setReloading(true);
+    onReload();
+  };
   const transfer = transaction?.kind === "transfer";
+  const loan = transaction?.kind === "loan";
   const category = transaction?.categoryId ? categoryById(transaction.categoryId) : undefined;
   const wallet = transaction ? walletById(transaction.walletId) : undefined;
   const toWallet = transaction?.toWalletId ? walletById(transaction.toWalletId) : undefined;
 
   const remove = () => {
-    if (!transaction) return;
+    if (!transaction || conflicted || reloading || pending) return;
     const id = transaction.id;
     startTransition(async () => {
-      const result = await deleteTransaction(id);
+      const result = await deleteTransaction(id, transaction.revision);
       if (!result.ok) {
-        toast.error(result.error === "notConfigured" ? t("errorPreview") : t("errorFailed"));
+        if (result.error === "conflict") setConflictSnapshot({ id, revision: transaction.revision });
+        toast.error(result.error === "notConfigured" ? t("errorPreview") : result.error === "conflict" ? tb("conflict") : t("errorFailed"));
         return;
       }
       onClose();
@@ -58,7 +79,13 @@ export function DetailSheet({
         action: {
           label: t("undo"),
           onClick: async () => {
-            await restoreTransaction(id);
+            const restored = await restoreTransaction(id, result.revision);
+            if (!restored.ok) {
+              if (restored.error === "conflict") toast.error(tb("conflict"), {
+                action: { label: tb("reload"), onClick: onReload },
+              });
+              else toast.error(restored.error === "walletUnavailable" ? ts("walletUnavailable") : restored.error === "exceedsRemaining" ? ti("restoreOvercap") : t("errorFailed"));
+            }
           },
         },
       });
@@ -85,10 +112,10 @@ export function DetailSheet({
             ) : null}
             <div className="min-w-0 flex-1">
               <p className="truncate text-[17px] font-semibold">
-                <bdi>{transfer ? t("move") : category ? categoryName(category, locale) : ""}</bdi>
+                <bdi>{loan ? tl("loan") : transfer ? t("move") : category ? categoryName(category, locale) : ""}</bdi>
               </p>
               <p className="text-[13px] text-muted-foreground">
-                {transfer ? t("moveLine") : transaction.kind === "income" ? t("income") : t("expense")}
+                {loan ? tl(transaction.loanEvent === "disbursement" ? "disbursement" : "repayment") : transfer ? t("moveLine") : transaction.kind === "income" ? t("income") : t("expense")}
               </p>
             </div>
           </div>
@@ -148,21 +175,45 @@ export function DetailSheet({
             ) : null}
           </dl>
 
-          <div className="grid grid-cols-2 gap-2">
+          {loan ? <div className="flex flex-col gap-2 text-sm"><p className="text-muted-foreground">{tl("movementHelp")}</p>
+            <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <dt>{tl("principalPart")}</dt><dd><Amount minor={transaction.loanPrincipalMinor ?? 0} currency={transaction.currency} /></dd>
+              <dt>{tl("feePart")}</dt><dd><Amount minor={transaction.loanFeeMinor ?? 0} currency={transaction.currency} /></dd>
+            </dl>
+          </div> : null}
+          {transaction.kind === "expense" ? <ExpenseBreakdown items={transaction.items}
+            parentMinor={transaction.amountMinor} currency={transaction.currency} labels={breakdownLabels} /> : null}
+          {transaction.settlement ? <CashSettlementSummary settlement={transaction.settlement} costMinor={transaction.amountMinor}
+            currency={transaction.currency} changeWalletName={transaction.settlement.change ? walletById(transaction.settlement.change.walletId)?.name : undefined} /> : null}
+
+          {transaction.source === "salary" ? <p className="text-sm text-muted-foreground">{ti("salaryDeleteHelp")}</p> : null}
+          {transaction.installmentId ? <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <p>{ti("noDuplicateHelp")}</p>
+            <Link href="/" onClick={onClose} className="inline-flex min-h-11 items-center self-start text-primary underline underline-offset-4">{ti("backInstallments")}</Link>
+          </div> : null}
+          {loan ? <div className="flex flex-col gap-2"><p className="text-sm text-muted-foreground">{tb("managedTransaction")}</p>
+            {transaction.loanId ? <Link href={{ pathname: "/loans", query: { loanId: transaction.loanId } }} onClick={onClose} className="inline-flex min-h-11 items-center self-start text-primary underline underline-offset-4">{tl("openLoan")}</Link> : null}
+          </div> : <div className="grid grid-cols-2 gap-2">
             {transfer ? null : (
               <>
-                <Button variant="outline" onClick={() => onEdit(transaction)}>
+                <Button variant="outline" disabled={pending || conflicted || reloading} className={transaction.installmentId ? "col-span-2" : undefined} onClick={() => onEdit(transaction)}>
                   {t("edit")}
                 </Button>
-                <Button variant="outline" onClick={() => onDuplicate(transaction)}>
+                {transaction.installmentId ? null : <Button variant="outline" disabled={pending || conflicted || reloading} onClick={() => onDuplicate(transaction)}>
                   {t("duplicate")}
-                </Button>
+                </Button>}
               </>
             )}
-            <Button variant="destructive" className="col-span-2" disabled={pending} onClick={remove}>
+            <Button variant="destructive" className="col-span-2" disabled={pending || conflicted || reloading} onClick={remove}>
               {t("delete")}
             </Button>
-          </div>
+          </div>}
+          {conflicted ? <div className="flex flex-col items-start gap-3">
+            <p role="alert" className="text-sm">{tb("conflict")}</p>
+            <Button type="button" variant="outline" disabled={reloading || pending} onClick={reloadLatest}>
+              {tb("reload")}
+            </Button>
+          </div> : null}
         </div>
       ) : null}
     </SheetShell>

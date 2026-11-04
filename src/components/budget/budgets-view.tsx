@@ -50,9 +50,9 @@ function Row({ row, data }: { row: BudgetRow; data: MonthBudgets }) {
           <CategoryGlyph tile={category.tile} color={category.color} />
           <span className="min-w-0 flex-1">
             <span className="block truncate font-medium">
-              <bdi>{name}</bdi>
+              <bdi>{name}</bdi>{category.archivedAt !== null ? <span className="ms-2 text-[13px] font-normal text-muted-foreground">{t("archived")}</span> : null}
             </span>
-            <span className="block truncate text-[13px] text-muted-foreground">
+            <span className="block text-[13px] text-muted-foreground">
               {row.limitMinor === null
                 ? t("spentOnly", { amount: money(row.spentMinor) })
                 : t("of", { spent: money(row.spentMinor), limit: money(row.limitMinor) })}
@@ -69,14 +69,14 @@ function Row({ row, data }: { row: BudgetRow; data: MonthBudgets }) {
             <span className="shrink-0 text-[13px] text-muted-foreground">{t("left", { amount: money(row.leftMinor) })}</span>
           )
         ) : null}
-        <Button
+        {category.archivedAt === null ? <Button
           variant="ghost"
           size="icon"
           aria-label={t("addTo", { name })}
           onClick={() => openAdd({ kind: "expense", categoryId: row.categoryId })}
         >
           <Plus aria-hidden />
-        </Button>
+        </Button> : null}
       </div>
       {row.limitMinor !== null ? (
         <TileBar
@@ -115,7 +115,7 @@ export function BudgetsView({
     <>
       <ScreenHeader title={nav("budgets")} month>
         <p className="text-[15px] text-shell-muted">{t("spent")}</p>
-        <p className="mt-0.5 text-[34px] leading-tight font-bold tracking-tight">
+        <p className={`mt-0.5 leading-tight font-bold tracking-tight ${formatAmount(data.totalSpentMinor, data.currency).length > 16 ? "text-xl" : "text-[34px]"}`}>
           <Amount minor={data.totalSpentMinor} currency={data.currency} />
         </p>
         <p className="mt-0.5 text-[15px] text-shell-muted">

@@ -1,0 +1,62 @@
+import { describe, expect, it } from "vitest";
+import { MAX_MINOR, type Currency } from "@/lib/money";
+import { cashSettlementInputSchema, convertSettlementMinor, parseSettlementRate, settlementRateText, validateSettlement } from "./settlement";
+
+const walletId = "aaaaaaaa-0000-4000-8000-000000000001";
+const rate = { base: "USD" as const, quote: "LBP" as const, quoteMajorNumerator: 89500, quoteMajorDenominator: 1 };
+describe("cash settlement", () => {
+  it("separates cost, tender and actual change", () => {
+    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrency: "LBP", settlement: { tenderMinor: 2000, change: { walletId, amountMinor: 671250, rate } } })).toEqual({ ok: true });
+    expect(validateSettlement({ costMinor: 895000, payCurrency: "LBP", changeCurrency: "USD", settlement: { tenderMinor: 1790000, change: { walletId, amountMinor: 1000, rate } } })).toEqual({ ok: true });
+    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrency: "USD", settlement: { tenderMinor: 2000, change: { walletId, amountMinor: 750 } } })).toEqual({ ok: true });
+  });
+  it("requires exact reconciliation, including exact tender without change", () => {
+    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", settlement: { tenderMinor: 1250, change: null } })).toEqual({ ok: true });
+    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", settlement: { tenderMinor: 2000, change: null } })).toEqual({ ok: false, reason: "mismatch" });
+    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrency: "LBP", settlement: { tenderMinor: 2000, change: { walletId, amountMinor: 671250 } } })).toEqual({ ok: false, reason: "rate" });
+  });
+  it("uses half-up rounding once and preserves actual cash", () => {
+    const r = { ...rate, quoteMajorNumerator: 200 };
+    expect(convertSettlementMinor(1, "LBP", "USD", r)).toBe(1);
+    expect(validateSettlement({ costMinor: 999, payCurrency: "USD", changeCurrency: "LBP", settlement: { tenderMinor: 1000, change: { walletId, amountMinor: 1, rate: r } } })).toEqual({ ok: true });
+    expect(convertSettlementMinor(MAX_MINOR, "USD", "LBP", rate)).toBeNull();
+  });
+  it("keeps the exact sub-half boundary at a large direct SYP quote", () => {
+    const quote = { base: "USD" as const, quote: "SYP" as const,
+      quoteMajorNumerator: 999999999999999, quoteMajorDenominator: 1000000 };
+    // Decimal division can round the first value to an integer before floor.
+    expect(convertSettlementMinor(999999499999999, "SYP", "USD", quote)).toBe(999999);
+    expect(convertSettlementMinor(999999500000000, "SYP", "USD", quote)).toBe(1000000);
+  });
+  it("rejects malformed inputs without throwing or floating point coercion", () => {
+    for (const amount of [NaN, Infinity, -1, 0.1, MAX_MINOR + 1]) expect(convertSettlementMinor(amount, "USD", "LBP", rate)).toBeNull();
+    expect(convertSettlementMinor(1, "USD", "LBP", { ...rate, quoteMajorDenominator: 0 })).toBeNull();
+    for (const invalid of [0.1, NaN, Infinity, -1, Number.MAX_SAFE_INTEGER]) {
+      expect(convertSettlementMinor(1, "USD", "LBP", { ...rate, quoteMajorNumerator: invalid })).toBeNull();
+      expect(convertSettlementMinor(1, "USD", "LBP", { ...rate, quoteMajorDenominator: invalid })).toBeNull();
+    }
+    expect(cashSettlementInputSchema.safeParse({ tenderMinor: 2000, change: { walletId, amountMinor: 0 } }).success).toBe(false);
+    expect(cashSettlementInputSchema.safeParse({ tenderMinor: 2000, hidden: true, change: null }).success).toBe(false);
+    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrency: "USD", settlement: { tenderMinor: 2000, change: { walletId, amountMinor: 750, rate } } }).ok).toBe(false);
+  });
+  it("parses canonical quotes exactly with bilingual digits", () => {
+    expect(parseSettlementRate("٨٩٬٥٠٠", "LBP", "USD")).toEqual(rate);
+    expect(parseSettlementRate("۸۹٬۵۰۰", "LBP", "USD")).toEqual(rate);
+    for (const value of ["0", "-1", "1e4", "1.5", "10000001", "89x"]) expect(parseSettlementRate(value, "USD", "LBP")).toBeNull();
+    expect(settlementRateText(rate)).toBe("89500");
+    expect(parseSettlementRate("1", "USD", "USD")).toBeNull();
+  });
+  it("supports SYP only through its registered two-decimal unit and a direct quote", () => {
+    const syp = "SYP" as Currency;
+    const r = parseSettlementRate("13000", "USD", syp)!;
+    expect(convertSettlementMinor(9750000, syp, "USD", r)).toBe(750);
+    expect(convertSettlementMinor(750, "USD", syp, r)).toBe(9750000);
+    const fractional = parseSettlementRate("٠٫٠١", "LBP", syp)!;
+    expect(fractional.quoteMajorNumerator).toBe(1);
+    expect(fractional.quoteMajorDenominator).toBe(100);
+    expect(settlementRateText(fractional)).toBe("0.01");
+    expect(convertSettlementMinor(50000, syp, "LBP", fractional)).toBe(50000);
+    expect(parseSettlementRate("0.0000001", "LBP", syp)).toBeNull();
+    expect(parseSettlementRate("1000000000.000001", "LBP", syp)).toBeNull();
+  });
+});

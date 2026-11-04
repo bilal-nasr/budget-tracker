@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { ChevronDown } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { CategorySelect } from "@/components/categories/category-select";
+import { categoryOptions } from "@/features/categories/schema";
 import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
 import { useComposer } from "@/components/shell/composer";
@@ -12,9 +13,9 @@ import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { createInstallment, deleteInstallment, updateInstallment } from "@/features/installments/actions";
-import type { Installment, InstallmentPayment } from "@/features/installments/schema";
-import type { Transaction } from "@/features/transactions/schema";
-import { parseAmount, toInputText, type Currency } from "@/lib/money";
+import type { Installment } from "@/features/installments/schema";
+import { CURRENCY_DECIMALS, parseAmount, toInputText, type Currency } from "@/lib/money";
+import { parseOptionalDay } from "@/lib/numeric-text";
 import { cn } from "@/lib/utils";
 
 export type InstallmentSheetState = { item: Installment };
@@ -29,26 +30,11 @@ function shortDate(date: string, locale: string): string {
   }).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
-/** A payment as the transaction detail sheet expects it, so a history row can open it. */
-function asTransaction(item: Installment, payment: InstallmentPayment): Transaction {
-  return {
-    id: payment.transactionId,
-    kind: "expense",
-    occurredOn: payment.occurredOn,
-    amountMinor: payment.amountMinor,
-    currency: item.currency,
-    walletId: payment.walletId,
-    categoryId: item.categoryId,
-    toWalletId: null,
-    toAmountMinor: null,
-    note: item.name,
-    createdAt: "",
-  };
-}
-
 /** Create (item is null) or edit an installment. Rendered inside the Fixed sheet and the edit sheet. */
 export function InstallmentForm({ item, onClose }: { item: Installment | null; onClose: () => void }) {
   const t = useTranslations("Installments");
+  const tCurrencies = useTranslations("Currencies");
+  const tc = useTranslations("Categories");
   const tAdd = useTranslations("Add");
   const locale = useLocale();
   const { wallets, categories, walletById } = useAppData();
@@ -59,7 +45,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
   const usable = wallets.filter(
     (w) => (!w.archived || w.id === item?.walletId) && (item === null || w.currency === item.currency),
   );
-  const expenseCategories = categories.filter((c) => c.kind === "expense");
+  const expenseCategories = categoryOptions(categories, "expense", item?.categoryId);
 
   const [name, setName] = useState(item?.name ?? "");
   const [walletId, setWalletId] = useState(item?.walletId ?? usable[0]?.id ?? "");
@@ -80,9 +66,8 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
   const paidBeforeMinor = paidBefore.trim() === "" ? 0 : parse(paidBefore);
   const monthlyMinor = parse(monthly);
   const bad = (text: string, value: number | null) => text.trim() !== "" && value === null;
-  const dayNumber = dueDay.trim() === "" ? null : Number(dueDay);
-  const dayError =
-    dayNumber !== null && (!Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 31) ? t("errorDay") : null;
+  const { value: dayNumber, invalid: invalidDay } = parseOptionalDay(dueDay);
+  const dayError = invalidDay ? t("errorDay") : null;
   const beforeError =
     bad(paidBefore, paidBeforeMinor)
       ? t("errorAmount")
@@ -94,7 +79,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
     totalMinor !== null && totalMinor > 0 &&
     paidBeforeMinor !== null && !beforeError &&
     !bad(monthly, monthlyMinor) && (monthlyMinor === null || monthlyMinor > 0) &&
-    wallet !== undefined && categoryId !== "" && !dayError;
+    wallet !== undefined && expenseCategories.some((c) => c.id === categoryId) && !dayError;
 
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
@@ -106,7 +91,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
             ? t("errorPreview")
             : result.error === "totalBelowPaid"
               ? t("errorTotalBelowPaid")
-              : t("errorFailed"),
+              : result.error === "categoryUnavailable" ? tc("errorUnavailable") : t("errorFailed"),
         );
         setConfirmDelete(false);
         return;
@@ -151,7 +136,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
         label={t("total")}
         value={total}
         onChange={(e) => setTotal(e.target.value)}
-        inputMode={currency === "USD" ? "decimal" : "numeric"}
+        inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
         placeholder="0"
         autoComplete="off"
         dir="ltr"
@@ -174,7 +159,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
               label={t("paidBefore")}
               value={paidBefore}
               onChange={(e) => setPaidBefore(e.target.value)}
-              inputMode={currency === "USD" ? "decimal" : "numeric"}
+              inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
               placeholder="0"
               autoComplete="off"
               dir="ltr"
@@ -194,7 +179,12 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
               type="button"
               role="radio"
               aria-checked={w.id === walletId}
-              onClick={() => setWalletId(w.id)}
+              onClick={() => {
+                if (w.currency !== currency) {
+                  setTotal(""); setPaidBefore(""); setMonthly("");
+                }
+                setWalletId(w.id);
+              }}
               className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
             >
               <bdi>{w.name}</bdi> · {w.currency}
@@ -202,6 +192,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
           ))}
         </div>
         <p className="text-[13px] text-muted-foreground">{t("defaultWalletHelp")}</p>
+        <p className="text-[13px] text-muted-foreground">{tCurrencies("reenterAmount", { currency })}</p>
       </div>
 
       <CategorySelect
@@ -217,7 +208,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
           label={t("monthlyAmount")}
           value={monthly}
           onChange={(e) => setMonthly(e.target.value)}
-          inputMode={currency === "USD" ? "decimal" : "numeric"}
+          inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
           placeholder="0"
           autoComplete="off"
           dir="ltr"
@@ -228,7 +219,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
       <TextField
         label={t("dueDay")}
         value={dueDay}
-        onChange={(e) => setDueDay(e.target.value.replace(/\D/g, "").slice(0, 2))}
+        onChange={(e) => setDueDay(e.target.value)}
         inputMode="numeric"
         placeholder="1 - 31"
         autoComplete="off"
@@ -257,10 +248,12 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
                     <button
                       type="button"
                       onClick={() => {
+                        if (!p.transaction) return;
                         onClose();
-                        openDetail(asTransaction(item, p));
+                        openDetail(p.transaction);
                       }}
-                      className="flex min-h-12 w-full items-center justify-between gap-3 text-start"
+                      disabled={!p.transaction}
+                      className="flex min-h-12 w-full items-center justify-between gap-3 text-start disabled:opacity-50"
                     >
                       <span className="min-w-0 truncate text-[15px]">
                         {shortDate(p.occurredOn, locale)} · <bdi>{walletById(p.walletId)?.name}</bdi>

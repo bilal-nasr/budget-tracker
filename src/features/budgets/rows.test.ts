@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Category } from "@/features/categories/schema";
-import { buildMonthBudgets, isOver } from "./rows";
+import { availableBudgetCurrencies, buildMonthBudgets, isOver } from "./rows";
 
 const cat = (id: string, position: number, kind: "expense" | "income" = "expense"): Category => ({
-  id, kind, nameEn: id, nameAr: id, tile: 1, color: "teal", position,
+  id, kind, nameEn: id, nameAr: id, tile: 1, color: "teal", position, parentId: null, archivedAt: null,
 });
 const categories = [cat("groceries", 1), cat("transport", 2), cat("fun", 3), cat("salary", 4, "income")];
 const budgets = [
@@ -19,6 +19,17 @@ const spend = [
 
 describe("buildMonthBudgets", () => {
   const usd = buildMonthBudgets("2026-11", "USD", categories, budgets, spend);
+
+  it("isolates SYP qirsh even when the category has USD and LBP amounts", () => {
+    const syp = buildMonthBudgets("2026-11", "SYP", categories,
+      [...budgets, { categoryId: "groceries", currency: "SYP", limitMinor: 5000 }],
+      [...spend, { categoryId: "groceries", currency: "SYP", spentMinor: 1250 }]);
+    expect(syp.totalLimitMinor).toBe(5000);
+    expect(syp.totalSpentMinor).toBe(1250);
+    expect(syp.rows[0].leftMinor).toBe(3750);
+    expect(availableBudgetCurrencies([{ currency: "SYP", archived: true }], [syp])).toEqual(["SYP"]);
+    expect(availableBudgetCurrencies([{ currency: "SYP", archived: false }], [])).toEqual(["SYP"]);
+  });
 
   it("computes left and progress, and flags over-budget rows", () => {
     const groceries = usd.rows[0];
@@ -53,5 +64,20 @@ describe("buildMonthBudgets", () => {
     const empty = buildMonthBudgets("2026-01", "USD", categories, [], []);
     expect(empty.rows).toEqual([]);
     expect(empty.totalLimitMinor).toBe(0);
+  });
+
+  it("keeps archived roots with spending or limits and omits empty archives", () => {
+    const archived = categories.map((c) => ({ ...c, archivedAt: "2026-11-04" }));
+    const result = buildMonthBudgets("2026-11", "USD", [...archived, { ...cat("empty", 9), archivedAt: "2026-11-04" }], budgets, spend);
+    expect(result.rows.map((r) => r.categoryId)).toEqual(["groceries", "transport", "fun"]);
+    expect(result.totalLimitMinor).toBe(35000);
+    expect(result.totalSpentMinor).toBe(35500);
+  });
+
+  it("never renders legacy child categories as independent budget rows", () => {
+    const child = { ...cat("child", 8), parentId: "groceries", archivedAt: "2026-11-04" };
+    const result = buildMonthBudgets("2026-11", "USD", [...categories, child], [...budgets, { categoryId: "child", currency: "USD", limitMinor: 999 }], spend);
+    expect(result.rows.some((r) => r.categoryId === "child")).toBe(false);
+    expect(result.totalLimitMinor).toBe(35000);
   });
 });

@@ -187,3 +187,15 @@ WCAG 2.2 AA: contrast ≥ 4.5:1 text / 3:1 UI; focus visible (2px ring, offset) 
 5. Loading, empty and error states exist and match the layout.
 6. Playwright mobile projects + axe pass; screenshots reviewed (not just the code).
 7. Reduced-motion respected; no layout shift on data arrival.
+
+## 15. Owner feedback round 3 flows
+
+- **Categories:** Settings opens the category manager. Names can be English, Arabic or both, with the other language as fallback. Used categories keep their history through archive/restore; live templates need reassignment first. Archived budget limits remain visible until explicitly cleared.
+- **Expense breakdown:** Optional one-level description/amount rows explain one expense. Keep the parent Name and full cost. Show an unitemized remainder rather than forcing a complete list; item amounts never create another debit or independently change category spending.
+- **Move:** Compact, visibly labelled FROM/TO wallet dropdowns show wallet name and currency. Use two columns where they fit and stack on narrow screens/large text. Cross-currency Received begins read-only. A labelled pencil button enables manual text entry and focuses the input synchronously; Use rate returns supported pairs to locked calculation. SYP pairs without a rate require explicit actual received entry. Pair changes clear stale values; same-pair rate edits preserve manual drafts.
+- **Cashier change:** Optional payment/change fields keep purchase cost, money handed over and returned change distinct. Show both wallets and currencies, require an active wallet for returned change, and explain how to create a missing-currency wallet. Confirm a transaction-specific rate for cross-currency reconciliation. Changing or undoing the purchase changes all its wallet effects together.
+- **Installments:** Paid/Part paid belongs to the current salary receipt, not the calendar month. Pay again requires a deliberate confirmation; remaining principal and monthly spending never reset with salary. A backdated accounting date does not silently move a payment to another salary cycle.
+- **Loans:** Reach Loans from Wallets. Separate borrowed from lent totals and keep currencies separate. Preview principal, the additive one-time fee and total due. Explicitly choose principal moving now or an existing loan with no new wallet movement. Repayments preview principal-first allocation and only fee portions count as spending/income.
+- **Numeric editing:** Labels follow the page language; numeric text editing stays LTR with bidi isolation and text selection. Numeric inputs opt touch caret gestures out of sheet dismissal. Store raw drafts synchronously; parse separately. Empty/partial values remain correctable. Never require select-all to delete, force the caret on each render, or format digits back into a live draft. Due-day inputs accept supported digit scripts without filtering typed text.
+
+Automated Chromium/WebKit mobile checks complement physical iPhone/Android keyboard validation. Browser emulation alone does not certify native keyboard behavior. Every new screen and expanded sheet still meets section 14.

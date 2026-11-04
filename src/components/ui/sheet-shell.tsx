@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useId } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,28 +24,32 @@ export function SheetShell({
   description,
   footer,
   children,
+  dismissible = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  title: string;
-  description?: string;
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  dismissible?: boolean;
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const t = useTranslations("Nav");
+  const titleId = useId();
+  const descriptionId = useId();
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="rounded-t-3xl bg-card md:mx-auto md:max-w-[480px]">
+    <Drawer open={open} onOpenChange={(next) => { if (next || dismissible) onOpenChange(next); }}>
+      <DrawerContent aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} className="rounded-t-3xl bg-card md:mx-auto md:max-w-[480px]">
         <div className="min-h-0 flex-1 overflow-y-auto px-4">
           <DrawerHeader className="px-0 text-start">
             <div className="flex min-h-11 items-center justify-between">
-              <DrawerTitle className="text-[17px] font-semibold">{title}</DrawerTitle>
-              <DrawerClose render={<Button variant="ghost" size="icon" aria-label={t("close")} />}>
+              <DrawerTitle id={titleId} className="text-[17px] font-semibold">{title}</DrawerTitle>
+              <DrawerClose render={<Button variant="ghost" size="icon" aria-label={t("close")} disabled={!dismissible} />}>
                 <X aria-hidden />
               </DrawerClose>
             </div>
             {description ? (
-              <DrawerDescription className="text-[15px]">{description}</DrawerDescription>
+              <DrawerDescription id={descriptionId} className="text-[15px]">{description}</DrawerDescription>
             ) : null}
           </DrawerHeader>
           <div className="pb-4">{children}</div>

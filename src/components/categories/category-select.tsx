@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { categoryName, type Category } from "@/features/categories/schema";
@@ -26,6 +26,7 @@ export function CategorySelect({
   invalid?: boolean;
 }) {
   const locale = useLocale();
+  const t = useTranslations("Categories");
   const labelId = useId();
   const current = categories.find((c) => c.id === value);
   return (
@@ -36,7 +37,7 @@ export function CategorySelect({
           {current ? (
             <span className="flex min-w-0 items-center gap-3">
               <CategoryGlyph tile={current.tile} color={current.color} />
-              <span className="truncate"><bdi>{categoryName(current, locale)}</bdi></span>
+              <span className="truncate"><bdi>{categoryName(current, locale)}</bdi>{current.archivedAt !== null ? <span className="ms-2 text-sm text-muted-foreground">{t("archived")}</span> : null}</span>
             </span>
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>
@@ -46,7 +47,7 @@ export function CategorySelect({
           {categories.map((c) => (
             <SelectItem key={c.id} value={c.id}>
               <CategoryGlyph tile={c.tile} color={c.color} />
-              <span className="truncate"><bdi>{categoryName(c, locale)}</bdi></span>
+              <span className="truncate"><bdi>{categoryName(c, locale)}</bdi>{c.archivedAt !== null ? <span className="ms-2 text-sm text-muted-foreground">{t("archived")}</span> : null}</span>
             </SelectItem>
           ))}
         </SelectContent>

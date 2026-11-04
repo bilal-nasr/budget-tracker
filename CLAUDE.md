@@ -1,6 +1,6 @@
 # Budget Tracker: Claude Code instructions
 
-Personal, mobile-first budget tracker. Next.js (App Router) + Supabase, English + Arabic (RTL), USD + LBP, open sign-up with email verification, self-hosted.
+Personal, mobile-first budget tracker. Next.js (App Router) + Supabase, English + Arabic (RTL), USD + LBP + SYP, open sign-up with email verification, self-hosted.
 
 ## Read first
 
@@ -45,8 +45,9 @@ pnpm owner:create   # create a confirmed account without email (needs SUPABASE_S
 - Names and amounts are wrapped in `<bdi>`; amounts never mirror.
 
 **Money**
-- Integer minor units only (USD cents, LBP whole lira). Parse/format only through `src/lib/money.ts`.
-- Never add or compare USD with LBP. Conversions are "≈" hints from the reference rate.
+- Integer minor units only (USD cents, LBP whole lira, current/new SYP qirsh). Parse/format only through `src/lib/money.ts`; currency metadata lives in `src/lib/currency.ts`.
+- Never add or compare different currencies. The legacy reference-rate helper supports only USD/LBP. SYP moves use actual sent/received amounts; cashier cross-currency change keeps its own confirmed direct-rate snapshot.
+- Descriptive expense items do not create ledger movements. Cashier reports use purchase cost; wallet balances use tender/change. Loan principal is separate from fee income/spending. Preserve the canonical transaction revision, stable draft ID and exact-revision Undo contracts when extending mutations.
 
 **Data & security**
 - Schema changes only through `supabase/migrations/`, with SQL tests.

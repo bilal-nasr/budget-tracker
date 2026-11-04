@@ -34,7 +34,60 @@ describe("formatAmount", () => {
   });
 });
 
-import { MAX_MINOR, convertAtRate, groupTyped, parseRate, toInputText } from "./money";
+import { MAX_MINOR, MoneyRangeError, convertAtRate, groupTyped, parseRate, readMinor, sumMinor, toInputText } from "./money";
+
+describe("SYP current-pound amounts", () => {
+  it.each([
+    ["12", 1200], ["12.5", 1250], ["0.01", 1], ["١٢٫٥٠", 1250],
+    ["١٬٢٣٤٫٥٠", 123450], ["۱۲٫۵۰", 1250],
+  ] as const)("parses %s as integer qirsh", (typed, expected) => {
+    expect(parseAmount(typed, "SYP")).toBe(expected);
+  });
+  it.each(["", "-1", "12.345", "NaN", "10000000000000.01"])("rejects invalid SYP %s", (typed) => {
+    expect(parseAmount(typed, "SYP")).toBeNull();
+  });
+  it("round-trips boundary qirsh without floating-point rounding", () => {
+    for (const minor of [0, 1, 1250, MAX_MINOR - 1, MAX_MINOR]) {
+      expect(parseAmount(toInputText(minor, "SYP"), "SYP")).toBe(minor);
+    }
+    expect(formatAmount(MAX_MINOR - 1, "SYP")).toBe("SYP 9,999,999,999,999.99");
+    expect(formatAmount(1250, "SYP")).toBe("SYP 12.50");
+    expect(formatAmount(-1250, "SYP")).toBe("−SYP 12.50");
+    expect(formatAmount(1250, "SYP", { sign: true })).toBe("+SYP 12.50");
+    expect(formatAmount(1250, "SYP", { digits: "arabic" })).toBe("SYP ١٢٫٥٠");
+  });
+  it.each(["USD", "LBP", "SYP"] as const)("never silently converts SYP to/from %s", (currency) => {
+    expect(convertAtRate(1250, "SYP", currency, 89500)).toBeNull();
+    expect(convertAtRate(1250, currency, "SYP", 89500)).toBeNull();
+  });
+});
+
+describe("stored minor-unit bounds", () => {
+  it("reads signed database integers and sums exactly, allowing cancellation", () => {
+    expect(readMinor("-1250")).toBe(-1250);
+    expect(readMinor(String(MAX_MINOR))).toBe(MAX_MINOR);
+    expect(sumMinor([MAX_MINOR, MAX_MINOR, -MAX_MINOR])).toBe(MAX_MINOR);
+    expect(sumMinor([-1250, 250])).toBe(-1000);
+  });
+  it.each(["1.5", "", "1e3", "NaN", "1000000000000001", Number.NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects an unrepresentable stored amount %j", (value) => {
+      expect(() => readMinor(value)).toThrow(MoneyRangeError);
+    },
+  );
+  it("refuses out-of-domain totals and invalid formatting inputs", () => {
+    expect(() => sumMinor([MAX_MINOR, 1])).toThrow(MoneyRangeError);
+    expect(() => formatAmount(1.5, "SYP")).toThrow(MoneyRangeError);
+  });
+  it.each([0, -1, 1.5, NaN, Infinity, 10_000_001])("rejects invalid legacy rate %s without throwing", (rate) => {
+    expect(convertAtRate(1250, "USD", "LBP", rate)).toBeNull();
+  });
+  it.each([-1, 1.5, NaN, Infinity, MAX_MINOR + 1, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid conversion input %s, including identity", (minor) => {
+      expect(convertAtRate(minor, "USD", "LBP", 89500)).toBeNull();
+      expect(convertAtRate(minor, "USD", "USD", 89500)).toBeNull();
+    },
+  );
+});
 
 describe("typed amounts", () => {
   it("round-trips minor units to input text", () => {

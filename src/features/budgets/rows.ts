@@ -1,5 +1,5 @@
 import type { Category } from "@/features/categories/schema";
-import type { Currency } from "@/lib/money";
+import { CURRENCIES, sumMinor, type Currency } from "@/lib/money";
 import type { BudgetLimit, BudgetRow, CategorySpend, MonthBudgets } from "./schema";
 
 /**
@@ -18,7 +18,7 @@ export function buildMonthBudgets(
 
   const budgeted: BudgetRow[] = [];
   const unbudgeted: BudgetRow[] = [];
-  for (const category of [...categories].filter((c) => c.kind === "expense").sort((a, b) => a.position - b.position)) {
+  for (const category of [...categories].filter((c) => c.kind === "expense" && c.parentId === null).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))) {
     const limit = limits.get(category.id) ?? null;
     const spentMinor = spent.get(category.id) ?? 0;
     if (limit !== null) {
@@ -38,9 +38,18 @@ export function buildMonthBudgets(
     month,
     currency,
     rows: [...budgeted, ...unbudgeted],
-    totalLimitMinor: budgeted.reduce((sum, r) => sum + (r.limitMinor ?? 0), 0),
-    totalSpentMinor: [...spent.values()].reduce((sum, v) => sum + v, 0),
+    totalLimitMinor: sumMinor(budgeted.map((row) => row.limitMinor ?? 0)),
+    totalSpentMinor: sumMinor([...spent.values()]),
   };
 }
 
 export const isOver = (row: BudgetRow) => row.leftMinor !== null && row.leftMinor < 0;
+
+/** Historical spending/budgets remain visible when the last wallet is archived. */
+export function availableBudgetCurrencies(
+  wallets: readonly { currency: Currency; archived: boolean }[],
+  months: readonly MonthBudgets[],
+): Currency[] {
+  return CURRENCIES.filter((currency) => wallets.some((wallet) => !wallet.archived && wallet.currency === currency)
+    || months.some((month) => month.currency === currency && month.rows.length > 0));
+}

@@ -9,7 +9,7 @@ import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { archiveWallet, createWallet, deleteWallet, unarchiveWallet, updateWallet } from "@/features/wallets/actions";
 import type { Wallet, WalletKind } from "@/features/wallets/schema";
-import { parseAmount, toInputText, type Currency } from "@/lib/money";
+import { CURRENCIES, CURRENCY_DECIMALS, parseAmount, toInputText, type Currency } from "@/lib/money";
 
 export type WalletSheetState = { wallet: Wallet | null };
 
@@ -26,6 +26,7 @@ export function WalletForm({
   onAddMoney?: (wallet: Wallet) => void;
 }) {
   const t = useTranslations("Wallets");
+  const tCurrencies = useTranslations("Currencies");
   const app = useAppDataOptional();
   const sources = (app?.wallets ?? []).filter((w) => !w.archived);
   const [pending, startTransition] = useTransition();
@@ -119,19 +120,21 @@ export function WalletForm({
       </div>
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">{t("currency")}</span>
-        <Segmented
+        {wallet ? <p className="min-h-11 py-2.5 font-semibold"><bdi dir="ltr">{currency}</bdi></p> : <Segmented
           label={t("currency")}
           value={currency}
           onChange={(next) => {
+            if (next !== currency) {
+              setAmount("");
+              setTakenText("");
+            }
             setCurrency(next);
-            if (next === "LBP") setAmount((v) => v.split(".")[0]);
           }}
-          options={[
-            { value: "USD", label: "USD" },
-            { value: "LBP", label: "LBP" },
-          ]}
-        />
+          options={CURRENCIES.map((value) => ({ value, label: <bdi dir="ltr">{value}</bdi> }))}
+        />}
         {wallet ? <p className="text-[13px] text-muted-foreground">{t("currencyLocked")}</p> : null}
+        {currency === "SYP" ? <p className="text-[13px] text-muted-foreground">{tCurrencies("SYP")} · {tCurrencies("sypUnitHelp")}</p> : null}
+        {!wallet ? <p className="text-[13px] text-muted-foreground">{tCurrencies("reenterAmount", { currency })}</p> : null}
       </div>
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium">{t("opening")}</span>
@@ -149,7 +152,7 @@ export function WalletForm({
         label={t("amount")}
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        inputMode={currency === "USD" ? "decimal" : "numeric"}
+        inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
         placeholder="0"
         autoComplete="off"
         dir="ltr"
@@ -183,7 +186,10 @@ export function WalletForm({
                     type="button"
                     role="radio"
                     aria-checked={s.id === sourceId}
-                    onClick={() => setSourceId(s.id)}
+                    onClick={() => {
+                      if (source?.currency !== s.currency) setTakenText("");
+                      setSourceId(s.id);
+                    }}
                     className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
                   >
                     <bdi>{s.name}</bdi> · {s.currency}
@@ -196,7 +202,7 @@ export function WalletForm({
                     label={t("takenFrom", { currency: source.currency })}
                     value={takenText}
                     onChange={(e) => setTakenText(e.target.value)}
-                    inputMode={source.currency === "USD" ? "decimal" : "numeric"}
+                    inputMode={CURRENCY_DECIMALS[source.currency] === 0 ? "numeric" : "decimal"}
                     placeholder="0"
                     autoComplete="off"
                     dir="ltr"

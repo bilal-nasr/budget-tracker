@@ -6,6 +6,7 @@ import type { Wallet } from "@/features/wallets/schema";
 
 type AppData = {
   wallets: Wallet[];
+  /** Complete historical catalogue. Use categoryOptions/activeCategories for new entries. */
   categories: Category[];
   timezone: string;
   salary: { amountMinor: number; walletId: string } | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, ArrowRight } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, HandCoins } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useAppData } from "@/components/providers/app-data";
 import { Amount } from "@/components/money/amount";
@@ -22,6 +22,8 @@ export function TransactionRow({
   onOpen: (transaction: Transaction) => void;
 }) {
   const t = useTranslations("Detail");
+  const ts = useTranslations("Cashier");
+  const tl = useTranslations("Loans");
   const locale = useLocale();
   const { categoryById, walletById } = useAppData();
   const wallet = walletById(transaction.walletId);
@@ -29,9 +31,10 @@ export function TransactionRow({
   const category = transaction.categoryId ? categoryById(transaction.categoryId) : undefined;
   const transfer = transaction.kind === "transfer";
   const exchange = transfer && toWallet !== undefined && wallet !== undefined && toWallet.currency !== wallet.currency;
-  const name = transfer ? t("move") : category ? categoryName(category, locale) : "";
+  const loan = transaction.kind === "loan";
+  const name = loan ? tl(transaction.loanEvent === "disbursement" ? "disbursement" : "repayment") : transfer ? t("move") : category ? categoryName(category, locale) : "";
   const title = transaction.note || name;
-  const income = transaction.kind === "income";
+  const income = transaction.kind === "income" || (loan && transaction.loanFlow === "in");
 
   return (
     <li className="border-b border-border last:border-b-0">
@@ -40,7 +43,7 @@ export function TransactionRow({
         onClick={() => onOpen(transaction)}
         className="flex min-h-[60px] w-full items-center gap-3 px-3.5 py-2 text-start hover:bg-accent/50 active:bg-accent"
       >
-        {transfer ? (
+        {loan ? <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-secondary text-primary"><HandCoins className="size-5" /></span> : transfer ? (
           <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-secondary text-primary">
             <ArrowLeftRight className="size-5" />
           </span>
@@ -66,6 +69,9 @@ export function TransactionRow({
               </>
             )}
           </span>
+          {transaction.settlement?.change ? <span className="block truncate text-[13px] text-muted-foreground">
+            {ts("changeTo")} · <bdi>{walletById(transaction.settlement.change.walletId)?.name ?? transaction.settlement.change.currency}</bdi>
+          </span> : null}
         </span>
         <span className="flex shrink-0 flex-col items-end">
           <Amount

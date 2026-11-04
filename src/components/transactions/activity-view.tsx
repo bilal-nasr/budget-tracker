@@ -16,8 +16,9 @@ import { loadTransactions } from "@/features/transactions/actions";
 import { addDays, groupByDay, todayIn } from "@/features/transactions/group";
 import type { Cursor, Filters, Page } from "@/features/transactions/schema";
 import { cn } from "@/lib/utils";
+import { CURRENCIES } from "@/lib/money";
 
-const KINDS = ["all", "expense", "income", "transfer"] as const;
+const KINDS = ["all", "expense", "income", "transfer", "loan"] as const;
 
 function toQuery(filters: Filters): Record<string, string> {
   return Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== "")) as Record<string, string>;
@@ -175,8 +176,8 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
                 <div className="sticky top-0 z-10 flex items-baseline justify-between gap-3 bg-background py-2.5 text-[13px] text-muted-foreground">
                   <h2 className="text-[14px] font-semibold text-foreground">{dayTitle(group.date, today, locale, t)}</h2>
                   {partial ? null : (
-                    <p className="flex gap-3">
-                      {(["USD", "LBP"] as const)
+                    <p className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+                      {CURRENCIES
                         .filter((c) => group.rows.some((r) => r.currency === c))
                         .map((c) => (
                           <Amount key={c} minor={group.totals[c]} currency={c} sign />
@@ -234,6 +235,7 @@ function FilterSheet({
   onApply: (patch: Partial<Filters>) => void;
 }) {
   const t = useTranslations("Activity");
+  const tc = useTranslations("Categories");
   const locale = useLocale();
   const { categories, timezone } = useAppData();
   const [walletId, setWalletId] = useState(filters.walletId);
@@ -302,7 +304,7 @@ function FilterSheet({
             </button>
             {categories.map((c) => (
               <button key={c.id} type="button" role="radio" aria-checked={categoryId === c.id} onClick={() => setCategoryId(c.id)} className={chip}>
-                <bdi>{categoryName(c, locale)}</bdi>
+                <bdi>{categoryName(c, locale)}</bdi>{c.archivedAt !== null ? <span className="ms-1 text-muted-foreground">({tc("archived")})</span> : null}
               </button>
             ))}
           </div>
