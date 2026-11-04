@@ -24,6 +24,28 @@ test("home shows money per currency, recent activity and wallets", async ({ page
   await expectNoHorizontalOverflow(page);
 });
 
+for (const locale of ["en", "ar"] as const) {
+  const ar = locale === "ar";
+  test(`activity filter sheet loads on first open and applies a wallet ${locale}`, async ({ page }, testInfo) => {
+    if (testInfo.project.name !== "desktop") await page.setViewportSize({ width: testInfo.project.name === "mobile-small" ? 320 : 390, height: 844 });
+    await page.goto(`/${locale}/activity`);
+    const open = page.getByRole("button", { name: ar ? "التصفية" : "Filters", exact: true });
+    await open.click();
+    const sheet = page.getByRole("dialog", { name: ar ? "التصفية" : "Filters" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("radio", { name: ar ? "كل المحافظ" : "All wallets" })).toHaveAttribute("aria-checked", "true");
+    await page.screenshot({ path: testInfo.outputPath(`activity-filters-${locale}.png`), animations: "disabled" });
+    await sheet.getByRole("radio", { name: "Bank · USD" }).click();
+    await sheet.getByRole("button", { name: ar ? "تطبيق" : "Apply", exact: true }).click();
+    await expect(page).toHaveURL(/walletId=/);
+    await expect(sheet).toBeHidden();
+    // Reopening re-syncs from the URL.
+    await open.click();
+    await expect(page.getByRole("dialog").getByRole("radio", { name: "Bank · USD" })).toHaveAttribute("aria-checked", "true");
+    await expectNoHorizontalOverflow(page);
+  });
+}
+
 test("activity groups by day, searches, and filters by type", async ({ page }) => {
   await page.goto("/en/activity");
   await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
