@@ -29,7 +29,7 @@ describe("synthetic transaction composition", () => {
     const syp = rows.find((row) => row.note === "Synthetic SYP groceries");
     expect(syp).toBeDefined();
     expect(syp!.currency).toBe("SYP");
-    expect(toInputText(syp!.amountMinor, syp!.currency)).toBe("12.5");
+    expect(toInputText(syp!.amountMinor, syp!.currency)).toBe("1250");
     expect(syp!.items).toEqual([]);
   });
 });

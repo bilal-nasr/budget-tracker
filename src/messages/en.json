@@ -608,7 +608,6 @@
     "USD": "US dollar",
     "LBP": "Lebanese pound",
     "SYP": "Syrian pound (new)",
-    "sypUnitHelp": "SYP uses the new Syrian pound, with 100 qirsh per pound.",
     "reenterAmount": "Enter the amount in {currency}."
   },
   "Breakdown": {

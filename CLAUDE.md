@@ -45,7 +45,7 @@ pnpm owner:create   # create a confirmed account without email (needs SUPABASE_S
 - Names and amounts are wrapped in `<bdi>`; amounts never mirror.
 
 **Money**
-- Integer minor units only (USD cents, LBP whole lira, current/new SYP qirsh). Parse/format only through `src/lib/money.ts`; currency metadata lives in `src/lib/currency.ts`.
+- Integer minor units only (USD cents, LBP whole lira, SYP whole pounds). Parse/format only through `src/lib/money.ts`; currency metadata lives in `src/lib/currency.ts`.
 - Never add or compare different currencies. The legacy reference-rate helper supports only USD/LBP. SYP moves use actual sent/received amounts; cashier cross-currency change keeps its own confirmed direct-rate snapshot.
 - Descriptive expense items do not create ledger movements. Cashier reports use purchase cost; wallet balances use tender/change. Loan principal is separate from fee income/spending. Preserve the canonical transaction revision, stable draft ID and exact-revision Undo contracts when extending mutations.
 

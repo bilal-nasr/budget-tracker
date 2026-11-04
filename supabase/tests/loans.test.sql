@@ -164,7 +164,7 @@ select throws_ok($$select pg_temp.orphan_new_loan()$$,null,'loan.invalid','new l
 select throws_ok($$select public.create_loan(pg_temp.loan_args(5,'borrowed','existing',1000000000000000,1))$$,null,'loan.invalid','fee plus principal cap checked with wide numeric intermediate');
 select lives_ok($$select public.create_loan(pg_temp.loan_args(6,'borrowed','new',1250,725)||'{"walletId":"ca100000-0000-4000-8000-000000000004"}'::jsonb)$$,'SYP loan derives units from its wallet');
 select is((select currency::text from public.loans where name='Synthetic loan 6'),'SYP','SYP currency retained');
-select is((select fee_minor from public.loans where name='Synthetic loan 6'),91::bigint,'SYP fee rounds to qirsh');
+select is((select fee_minor from public.loans where name='Synthetic loan 6'),91::bigint,'SYP fee rounds to whole pounds');
 select lives_ok($$select public.record_loan_payment(pg_temp.payment_args(6,6,1341,'ca100000-0000-4000-8000-000000000004'))$$,'SYP repayment stays in same currency');
 select is((select sum(amount_minor) from public.reporting_entries where currency='SYP'),91::numeric,'SYP report contains only its fee');
 

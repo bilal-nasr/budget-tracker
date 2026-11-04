@@ -20,7 +20,7 @@ const spend = [
 describe("buildMonthBudgets", () => {
   const usd = buildMonthBudgets("2026-11", "USD", categories, budgets, spend);
 
-  it("isolates SYP qirsh even when the category has USD and LBP amounts", () => {
+  it("isolates SYP whole pounds even when the category has USD and LBP amounts", () => {
     const syp = buildMonthBudgets("2026-11", "SYP", categories,
       [...budgets, { categoryId: "groceries", currency: "SYP", limitMinor: 5000 }],
       [...spend, { categoryId: "groceries", currency: "SYP", spentMinor: 1250 }]);

@@ -17,7 +17,6 @@ const subscribeNoop = () => () => {};
 
 export function SettingsForm({ profile }: { profile: Profile }) {
   const t = useTranslations("Settings");
-  const tCurrencies = useTranslations("Currencies");
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -93,11 +92,6 @@ export function SettingsForm({ profile }: { profile: Profile }) {
       </section>
 
       <Link href="/settings/categories" className="inline-flex min-h-12 items-center justify-between rounded-xl border border-border bg-card px-4 py-3 font-medium focus-visible:outline-2 focus-visible:outline-ring">{t("categories")}</Link>
-
-      <section aria-labelledby="s-syp-unit" className="flex flex-col gap-2">
-        <h2 id="s-syp-unit" className="text-[17px] font-semibold">{tCurrencies("SYP")} <bdi dir="ltr">SYP</bdi></h2>
-        <p className="text-[14px] text-muted-foreground">{tCurrencies("sypUnitHelp")}</p>
-      </section>
 
       {message ? (
         <p role="alert" className="text-sm text-over">{message}</p>

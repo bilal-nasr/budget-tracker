@@ -14,7 +14,7 @@ import {
 describe("currency registry", () => {
   it("keeps stable currency order and explicit ledger precision", () => {
     expect(CURRENCIES).toEqual(["USD", "LBP", "SYP"]);
-    expect(CURRENCY_DECIMALS).toEqual({ USD: 2, LBP: 0, SYP: 2 });
+    expect(CURRENCY_DECIMALS).toEqual({ USD: 2, LBP: 0, SYP: 0 });
     expect(Object.isFrozen(CURRENCIES)).toBe(true);
     expect(Object.isFrozen(CURRENCY_DECIMALS)).toBe(true);
     expect(MAX_MINOR).toBe(1_000_000_000_000_000);

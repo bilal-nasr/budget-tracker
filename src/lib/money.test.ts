@@ -36,25 +36,24 @@ describe("formatAmount", () => {
 
 import { MAX_MINOR, MoneyRangeError, convertAtRate, groupTyped, parseRate, readMinor, sumMinor, toInputText } from "./money";
 
-describe("SYP current-pound amounts", () => {
+describe("SYP whole-pound amounts", () => {
   it.each([
-    ["12", 1200], ["12.5", 1250], ["0.01", 1], ["١٢٫٥٠", 1250],
-    ["١٬٢٣٤٫٥٠", 123450], ["۱۲٫۵۰", 1250],
-  ] as const)("parses %s as integer qirsh", (typed, expected) => {
+    ["12", 12], ["1,250", 1250], ["١٬٢٣٤", 1234], ["۱۲۵۰", 1250],
+  ] as const)("parses %s as whole pounds", (typed, expected) => {
     expect(parseAmount(typed, "SYP")).toBe(expected);
   });
-  it.each(["", "-1", "12.345", "NaN", "10000000000000.01"])("rejects invalid SYP %s", (typed) => {
+  it.each(["", "-1", "12.5", "0.01", "١٢٫٥٠", "NaN", "1000000000000001"])("rejects invalid SYP %s", (typed) => {
     expect(parseAmount(typed, "SYP")).toBeNull();
   });
-  it("round-trips boundary qirsh without floating-point rounding", () => {
+  it("round-trips whole pounds without scaling or decimal formatting", () => {
     for (const minor of [0, 1, 1250, MAX_MINOR - 1, MAX_MINOR]) {
       expect(parseAmount(toInputText(minor, "SYP"), "SYP")).toBe(minor);
     }
-    expect(formatAmount(MAX_MINOR - 1, "SYP")).toBe("SYP 9,999,999,999,999.99");
-    expect(formatAmount(1250, "SYP")).toBe("SYP 12.50");
-    expect(formatAmount(-1250, "SYP")).toBe("−SYP 12.50");
-    expect(formatAmount(1250, "SYP", { sign: true })).toBe("+SYP 12.50");
-    expect(formatAmount(1250, "SYP", { digits: "arabic" })).toBe("SYP ١٢٫٥٠");
+    expect(formatAmount(MAX_MINOR - 1, "SYP")).toBe("SYP 999,999,999,999,999");
+    expect(formatAmount(1250, "SYP")).toBe("SYP 1,250");
+    expect(formatAmount(-1250, "SYP")).toBe("−SYP 1,250");
+    expect(formatAmount(1250, "SYP", { sign: true })).toBe("+SYP 1,250");
+    expect(formatAmount(1250, "SYP", { digits: "arabic" })).toBe("SYP ١٬٢٥٠");
   });
   it.each(["USD", "LBP", "SYP"] as const)("never silently converts SYP to/from %s", (currency) => {
     expect(convertAtRate(1250, "SYP", currency, 89500)).toBeNull();

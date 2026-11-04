@@ -18,7 +18,7 @@ beforeEach(() => {
   mocks.from.mockImplementation((table: string) => table === "wallets" ? query : { select: () => Promise.resolve(balance) });
   mocks.createClient.mockResolvedValue({ from: mocks.from });
 });
-it("reads a signed SYP balance without rescaling qirsh", async () => {
+it("reads a signed SYP balance without rescaling whole pounds", async () => {
   expect(await getWallets()).toEqual([expect.objectContaining({ currency: "SYP", balanceMinor: -1250, openingBalanceMinor: 2500 })]);
 });
 it("rejects an out-of-domain aggregate before Number conversion", async () => {

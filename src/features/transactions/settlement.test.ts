@@ -25,8 +25,8 @@ describe("cash settlement", () => {
     const quote = { base: "USD" as const, quote: "SYP" as const,
       quoteMajorNumerator: 999999999999999, quoteMajorDenominator: 1000000 };
     // Decimal division can round the first value to an integer before floor.
-    expect(convertSettlementMinor(999999499999999, "SYP", "USD", quote)).toBe(999999);
-    expect(convertSettlementMinor(999999500000000, "SYP", "USD", quote)).toBe(1000000);
+    expect(convertSettlementMinor(9999994999999, "SYP", "USD", quote)).toBe(999999);
+    expect(convertSettlementMinor(9999995000000, "SYP", "USD", quote)).toBe(1000000);
   });
   it("rejects malformed inputs without throwing or floating point coercion", () => {
     for (const amount of [NaN, Infinity, -1, 0.1, MAX_MINOR + 1]) expect(convertSettlementMinor(amount, "USD", "LBP", rate)).toBeNull();
@@ -46,16 +46,16 @@ describe("cash settlement", () => {
     expect(settlementRateText(rate)).toBe("89500");
     expect(parseSettlementRate("1", "USD", "USD")).toBeNull();
   });
-  it("supports SYP only through its registered two-decimal unit and a direct quote", () => {
+  it("supports SYP only through its registered whole-pound unit and a direct quote", () => {
     const syp = "SYP" as Currency;
     const r = parseSettlementRate("13000", "USD", syp)!;
-    expect(convertSettlementMinor(9750000, syp, "USD", r)).toBe(750);
-    expect(convertSettlementMinor(750, "USD", syp, r)).toBe(9750000);
+    expect(convertSettlementMinor(97500, syp, "USD", r)).toBe(750);
+    expect(convertSettlementMinor(750, "USD", syp, r)).toBe(97500);
     const fractional = parseSettlementRate("٠٫٠١", "LBP", syp)!;
     expect(fractional.quoteMajorNumerator).toBe(1);
     expect(fractional.quoteMajorDenominator).toBe(100);
     expect(settlementRateText(fractional)).toBe("0.01");
-    expect(convertSettlementMinor(50000, syp, "LBP", fractional)).toBe(50000);
+    expect(convertSettlementMinor(500, syp, "LBP", fractional)).toBe(50000);
     expect(parseSettlementRate("0.0000001", "LBP", syp)).toBeNull();
     expect(parseSettlementRate("1000000000.000001", "LBP", syp)).toBeNull();
   });

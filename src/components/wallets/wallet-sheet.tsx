@@ -133,7 +133,6 @@ export function WalletForm({
           options={CURRENCIES.map((value) => ({ value, label: <bdi dir="ltr">{value}</bdi> }))}
         />}
         {wallet ? <p className="text-[13px] text-muted-foreground">{t("currencyLocked")}</p> : null}
-        {currency === "SYP" ? <p className="text-[13px] text-muted-foreground">{tCurrencies("SYP")} · {tCurrencies("sypUnitHelp")}</p> : null}
         {!wallet ? <p className="text-[13px] text-muted-foreground">{tCurrencies("reenterAmount", { currency })}</p> : null}
       </div>
       <div className="flex flex-col gap-1.5">

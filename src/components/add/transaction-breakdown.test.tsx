@@ -275,7 +275,7 @@ describe.each(["en", "ar"] as const)("%s explicit conflict recovery", (locale) =
 describe("cashier aggregate integration", () => {
   const cashSaved: Transaction = { ...saved, amountMinor: 1250,
     items: [{ ...saved.items[0], amountMinor: 1000 }],
-    settlement: { tenderMinor: 2000, change: { walletId: wallets[1].id, amountMinor: 9750000, currency: "SYP",
+    settlement: { tenderMinor: 2000, change: { walletId: wallets[1].id, amountMinor: 97500, currency: "SYP",
       rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } } },
   };
   it.each(["en", "ar"] as const)("%s hydrates the persisted rate, keeps cost/items separate and saves one captured revision", async (locale) => {
@@ -287,7 +287,7 @@ describe("cashier aggregate integration", () => {
     fireEvent.click(screen.getByRole("button", { name: m.Add.saveChanges }));
     await waitFor(() => expect(mock.updateTransaction).toHaveBeenCalledWith(id, expect.objectContaining({
       amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
-      settlement: { tenderMinor: 2000, change: { walletId: wallets[1].id, amountMinor: 9750000,
+      settlement: { tenderMinor: 2000, change: { walletId: wallets[1].id, amountMinor: 97500,
         rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } } },
     }), 17));
     expect(mock.updateTransaction).toHaveBeenCalledOnce();

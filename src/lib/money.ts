@@ -8,7 +8,7 @@ export {
 export type { Currency } from "./currency";
 
 /**
- * Integer minor units: USD cents, LBP whole lira, SYP current-pound qirsh.
+ * Integer minor units: USD cents, LBP whole lira, SYP whole pounds.
  * Callers may sum only amounts denominated in the same currency.
  */
 export type Digits = "latin" | "arabic";

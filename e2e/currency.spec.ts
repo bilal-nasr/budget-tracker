@@ -5,16 +5,15 @@ import { expectNoHorizontalOverflow } from "./support";
 
 for (const locale of ["en", "ar"] as const) {
   const messages = locale === "en" ? en : ar;
-  test(`${locale}: SYP wallet creation uses qirsh precision and current-pound context`, async ({ page }) => {
+  test(`${locale}: SYP wallet creation uses whole-pound amounts`, async ({ page }) => {
     await page.goto(`/${locale}/wallets`);
     await expect(page.getByRole("heading", { name: "SYP", exact: true })).toBeVisible();
     await page.getByRole("button", { name: messages.Wallets.add, exact: true }).click();
     const dialog = page.getByRole("dialog");
     await dialog.locator("label").filter({ hasText: /^SYP$/ }).click();
-    await expect(dialog.getByText(messages.Currencies.sypUnitHelp, { exact: false })).toBeVisible();
     const amount = dialog.getByLabel(messages.Wallets.amount, { exact: true });
-    await expect(amount).toHaveAttribute("inputmode", "decimal");
-    await amount.fill("١٢٫٥٠");
+    await expect(amount).toHaveAttribute("inputmode", "numeric");
+    await amount.fill("١٢٥٠");
     await dialog.getByLabel(messages.Wallets.name, { exact: true }).fill("محفظة سورية Synthetic wallet");
     await expect(dialog.getByRole("button", { name: messages.Wallets.create, exact: true })).toBeEnabled();
     await expectNoHorizontalOverflow(page);
@@ -48,7 +47,7 @@ for (const locale of ["en", "ar"] as const) {
       await dialog.getByRole("button", { name: messages.Add.editReceived }).click();
       await expect(received).toBeEditable();
       await expect(received).toBeFocused();
-      await received.fill(destination === "LBP" ? "١٢٥٠" : "١٢٫٥٠");
+      await received.fill(destination === "USD" ? "١٢٫٥٠" : "١٢٥٠");
       await expect(save).toBeEnabled();
       await received.fill("");
       await dialog.getByRole("button", { name: "0", exact: true }).click();
@@ -61,7 +60,7 @@ for (const locale of ["en", "ar"] as const) {
   test(`${locale}: SYP budget query shows a separate currency total`, async ({ page }) => {
     await page.goto(`/${locale}/budgets?currency=SYP`);
     await expect(page).toHaveURL(/currency=SYP/);
-    await expect(page.locator("main")).toContainText("SYP 12.50");
+    await expect(page.locator("main")).toContainText("SYP 1,250");
     await expectNoHorizontalOverflow(page);
   });
   test(`${locale}: invalid or repeated currency queries safely select the default`, async ({ page }) => {

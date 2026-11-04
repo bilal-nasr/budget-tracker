@@ -58,7 +58,7 @@ v1 scope:
 - Installable PWA with an "Add expense" shortcut.
 
 Constraints:
-- Money is stored as integer minor units (USD cents, LBP whole lira, current/new SYP qirsh). Never floats. Never add different currencies. No automatic old/new SYP redenomination.
+- Money is stored as integer minor units (USD cents, LBP whole lira, SYP whole pounds). Never floats. Never add different currencies. No automatic old/new SYP redenomination.
 - All data is private to its owner; Row Level Security on every table.
 - Open sign-up with email verification and password recovery (Supabase Auth). No owner allowlist. Persistent login uses a 30-day absolute session policy where configured; hosted Auth must be configured separately (see `docs/ARCHITECTURE.md` §3).
 - Every user-visible string ships in English and Arabic in the same change.

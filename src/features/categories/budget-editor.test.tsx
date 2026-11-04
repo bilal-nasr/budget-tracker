@@ -16,9 +16,9 @@ it("keeps raw SYP budget drafts editable when their total exceeds the money doma
   mock.categories = [category, { ...category, id: "two", nameEn: "Two", position: 2 }];
   render(<NextIntlClientProvider locale="en" messages={en}><BudgetsSheet state={{ data: { month: "2026-11", currency: "SYP", rows: [], totalLimitMinor: 0, totalSpentMinor: 0 }, salaryAfterMinor: null }} onClose={() => {}} /></NextIntlClientProvider>);
   const first = screen.getByRole("textbox", { name: en.Budgets.amountFor.replace("{name}", "One") }) as HTMLInputElement;
-  fireEvent.change(first, { target: { value: "10000000000000" } });
-  fireEvent.change(screen.getByRole("textbox", { name: en.Budgets.amountFor.replace("{name}", "Two") }), { target: { value: "0.01" } });
-  expect(first.value).toBe("10000000000000");
+  fireEvent.change(first, { target: { value: "1000000000000000" } });
+  fireEvent.change(screen.getByRole("textbox", { name: en.Budgets.amountFor.replace("{name}", "Two") }), { target: { value: "1" } });
+  expect(first.value).toBe("1000000000000000");
   expect(screen.getByRole("alert").textContent).toBe(en.Budgets.totalTooLarge);
   expect((screen.getByRole("button", { name: en.Budgets.save }) as HTMLButtonElement).disabled).toBe(true);
 });

@@ -8,7 +8,7 @@ Built with Next.js (App Router) and Supabase. Open sign-up with email verificati
 
 ## Features so far
 
-- Wallets in USD, LBP or SYP (cash, bank, card). Totals are always per currency, never combined. SYP uses the current/new pound, with 100 qirsh per pound; existing whole-lira LBP amounts keep their units.
+- Wallets in USD, LBP or SYP (cash, bank, card). Totals are always per currency, never combined. SYP and LBP both use whole-pound amounts, without fractional units.
 - Add an expense or income in a few taps with an in-sheet keypad; edit, duplicate, delete with Undo.
 - Manage expense/income categories in Settings. Used categories are archived with history retained; unused categories can be deleted. Templates need reassignment before their category is removed.
 - Optional expense breakdowns describe one payment without adding extra wallet debits. Partial lists show the unitemized remainder.
@@ -21,6 +21,8 @@ Built with Next.js (App Router) and Supabase. Open sign-up with email verificati
 - Per-currency monthly budgets, fixed expenses and payment summaries.
 - English and Arabic (RTL), light and dark, installable-ready, built phone-first.
 - Email sign-up with verification; Row Level Security on every table keeps accounts apart.
+
+When upgrading an existing database to whole-pound SYP, stop app writes and apply `20261112000100_syp_whole_pounds.sql` before starting the updated app. The migration divides existing SYP qirsh amounts by 100, including historical transfers, loan replay payloads and archived records. Any fractional-pound amount aborts the entire migration without rounding; resolve it explicitly before retrying. Direct exchange-rate quotes remain in major currency units.
 
 Without Supabase keys the app shows synthetic demo data (read-only) so you can look around.
 

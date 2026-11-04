@@ -7,7 +7,7 @@ const wallet = (currency: Wallet["currency"], balanceMinor: number, archived = f
 });
 
 describe("wallet currency schema and totals", () => {
-  it("accepts signed SYP qirsh but rejects unknown currencies and fractional minor units", () => {
+  it("accepts signed SYP whole pounds but rejects unknown currencies and fractional minor units", () => {
     const input = { name: "Synthetic SYP", kind: "cash", currency: "SYP", openingBalanceMinor: -1250 };
     expect(walletInputSchema.safeParse(input).success).toBe(true);
     expect(walletInputSchema.safeParse({ ...input, currency: "EUR" }).success).toBe(false);

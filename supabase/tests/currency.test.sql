@@ -57,7 +57,7 @@ select is((select count(*) from public.transactions where currency = 'SYP'), 2::
   'wallet currency replaces caller placeholders for SYP income and expense');
 select is((select balance_minor::bigint from public.wallet_balances
   where wallet_id = 'c6100000-0000-4000-8000-000000000003'), 99000::bigint,
-  'SYP balances use integer qirsh without rescaling');
+  'SYP balances use integer whole pounds without rescaling');
 select is((select balance_minor::bigint from public.wallet_balances
   where wallet_id = 'c6100000-0000-4000-8000-000000000001'), 10000::bigint,
   'existing USD cents are unchanged');
@@ -72,7 +72,7 @@ insert into public.budgets (category_id, currency, starts_month, limit_minor) va
 select is((select count(*) from public.month_budgets('2026-11-01')), 3::bigint,
   'one category can have independent budgets in all three currencies');
 select is((select spent_minor from public.month_category_spend('2026-11-01') where currency = 'SYP'),
-  1250::bigint, 'SYP spending excludes income and stays in qirsh');
+  1250::bigint, 'SYP spending excludes income and stays in whole pounds');
 insert into public.fixed_expenses (name, amount_minor, wallet_id, category_id) values
   ('Synthetic fixed', 1250, 'c6100000-0000-4000-8000-000000000006', 'c6300000-0000-4000-8000-000000000001');
 insert into public.installments (id, name, total_minor, monthly_minor, wallet_id, category_id, currency) values

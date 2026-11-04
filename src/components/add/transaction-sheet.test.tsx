@@ -81,7 +81,7 @@ describe.each(["en", "ar"] as const)("%s Move received ownership", (locale) => {
     await choose(t.to, /Syrian bank SYP/);
     expect(received.value).toBe("١٢٫");
     expect(received.readOnly).toBe(false);
-    fireEvent.change(received, { target: { value: "١٢٫٥٠" } });
+    fireEvent.change(received, { target: { value: "١٢٥٠" } });
     fireEvent.click(screen.getByRole("button", { name: t.moveSave }));
     await waitFor(() => expect(mocks.createTransfer).toHaveBeenCalledWith(expect.objectContaining({ toAmountMinor: 1250, rate: undefined })));
     await choose(t.to, /Cash LBP/);

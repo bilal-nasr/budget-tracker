@@ -2,11 +2,11 @@
 export const CURRENCIES = Object.freeze(["USD", "LBP", "SYP"] as const);
 export type Currency = (typeof CURRENCIES)[number];
 
-/** SYP uses the current/new pound, stored in qirsh. LBP keeps whole-lira units. */
+/** USD uses cents; LBP and SYP both use whole-pound ledger units. */
 export const CURRENCY_DECIMALS: Readonly<Record<Currency, 0 | 2>> = Object.freeze({
   USD: 2,
   LBP: 0,
-  SYP: 2,
+  SYP: 0,
 });
 
 export const MAX_MINOR = 1_000_000_000_000_000;

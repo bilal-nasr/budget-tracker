@@ -41,9 +41,9 @@ describe("settlement row boundary", () => {
     expect(() => readSettlementSnapshot(row, { ...context, amountMinor: 1251 })).toThrow(SettlementSnapshotError);
     expect(() => readSettlementSnapshot(row, { ...context, kind: "income" })).toThrow(SettlementSnapshotError);
   });
-  it("decodes SYP qirsh with its direct rate snapshot", () => {
-    const snapshot = readSettlementSnapshot({ ...row, change_currency: "SYP", change_minor: "9750000", change_rate_quote: "SYP", change_rate_numerator: "13000" }, context)!;
-    expect(snapshot.change?.amountMinor).toBe(9750000);
+  it("decodes SYP whole pounds with its direct rate snapshot", () => {
+    const snapshot = readSettlementSnapshot({ ...row, change_currency: "SYP", change_minor: "97500", change_rate_quote: "SYP", change_rate_numerator: "13000" }, context)!;
+    expect(snapshot.change?.amountMinor).toBe(97500);
     expect(snapshot.change?.currency).toBe("SYP");
   });
   it("serializes omitted, removed, and entered settlement distinctly", () => {

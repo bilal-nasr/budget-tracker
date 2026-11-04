@@ -22,11 +22,9 @@ describe("applyKey", () => {
     expect(applyKey("54.2", "back", "USD")).toBe("54.");
     expect(applyKey("", "back", "USD")).toBe("");
   });
-  it("uses decimal qirsh entry for SYP and preserves a partial draft", () => {
-    let value = "";
-    for (const key of ["1", "2", ".", "5", "0"]) value = applyKey(value, key, "SYP");
-    expect(value).toBe("12.50");
-    expect(applyKey(value, "1", "SYP")).toBe("12.50");
-    expect(applyKey("12.5", "back", "SYP")).toBe("12.");
+  it("uses whole-pound entry for SYP like LBP", () => {
+    expect(applyKey("12", ".", "SYP")).toBe("12");
+    expect(applyKey("12", "000", "SYP")).toBe("12000");
+    expect(applyKey("1250", "back", "SYP")).toBe("125");
   });
 });

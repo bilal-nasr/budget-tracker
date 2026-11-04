@@ -63,9 +63,9 @@ select throws_ok($$update public.transactions set tender_minor=2000 where id='c2
 select throws_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000002',null,(select value from cashier_input),'[{"description":"Too much","amountMinor":1500}]','{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000001","amountMinor":750}}')$$,null,null,'items below tender but above cost fail atomically');
 select is((select count(*) from public.transactions where id='c2000000-0000-4000-8000-000000000002'),0::bigint,'invalid items leave no parent');
 select is(public.cashier_convert_minor(1,'LBP','USD','USD','LBP',200,1),1::bigint,'SQL half-up rounding matches domain helper');
-select is(public.cashier_convert_minor(999999499999999,'SYP','USD','USD','SYP',999999999999999,1000000),999999::bigint,
+select is(public.cashier_convert_minor(9999994999999,'SYP','USD','USD','SYP',999999999999999,1000000),999999::bigint,
   'large SYP quote stays below half without intermediate numeric division rounding');
-select is(public.cashier_convert_minor(999999500000000,'SYP','USD','USD','SYP',999999999999999,1000000),1000000::bigint,
+select is(public.cashier_convert_minor(9999995000000,'SYP','USD','USD','SYP',999999999999999,1000000),1000000::bigint,
   'adjacent SYP quote boundary rounds up once');
 
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000004',null,(select value from cashier_input),null,
@@ -73,12 +73,12 @@ select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000
 select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000001'),-2500::numeric,'same-wallet tender and change net to cost');
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000005',null,(select value from cashier_input),null,'{"tenderMinor":1250,"change":null}')$$,'exact tender with no change');
 select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000001'),-3750::numeric,'no-change tender is one cost debit');
-insert into public.wallets(id,name,kind,currency) values ('c1000000-0000-4000-8000-000000000005','SYP qirsh','cash','SYP');
+insert into public.wallets(id,name,kind,currency) values ('c1000000-0000-4000-8000-000000000005','SYP pounds','cash','SYP');
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000006',null,(select value from cashier_input),null,
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000005","amountMinor":9750000,"rate":{"base":"USD","quote":"SYP","quoteMajorNumerator":13000,"quoteMajorDenominator":1}}}')$$,'SYP direct quote uses qirsh scale without a profile-rate fallback');
-select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000005'),9750000::numeric,'actual qirsh credited exactly');
-select is(public.cashier_convert_minor(50000,'SYP','LBP','LBP','SYP',1,100),50000::bigint,'fractional LBP/SYP quote uses exact rational math');
-select is(public.cashier_convert_minor(750,'USD','SYP','USD','SYP',13000,1),9750000::bigint,'reverse SYP conversion is explicit and scale-aware');
+'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000005","amountMinor":97500,"rate":{"base":"USD","quote":"SYP","quoteMajorNumerator":13000,"quoteMajorDenominator":1}}}')$$,'SYP direct quote uses whole-pound scale without a profile-rate fallback');
+select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000005'),97500::numeric,'actual pounds credited exactly');
+select is(public.cashier_convert_minor(500,'SYP','LBP','LBP','SYP',1,100),50000::bigint,'fractional LBP/SYP quote uses exact rational math');
+select is(public.cashier_convert_minor(750,'USD','SYP','USD','SYP',13000,1),97500::bigint,'reverse SYP conversion is explicit and scale-aware');
 select throws_ok($$select public.cashier_convert_minor(100,'SYP','USD','USD','LBP',89500,1)$$,'P0001','invalid settlement rate','legacy USD/LBP quote cannot value SYP');
 select throws_ok($$update public.transactions set change_currency='USD' where id='c2000000-0000-4000-8000-000000000006'$$,'P0001','settlement currency mismatch','direct forged receiving currency rejected');
 
