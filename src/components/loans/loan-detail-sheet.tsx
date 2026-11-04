@@ -85,7 +85,7 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
           {item.remainingMinor === 0 ? <Button variant="outline" disabled={pending} onClick={() => run(() => setLoanArchived(item.id, !item.archivedAt))}>{t(item.archivedAt ? "unarchive" : "archive")}</Button> : null}
           {livePaymentCount === 0 ? <Button variant="outline" disabled={pending} onClick={() => setConfirm({ kind: "cancel" })}>{t("cancelLoan")}</Button> : null}
         </div> : null}
-        {item.archivedAt ? <Button variant="destructive" disabled={pending} onClick={() => { setError(null); setConfirm({ kind: "deleteLoan" }); }}>{t("deleteLoan")}</Button> : null}
+        {item.archivedAt || item.deletedAt ? <Button variant="destructive" disabled={pending} onClick={() => { setError(null); setConfirm({ kind: "deleteLoan" }); }}>{t("deleteLoan")}</Button> : null}
       </div>
     </SheetShell>
     <ConfirmSheet open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)} title={t(confirm?.kind === "deleteLoan" ? "deleteLoanTitle" : confirm?.kind === "deletePayment" ? "deletePaymentTitle" : confirm?.kind === "void" ? "voidTitle" : "cancelTitle")}

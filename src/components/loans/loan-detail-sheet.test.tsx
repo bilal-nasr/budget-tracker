@@ -33,6 +33,19 @@ it.each(["en", "ar"] as const)("only offers permanent loan deletion after archiv
   await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
 });
 
+it.each(["en", "ar"] as const)("allows permanent deletion of a canceled unarchived loan (%s)", async (locale) => {
+  const messages = locale === "ar" ? ar : en;
+  const item = { ...demoLoans()[0], events: [], historyComplete: true, archivedAt: null, deletedAt: "2026-11-04T00:00:00Z" };
+  const onClose = vi.fn();
+  state.deleteLoan.mockResolvedValue({ ok: true });
+  render(<NextIntlClientProvider locale={locale} messages={messages}><LoanDetailSheet item={item} onClose={onClose} onEdit={vi.fn()} onPay={vi.fn()} /></NextIntlClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: messages.Loans.deleteLoan }));
+  expect(state.deleteLoan).not.toHaveBeenCalled();
+  fireEvent.click(screen.getAllByRole("button", { name: messages.Loans.deleteLoan }).at(-1)!);
+  await waitFor(() => expect(state.deleteLoan).toHaveBeenCalledWith(item.id));
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+});
+
 it("allows permanently deleting an older payment with its revision and keeps failures visible", async () => {
   const base = demoLoans()[0];
   const old = { transactionId: "old", revision: 4, loanId: base.id, event: "repayment" as const, flow: "out" as const,
