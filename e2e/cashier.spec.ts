@@ -33,24 +33,25 @@ for (const locale of ["en", "ar"] as const) {
     await expect(dialog.getByLabel(m.Breakdown.amount, { exact: true })).toHaveValue("10");
     await expectNoHorizontalOverflow(page);
   });
-  test(`${locale} USD/LBP then SYP change requires an explicit reconciled rate`, async ({ page }) => {
+  test(`${locale} LBP then SYP change records actual cash without a rate`, async ({ page }) => {
     const { dialog, m } = await startPurchase(page, locale);
     await dialog.getByLabel(m.Cashier.tender).fill("20");
     await dialog.getByLabel(m.Cashier.currency).selectOption("LBP");
     await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("671250");
-    await dialog.getByLabel(m.Cashier.rate, { exact: true }).fill("۸۹۵۰۰");
+    // Cross-currency change takes the actual amounts; no quote is asked for.
+    await expect(dialog.getByLabel(m.Cashier.rate, { exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole("checkbox", { name: m.Cashier.confirmRate })).toHaveCount(0);
     const save = dialog.getByRole("button", { name: m.Add.save, exact: true });
-    await expect(save).toBeDisabled();
-    await dialog.getByRole("checkbox", { name: m.Cashier.confirmRate }).check();
     await expect(save).toBeEnabled();
-    await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("700000");
+    // Change in another currency still needs cash paid above the purchase cost.
+    await dialog.getByLabel(m.Cashier.tender).fill("12.50");
     await expect(save).toBeDisabled();
     await expect(dialog.getByText(m.Cashier.mismatch)).toBeVisible();
+    await dialog.getByLabel(m.Cashier.tender).fill("20");
+    await expect(save).toBeEnabled();
     await dialog.getByLabel(m.Cashier.currency).selectOption("SYP");
     await expect(dialog.getByLabel(m.Cashier.change, { exact: true })).toHaveValue("");
     await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("97500");
-    await dialog.getByLabel(m.Cashier.rate, { exact: true }).fill("13000");
-    await dialog.getByRole("checkbox", { name: m.Cashier.confirmRate }).check();
     await expect(save).toBeEnabled();
     await expect(dialog.getByLabel(m.Cashier.change, { exact: true })).toHaveAttribute("dir", "ltr");
     await expectNoHorizontalOverflow(page);
@@ -68,8 +69,9 @@ for (const locale of ["en", "ar"] as const) {
     dialog = page.getByRole("dialog");
     await expect(dialog.getByLabel(m.Cashier.tender)).toHaveValue("10");
     await expect(dialog.getByLabel(m.Cashier.change, { exact: true })).toHaveValue("581750");
-    await expect(dialog.getByRole("checkbox", { name: m.Cashier.confirmRate })).not.toBeChecked();
-    await expect(dialog.getByRole("button", { name: m.Add.save, exact: true })).toBeDisabled();
+    // A duplicate is new money: it records actual cash and drops the old quote.
+    await expect(dialog.getByRole("checkbox", { name: m.Cashier.confirmRate })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: m.Add.save, exact: true })).toBeEnabled();
     await expectNoHorizontalOverflow(page);
   });
   test(`${locale} receiving-wallet filter includes the one purchase`, async ({ page }) => {
