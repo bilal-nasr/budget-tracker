@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimistic, useRef, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { Check, Info } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -10,13 +11,14 @@ import { formatAmount } from "@/lib/money";
 import { useAppData } from "@/components/providers/app-data";
 import { useComposer } from "@/components/shell/composer";
 import { Button } from "@/components/ui/button";
-import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { receiveSalary } from "@/features/salary/actions";
 import type { ReceiveSalaryInput } from "@/features/installments/cycle-input";
 import type { SalaryStatus } from "@/features/salary/schema";
 import { deleteTransaction } from "@/features/transactions/actions";
 import { todayIn } from "@/features/transactions/group";
 import { useRouter } from "@/i18n/navigation";
+
+const ConfirmSheet = dynamic(() => import("@/components/ui/confirm-sheet").then((m) => m.ConfirmSheet));
 
 function shortDate(date: string, locale: string): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -42,6 +44,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
   const { openSalary } = useComposer();
   const [pending, startTransition] = useTransition();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmMounted, setConfirmMounted] = useState(false);
   const [draft, setDraft] = useState<ReceiveSalaryInput | null>(null);
   const [uncertain, setUncertain] = useState(false);
   const inFlight = useRef(false);
@@ -83,6 +86,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
   };
   const openReceive = () => {
     if (!uncertain || !draft) setDraft({ requestId: crypto.randomUUID(), expectedCycleId: serverStatus.receiptId });
+    setConfirmMounted(true);
     setConfirmOpen(true);
   };
 
@@ -146,7 +150,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
         <Button variant="ghost" disabled={pending || uncertain} onClick={openSalary}>{t("edit")}</Button>
       </div>
 
-      <ConfirmSheet
+      {confirmMounted && <ConfirmSheet
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={t("confirmTitle")}
@@ -167,7 +171,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
             {t("confirmAlready", { date: shortDate(status.lastReceivedOn, locale) })}
           </p>
         ) : null}
-      </ConfirmSheet>
+      </ConfirmSheet>}
     </section>
   );
 }

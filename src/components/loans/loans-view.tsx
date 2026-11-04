@@ -49,7 +49,7 @@ export function LoansView({ loans, initialLoanId }: { loans: Loan[]; initialLoan
     </div>
     {sheet?.mode === "create" ? <LoanSheet item={null} onClose={close} /> : null}
     {current && sheet?.mode === "edit" ? <LoanSheet key={current.id} item={current} onClose={() => setSheet({ mode: "detail", id: current.id })} /> : null}
-    {current && sheet?.mode === "detail" ? <LoanDetailSheet item={current} onClose={close} onEdit={() => setSheet({ mode: "edit", id: current.id })} onPay={() => setSheet({ mode: "pay", id: current.id })} /> : null}
+    {current && sheet?.mode === "detail" ? <LoanDetailSheet key={`${current.id}:${current.remainingMinor}:${current.livePaymentCount}:${current.latestLivePayment?.transactionId}:${current.latestLivePayment?.revision}:${current.archivedAt}:${current.deletedAt}`} item={current} onClose={close} onEdit={() => setSheet({ mode: "edit", id: current.id })} onPay={() => setSheet({ mode: "pay", id: current.id })} /> : null}
     {current && sheet?.mode === "pay" ? <LoanPaymentSheet item={current} onClose={() => setSheet({ mode: "detail", id: current.id })} /> : null}
   </>;
 }

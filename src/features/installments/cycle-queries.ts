@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { demoInstallments, demoSalaryReceipt } from "@/lib/demo-data";
 import { toTransaction } from "@/features/transactions/queries";
-import { withProgress, type Installment, type InstallmentPayment, type SalaryReceipt } from "./cycle";
+import { dueThisCycle, withProgress, type Installment, type InstallmentPayment, type SalaryReceipt } from "./cycle";
 
 export type InstallmentCycleSnapshot = { receipt: SalaryReceipt | null; installments: Installment[] };
 
@@ -93,4 +93,51 @@ export const getCycleSnapshot = cache(async (timezone = "Asia/Beirut"): Promise<
   } catch {
     throw unavailable();
   }
+});
+
+const summaryRows = z.object({
+  receipt: snapshotRows.shape.receipt,
+  installments: installmentRow.extend({
+    paid_minor: nonnegativeMinor, remaining_minor: nonnegativeMinor, paid_this_cycle_minor: nonnegativeMinor,
+    cycle_payment_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    cycle_latest_payment_id: z.uuid().nullable(),
+  }).array(),
+});
+
+/** Compact progress facts from one statement snapshot, with no historical parents. */
+export function parseCycleSummary(payload: unknown): InstallmentCycleSnapshot {
+  try {
+    const rows = summaryRows.parse(payload);
+    const receipt = rows.receipt && { id: rows.receipt.id, occurredOn: rows.receipt.occurred_on, createdAt: rows.receipt.created_at };
+    const seen = new Set<string>();
+    const installments = rows.installments.map((i): Installment => {
+      if (seen.has(i.id) || i.paid_minor < i.paid_before_minor
+        || BigInt(i.paid_minor) + BigInt(i.remaining_minor) !== BigInt(i.total_minor)
+        || i.paid_this_cycle_minor > i.paid_minor - i.paid_before_minor
+        || (i.cycle_payment_count === 0) !== (i.cycle_latest_payment_id === null)
+        || (i.cycle_payment_count === 0) !== (i.paid_this_cycle_minor === 0)) throw unavailable();
+      seen.add(i.id);
+      const progress = {
+        id: i.id, name: i.name, currency: i.currency, walletId: i.wallet_id, categoryId: i.category_id,
+        totalMinor: i.total_minor, paidBeforeMinor: i.paid_before_minor, monthlyMinor: i.monthly_minor, dueDay: i.due_day,
+        paidMinor: i.paid_minor, remainingMinor: i.remaining_minor, salaryCycleId: receipt?.id ?? null,
+        paidThisCycleMinor: i.paid_this_cycle_minor, cyclePaymentCount: i.cycle_payment_count,
+        cycleLatestPaymentId: i.cycle_latest_payment_id, payments: [], historyComplete: false,
+      };
+      const cycleStatus = progress.remainingMinor === 0 ? "paidOff" : progress.cyclePaymentCount === 0 ? "unpaid"
+        : progress.paidThisCycleMinor < dueThisCycle(progress) ? "partial" : "paid";
+      return { ...progress, cycleStatus };
+    });
+    return { receipt, installments };
+  } catch { throw unavailable(); }
+}
+
+export const getCycleSummary = cache(async (timezone = "Asia/Beirut"): Promise<InstallmentCycleSnapshot> => {
+  if (!supabaseConfigured()) return { receipt: demoSalaryReceipt(timezone), installments: demoInstallments(timezone) };
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("installment_cycle_summary");
+    if (error) throw unavailable();
+    return parseCycleSummary(data);
+  } catch { throw unavailable(); }
 });

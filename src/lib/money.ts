@@ -54,6 +54,10 @@ export function parseAmount(input: string, currency: Currency): number | null {
   return minor <= BigInt(MAX_MINOR) ? Number(minor) : null;
 }
 
+// Only two display digit systems are supported. Reuse Intl's relatively expensive
+// locale setup across amounts while preserving the exact integer formatting below.
+const numberFormatters: Partial<Record<Digits, Intl.NumberFormat>> = {};
+
 /** Formats minor units for display. Wrap the result in <bdi dir="ltr"> in the UI. */
 export function formatAmount(
   minor: number,
@@ -63,10 +67,12 @@ export function formatAmount(
   const prefix = currencyPrefix(currency);
   const checked = readMinor(minor);
   const decimals = CURRENCY_DECIMALS[currency];
-  const locale = options.digits === "arabic" ? "ar-u-nu-arab" : "en-US";
+  const digits = options.digits === "arabic" ? "arabic" : "latin";
+  const locale = digits === "arabic" ? "ar-u-nu-arab" : "en-US";
   const absolute = BigInt(Math.abs(checked));
   const scale = BigInt(10 ** decimals);
-  const whole = new Intl.NumberFormat(locale).format(absolute / scale);
+  const formatter = numberFormatters[digits] ??= new Intl.NumberFormat(locale);
+  const whole = formatter.format(absolute / scale);
   const fraction = String(absolute % scale).padStart(decimals, "0");
   const localizedFraction = options.digits === "arabic"
     ? fraction.replace(/\d/g, (digit) => "٠١٢٣٤٥٦٧٨٩"[Number(digit)])

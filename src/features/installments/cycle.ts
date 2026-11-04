@@ -38,6 +38,8 @@ export type Installment = InstallmentBase & {
   cycleStatus: "unpaid" | "partial" | "paid" | "paidOff";
   /** Recording order, newest first. Never sorted by editable accounting date. */
   payments: InstallmentPayment[];
+  /** False for dashboard summaries; the edit sheet reads canonical history on demand. */
+  historyComplete?: boolean;
 };
 
 type CycleAmounts = Pick<Installment, "monthlyMinor" | "remainingMinor" | "paidThisCycleMinor">;

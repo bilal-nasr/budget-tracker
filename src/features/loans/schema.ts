@@ -49,4 +49,8 @@ export type Loan = {
   feePaidMinor: number; principalRemainingMinor: number; feeRemainingMinor: number; remainingMinor: number;
   monthlyPaymentMinor: number | null; paymentCount: number | null; finalPaymentMinor: number | null;
   archivedAt: string | null; deletedAt: string | null; events: LoanEvent[];
+  historyComplete?: boolean;
+  livePaymentCount?: number;
+  latestPaymentOn?: string | null;
+  latestLivePayment?: { transactionId: string; revision: number; sequence: number } | null;
 };

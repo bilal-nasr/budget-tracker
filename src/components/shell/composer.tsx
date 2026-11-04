@@ -1,20 +1,39 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useLocale } from "next-intl";
-import { TransactionSheet, type ComposerPreset, type ComposerState } from "@/components/add/transaction-sheet";
+import type { ComposerPreset, ComposerState } from "@/components/add/transaction-sheet";
 import { Toaster } from "@/components/ui/sonner";
-import { DetailSheet } from "@/components/transactions/detail-sheet";
-import { FixedSheet, type FixedSheetState } from "@/components/fixed/fixed-sheet";
-import { BudgetsSheet, type BudgetsSheetState } from "@/components/budget/budgets-sheet";
-import { InstallmentPaySheet, type InstallmentPayState } from "@/components/installments/installment-pay-sheet";
-import { InstallmentSheet, type InstallmentSheetState } from "@/components/installments/installment-sheet";
-import { SalarySheet } from "@/components/salary/salary-sheet";
-import { WalletSheet, type WalletSheetState } from "@/components/wallets/wallet-sheet";
+import type { FixedSheetState } from "@/components/fixed/fixed-sheet";
+import type { BudgetsSheetState } from "@/components/budget/budgets-sheet";
+import type { InstallmentPayState } from "@/components/installments/installment-pay-sheet";
+import type { InstallmentSheetState } from "@/components/installments/installment-sheet";
+import type { WalletSheetState } from "@/components/wallets/wallet-sheet";
 import type { FixedExpense } from "@/features/fixed/schema";
 import type { Installment } from "@/features/installments/schema";
 import type { Transaction } from "@/features/transactions/schema";
 import type { Wallet } from "@/features/wallets/schema";
+
+const TransactionSheet = dynamic(() => import("@/components/add/transaction-sheet").then((m) => m.TransactionSheet));
+const DetailSheet = dynamic(() => import("@/components/transactions/detail-sheet").then((m) => m.DetailSheet));
+const WalletSheet = dynamic(() => import("@/components/wallets/wallet-sheet").then((m) => m.WalletSheet));
+const SalarySheet = dynamic(() => import("@/components/salary/salary-sheet").then((m) => m.SalarySheet));
+const FixedSheet = dynamic(() => import("@/components/fixed/fixed-sheet").then((m) => m.FixedSheet));
+const InstallmentSheet = dynamic(() => import("@/components/installments/installment-sheet").then((m) => m.InstallmentSheet));
+const InstallmentPaySheet = dynamic(() => import("@/components/installments/installment-pay-sheet").then((m) => m.InstallmentPaySheet));
+const BudgetsSheet = dynamic(() => import("@/components/budget/budgets-sheet").then((m) => m.BudgetsSheet));
+
+/** Defer the first mount, then retain the drawer root for its normal exit animation. */
+function useSheetState<T>(initial: T) {
+  const [state, setState] = useState(initial);
+  const [mounted, setMounted] = useState(false);
+  const update = useCallback((next: T) => {
+    setMounted(true);
+    setState(next);
+  }, []);
+  return [state, update, mounted] as const;
+}
 
 type Composer = {
   openAdd: (preset?: ComposerPreset) => void;
@@ -35,26 +54,26 @@ const Context = createContext<Composer | null>(null);
  */
 export function ComposerProvider({ children }: { children: React.ReactNode }) {
   const locale = useLocale();
-  const [add, setAdd] = useState<ComposerState | null>(null);
-  const [detail, setDetail] = useState<Transaction | null>(null);
-  const [wallet, setWallet] = useState<WalletSheetState | null>(null);
-  const [salaryOpen, setSalaryOpen] = useState(false);
-  const [fixed, setFixed] = useState<FixedSheetState | null>(null);
-  const [installment, setInstallment] = useState<InstallmentSheetState | null>(null);
-  const [installmentPay, setInstallmentPay] = useState<InstallmentPayState | null>(null);
-  const [budgets, setBudgets] = useState<BudgetsSheetState | null>(null);
+  const [add, setAdd, addMounted] = useSheetState<ComposerState | null>(null);
+  const [detail, setDetail, detailMounted] = useSheetState<Transaction | null>(null);
+  const [wallet, setWallet, walletMounted] = useSheetState<WalletSheetState | null>(null);
+  const [salaryOpen, setSalaryOpen, salaryMounted] = useSheetState(false);
+  const [fixed, setFixed, fixedMounted] = useSheetState<FixedSheetState | null>(null);
+  const [installment, setInstallment, installmentMounted] = useSheetState<InstallmentSheetState | null>(null);
+  const [installmentPay, setInstallmentPay, installmentPayMounted] = useSheetState<InstallmentPayState | null>(null);
+  const [budgets, setBudgets, budgetsMounted] = useSheetState<BudgetsSheetState | null>(null);
 
-  const openAdd = useCallback((preset?: ComposerPreset) => setAdd({ mode: "add", draftId: crypto.randomUUID(), preset }), []);
-  const openDetail = useCallback((t: Transaction) => setDetail(t), []);
-  const openWallet = useCallback((w: Wallet | null) => setWallet({ wallet: w }), []);
+  const openAdd = useCallback((preset?: ComposerPreset) => setAdd({ mode: "add", draftId: crypto.randomUUID(), preset }), [setAdd]);
+  const openDetail = useCallback((t: Transaction) => setDetail(t), [setDetail]);
+  const openWallet = useCallback((w: Wallet | null) => setWallet({ wallet: w }), [setWallet]);
 
-  const openSalary = useCallback(() => setSalaryOpen(true), []);
-  const openFixed = useCallback((item: FixedExpense | null) => setFixed({ item }), []);
+  const openSalary = useCallback(() => setSalaryOpen(true), [setSalaryOpen]);
+  const openFixed = useCallback((item: FixedExpense | null) => setFixed({ item }), [setFixed]);
 
-  const openInstallment = useCallback((item: Installment) => setInstallment({ item }), []);
-  const openInstallmentPay = useCallback((item: Installment, intent: "normal" | "again" = "normal") => setInstallmentPay({ item, intent, requestId: crypto.randomUUID() }), []);
+  const openInstallment = useCallback((item: Installment) => setInstallment({ item }), [setInstallment]);
+  const openInstallmentPay = useCallback((item: Installment, intent: "normal" | "again" = "normal") => setInstallmentPay({ item, intent, requestId: crypto.randomUUID() }), [setInstallmentPay]);
 
-  const openBudgets = useCallback((state: BudgetsSheetState) => setBudgets(state), []);
+  const openBudgets = useCallback((state: BudgetsSheetState) => setBudgets(state), [setBudgets]);
 
   const value = useMemo(
     () => ({ openAdd, openDetail, openWallet, openSalary, openFixed, openInstallment, openInstallmentPay, openBudgets }),
@@ -64,8 +83,8 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
   return (
     <Context value={value}>
       {children}
-      <TransactionSheet state={add} onClose={() => setAdd(null)} onCreateWallet={() => setWallet({ wallet: null })} />
-      <DetailSheet
+      {addMounted && <TransactionSheet state={add} onClose={() => setAdd(null)} onCreateWallet={() => setWallet({ wallet: null })} />}
+      {detailMounted && <DetailSheet
         transaction={detail}
         onClose={() => setDetail(null)}
         onEdit={(t) => {
@@ -76,20 +95,20 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
           setDetail(null);
           setAdd({ mode: "add", draftId: crypto.randomUUID(), initial: t });
         }}
-      />
-      <WalletSheet
+      />}
+      {walletMounted && <WalletSheet
         state={wallet}
         onClose={() => setWallet(null)}
         onAddMoney={(w) => {
           setWallet(null);
           setAdd({ mode: "add", draftId: crypto.randomUUID(), preset: { kind: "income", walletId: w.id } });
         }}
-      />
-      <SalarySheet open={salaryOpen} onClose={() => setSalaryOpen(false)} />
-      <FixedSheet state={fixed} onClose={() => setFixed(null)} />
-      <InstallmentSheet state={installment} onClose={() => setInstallment(null)} />
-      <InstallmentPaySheet state={installmentPay} onClose={() => setInstallmentPay(null)} />
-      <BudgetsSheet state={budgets} onClose={() => setBudgets(null)} />
+      />}
+      {salaryMounted && <SalarySheet open={salaryOpen} onClose={() => setSalaryOpen(false)} />}
+      {fixedMounted && <FixedSheet state={fixed} onClose={() => setFixed(null)} />}
+      {installmentMounted && <InstallmentSheet state={installment} onClose={() => setInstallment(null)} />}
+      {installmentPayMounted && <InstallmentPaySheet state={installmentPay} onClose={() => setInstallmentPay(null)} />}
+      {budgetsMounted && <BudgetsSheet state={budgets} onClose={() => setBudgets(null)} />}
       <Toaster
         dir={locale === "ar" ? "rtl" : "ltr"}
         position="bottom-center"

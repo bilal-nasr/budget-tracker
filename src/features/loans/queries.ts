@@ -33,20 +33,9 @@ async function allRows<T extends { id: string }>(load: (from: number, to: number
 export async function getLoans(): Promise<Loan[]> {
   if (!supabaseConfigured()) return demoLoans();
   const supabase = await createClient();
-  const [items, events] = await Promise.all([
-    allRows((from, to) => supabase.from("loan_progress").select("*").order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to)),
-    allRows((from, to) => supabase.from("transactions").select("id,revision,loan_id,loan_event,loan_flow,loan_event_seq,wallet_id,occurred_on,amount_minor,loan_principal_minor,loan_fee_minor,category_id,deleted_at")
-      .eq("kind", "loan").order("loan_id").order("loan_event_seq", { ascending: false }).order("id", { ascending: false }).range(from, to)),
-  ]);
-  const histories = new Map<string, LoanEvent[]>();
-  for (const e of events) {
-    const event: LoanEvent = { transactionId: e.id, revision: amount(e.revision), loanId: e.loan_id, event: e.loan_event, flow: e.loan_flow,
-      sequence: amount(e.loan_event_seq), walletId: e.wallet_id, occurredOn: e.occurred_on,
-      amountMinor: amount(e.amount_minor), principalMinor: amount(e.loan_principal_minor), feeMinor: amount(e.loan_fee_minor),
-      categoryId: e.category_id, deletedAt: e.deleted_at };
-    const history = histories.get(event.loanId) ?? [];
-    history.push(event); histories.set(event.loanId, history);
-  }
+  const items = await allRows((from, to) => supabase.from("loan_overview")
+    .select("id,name,direction,currency,wallet_id,fee_category_id,opened_on,creation_mode,principal_minor,fee_bps,fee_minor,total_due_minor,principal_paid_before_minor,fee_paid_before_minor,principal_paid_minor,fee_paid_minor,principal_remaining_minor,fee_remaining_minor,remaining_minor,monthly_payment_minor,payment_count,archived_at,deleted_at,live_payment_count,latest_payment_on,latest_payment_id,latest_payment_revision,latest_payment_sequence")
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to));
   return items.map((r) => {
     if (!isCurrency(r.currency)) throw new Error("loansUnavailable");
     const monthlyPaymentMinor = r.monthly_payment_minor == null ? null : amount(r.monthly_payment_minor);
@@ -54,6 +43,11 @@ export async function getLoans(): Promise<Loan[]> {
     const plan = monthlyPaymentMinor !== null && paymentCount !== null ? calculateLoanPaymentPlan(amount(r.total_due_minor), monthlyPaymentMinor, paymentCount) : null;
     if ((monthlyPaymentMinor !== null || paymentCount !== null) && !plan) throw new Error("loansUnavailable");
     const finalPaymentMinor = plan?.finalPaymentMinor ?? null;
+    const livePaymentCount = amount(r.live_payment_count);
+    if ((livePaymentCount === 0) !== (r.latest_payment_id === null)) throw new Error("loansUnavailable");
+    const latestLivePayment = r.latest_payment_id === null ? null : {
+      transactionId: r.latest_payment_id, revision: amount(r.latest_payment_revision), sequence: amount(r.latest_payment_sequence),
+    };
     return { id: r.id, name: r.name, direction: r.direction, currency: r.currency,
       walletId: r.wallet_id, feeCategoryId: r.fee_category_id, openedOn: r.opened_on, creationMode: r.creation_mode,
       principalMinor: amount(r.principal_minor), feeBps: amount(r.fee_bps), feeMinor: amount(r.fee_minor), totalDueMinor: amount(r.total_due_minor),
@@ -61,6 +55,31 @@ export async function getLoans(): Promise<Loan[]> {
       principalPaidMinor: amount(r.principal_paid_minor), feePaidMinor: amount(r.fee_paid_minor),
       principalRemainingMinor: amount(r.principal_remaining_minor), feeRemainingMinor: amount(r.fee_remaining_minor), remainingMinor: amount(r.remaining_minor),
       monthlyPaymentMinor, paymentCount, finalPaymentMinor,
-      archivedAt: r.archived_at, deletedAt: r.deleted_at, events: histories.get(r.id) ?? [] };
+      archivedAt: r.archived_at, deletedAt: r.deleted_at, events: [], historyComplete: false, livePaymentCount, latestPaymentOn: r.latest_payment_on, latestLivePayment };
   });
+}
+
+export type LoanHistoryPage = { rows: LoanEvent[]; next: number | null };
+
+/** Sequence is unique within a loan, so paging never uses growing offsets. */
+export async function getLoanHistory(id: string, before: number | null): Promise<LoanHistoryPage> {
+  if (!supabaseConfigured()) {
+    const events = (demoLoans().find((loan) => loan.id === id)?.events ?? [])
+      .filter((event) => before === null || event.sequence < before).sort((a, b) => b.sequence - a.sequence);
+    return { rows: events.slice(0, 30), next: events.length > 30 ? events[29].sequence : null };
+  }
+  const supabase = await createClient();
+  let query = supabase.from("transactions")
+    .select("id,revision,loan_id,loan_event,loan_flow,loan_event_seq,wallet_id,occurred_on,amount_minor,loan_principal_minor,loan_fee_minor,category_id,deleted_at")
+    .eq("loan_id", id).order("loan_event_seq", { ascending: false }).limit(31);
+  if (before !== null) query = query.lt("loan_event_seq", before);
+  const { data, error } = await query;
+  if (error || !data) throw new Error("loansUnavailable");
+  const rows: LoanEvent[] = data.slice(0, 30).map((e) => ({
+    transactionId: e.id, revision: amount(e.revision), loanId: e.loan_id, event: e.loan_event, flow: e.loan_flow,
+    sequence: amount(e.loan_event_seq), walletId: e.wallet_id, occurredOn: e.occurred_on,
+    amountMinor: amount(e.amount_minor), principalMinor: amount(e.loan_principal_minor), feeMinor: amount(e.loan_fee_minor),
+    categoryId: e.category_id, deletedAt: e.deleted_at,
+  }));
+  return { rows, next: data.length > 30 ? rows[29].sequence : null };
 }

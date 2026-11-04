@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("react", () => ({ cache: (fn: unknown) => fn }));
 vi.mock("@/lib/supabase/proxy", () => ({ supabaseConfigured: mocks.configured }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }));
-import { getCycleSnapshot, parseCycleSnapshot } from "./cycle-queries";
+import { getCycleSnapshot, parseCycleSnapshot, parseCycleSummary } from "./cycle-queries";
 
 const itemId = "a1000000-0000-4000-8000-000000000001";
 const walletId = "a2000000-0000-4000-8000-000000000001";
@@ -39,6 +39,21 @@ beforeEach(() => {
 });
 
 describe("coherent installment snapshot", () => {
+  it("decodes a compact summary with the same progress without retaining historical transactions", () => {
+    const input = data();
+    const summary = { receipt: input.receipt, installments: [{ ...storedItem,
+      paid_minor: "34000", remaining_minor: "66000", paid_this_cycle_minor: "4000",
+      cycle_payment_count: 1, cycle_latest_payment_id: payId,
+    }] };
+    const actual = parseCycleSummary(summary);
+    const full = parseCycleSnapshot(input);
+    expect(actual.receipt).toEqual(full.receipt);
+    expect(actual.installments[0]).toEqual({ ...full.installments[0], payments: [], historyComplete: false });
+    for (const invalid of [
+      { remaining_minor: "65999" }, { paid_this_cycle_minor: "100001" },
+      { cycle_payment_count: 0 }, { cycle_latest_payment_id: null }, { paid_minor: "100001" },
+    ]) expect(() => parseCycleSummary({ ...summary, installments: [{ ...summary.installments[0], ...invalid }] })).toThrow("installment_cycle_snapshot_unavailable");
+  });
   it("maps the single RPC snapshot with exact money, receipt identity, revisions, and microseconds", async () => {
     const result = await getCycleSnapshot();
     expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("installment_cycle_snapshot");

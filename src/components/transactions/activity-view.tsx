@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Amount } from "@/components/money/amount";
@@ -39,11 +39,10 @@ function dayTitle(date: string, today: string, locale: string, t: (k: string) =>
 
 export function ActivityView({ filters, initial }: { filters: Filters; initial: Page }) {
   const t = useTranslations("Activity");
-  const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
-  const { timezone, wallets } = useAppData();
-  const { openDetail, openAdd } = useComposer();
+  const { wallets } = useAppData();
+  const { openAdd } = useComposer();
   const [rows, setRows] = useState(initial.rows);
   const [next, setNext] = useState<Cursor | null>(initial.next);
   const [loading, startLoading] = useTransition();
@@ -51,7 +50,6 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
   const [filterOpen, setFilterOpen] = useState(false);
   const [q, setQ] = useState(filters.q ?? "");
   const sentinel = useRef<HTMLDivElement>(null);
-  const today = todayIn(timezone);
 
   // Server re-renders hand us a fresh first page (after a save, delete or filter change).
   const [seen, setSeen] = useState(initial);
@@ -98,7 +96,6 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [next, loading]);
 
-  const groups = useMemo(() => groupByDay(rows), [rows]);
   const kind = filters.kind ?? "all";
   const extraCount = [filters.walletId, filters.categoryId, filters.from, filters.to].filter(Boolean).length;
   const filtered = Boolean(filters.q || filters.kind || extraCount);
@@ -169,30 +166,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
         />
       ) : (
         <div className="flex flex-col">
-          {groups.map((group, index) => {
-            const partial = index === groups.length - 1 && next !== null;
-            return (
-              <section key={group.date} aria-label={dayTitle(group.date, today, locale, t)}>
-                <div className="sticky top-0 z-10 flex items-baseline justify-between gap-3 bg-background py-2.5 text-[13px] text-muted-foreground">
-                  <h2 className="text-[14px] font-semibold text-foreground">{dayTitle(group.date, today, locale, t)}</h2>
-                  {partial ? null : (
-                    <p className="flex flex-wrap justify-end gap-x-3 gap-y-1">
-                      {CURRENCIES
-                        .filter((c) => group.rows.some((r) => r.currency === c))
-                        .map((c) => (
-                          <Amount key={c} minor={group.totals[c]} currency={c} sign />
-                        ))}
-                    </p>
-                  )}
-                </div>
-                <ul className="overflow-hidden rounded-xl border border-border bg-card">
-                  {group.rows.map((row) => (
-                    <TransactionRow key={row.id} transaction={row} onOpen={openDetail} />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+          <ActivityGroups rows={rows} hasMore={next !== null} />
           <div ref={sentinel} aria-hidden className="h-px" />
           {next ? (
             <div className="flex flex-col items-center gap-2 py-4">
@@ -220,6 +194,43 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
     </div>
   );
 }
+
+
+// Search input state must not rerender every loaded transaction on each keystroke.
+const ActivityGroups = memo(function ActivityGroups({ rows, hasMore }: { rows: Page["rows"]; hasMore: boolean }) {
+  const t = useTranslations("Activity");
+  const locale = useLocale();
+  const { timezone } = useAppData();
+  const { openDetail } = useComposer();
+  const today = todayIn(timezone);
+  const groups = useMemo(() => groupByDay(rows), [rows]);
+  return <>
+    {groups.map((group, index) => {
+      const partial = index === groups.length - 1 && hasMore;
+      return (
+        <section style={{ contentVisibility: "auto", containIntrinsicSize: `auto ${48 + group.rows.length * 72}px` }} key={group.date} aria-label={dayTitle(group.date, today, locale, t)}>
+          <div className="sticky top-0 z-10 flex items-baseline justify-between gap-3 bg-background py-2.5 text-[13px] text-muted-foreground">
+            <h2 className="text-[14px] font-semibold text-foreground">{dayTitle(group.date, today, locale, t)}</h2>
+            {partial ? null : (
+              <p className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+                {CURRENCIES
+                  .filter((c) => group.rows.some((r) => r.currency === c))
+                  .map((c) => (
+                    <Amount key={c} minor={group.totals[c]} currency={c} sign />
+                  ))}
+              </p>
+            )}
+          </div>
+          <ul className="overflow-hidden rounded-xl border border-border bg-card">
+            {group.rows.map((row) => (
+              <TransactionRow key={row.id} transaction={row} onOpen={openDetail} />
+            ))}
+          </ul>
+        </section>
+      );
+    })}
+  </>;
+});
 
 function FilterSheet({
   open,

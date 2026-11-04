@@ -32,7 +32,7 @@ for (const locale of ["en", "ar"] as const) {
     await expect(page.getByRole("heading", { name: t.title, exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "USD", exact: true })).toContainText(t.owed);
     await expect(page.getByRole("region", { name: "USD", exact: true })).toContainText(t.receivable);
-    await expect(page.getByRole("region", { name: "SYP", exact: true })).toContainText("SYP 13.41");
+    await expect(page.getByRole("region", { name: "SYP", exact: true })).toContainText("SYP 1,341");
     await expectNoHorizontalOverflow(page);
   });
 

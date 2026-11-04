@@ -2,12 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { ChevronDown } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { CategorySelect } from "@/components/categories/category-select";
 import { categoryOptions } from "@/features/categories/schema";
-import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
-import { useComposer } from "@/components/shell/composer";
+import { InstallmentHistory } from "./installment-history";
 import { Button } from "@/components/ui/button";
 import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { SheetShell } from "@/components/ui/sheet-shell";
@@ -20,25 +19,13 @@ import { cn } from "@/lib/utils";
 
 export type InstallmentSheetState = { item: Installment };
 
-function shortDate(date: string, locale: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Intl.DateTimeFormat(locale === "ar" ? "ar-LB-u-nu-latn" : "en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(y, m - 1, d)));
-}
-
 /** Create (item is null) or edit an installment. Rendered inside the Fixed sheet and the edit sheet. */
 export function InstallmentForm({ item, onClose }: { item: Installment | null; onClose: () => void }) {
   const t = useTranslations("Installments");
   const tCurrencies = useTranslations("Currencies");
   const tc = useTranslations("Categories");
   const tAdd = useTranslations("Add");
-  const locale = useLocale();
   const { wallets, categories, walletById } = useAppData();
-  const { openDetail } = useComposer();
   const [pending, startTransition] = useTransition();
 
   // On edit the currency is locked, so only wallets in it are offered.
@@ -237,40 +224,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
 
       {item ? (
         <>
-          <section aria-labelledby="in-history" className="flex flex-col gap-1 border-t border-border pt-4">
-            <h3 id="in-history" className="text-sm font-medium">{t("history")}</h3>
-            {item.payments.length === 0 && item.paidBeforeMinor === 0 ? (
-              <p className="text-[15px] text-muted-foreground">{t("historyEmpty")}</p>
-            ) : (
-              <ul className="flex flex-col">
-                {item.payments.map((p) => (
-                  <li key={p.transactionId} className="border-b border-border last:border-b-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!p.transaction) return;
-                        onClose();
-                        openDetail(p.transaction);
-                      }}
-                      disabled={!p.transaction}
-                      className="flex min-h-12 w-full items-center justify-between gap-3 text-start disabled:opacity-50"
-                    >
-                      <span className="min-w-0 truncate text-[15px]">
-                        {shortDate(p.occurredOn, locale)} · <bdi>{walletById(p.walletId)?.name}</bdi>
-                      </span>
-                      <Amount minor={p.amountMinor} currency={item.currency} className="shrink-0 font-semibold" />
-                    </button>
-                  </li>
-                ))}
-                {item.paidBeforeMinor > 0 ? (
-                  <li className="flex min-h-12 items-center justify-between gap-3 text-[15px] text-muted-foreground">
-                    <span>{t("beforeApp")}</span>
-                    <Amount minor={item.paidBeforeMinor} currency={item.currency} className="shrink-0" />
-                  </li>
-                ) : null}
-              </ul>
-            )}
-          </section>
+          <InstallmentHistory key={`${item.id}:${item.paidMinor}:${item.cycleLatestPaymentId}`} item={item} onClose={onClose} />
           <Button type="button" variant="ghost" className="text-over" onClick={() => setConfirmDelete(true)}>
             {t("delete")}
           </Button>

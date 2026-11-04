@@ -11,16 +11,20 @@ import { cancelLoan, restoreLoanPayment, setLoanArchived, voidLoanPayment, type 
 import { loanErrorKey } from "@/features/loans/errors";
 import type { Loan } from "@/features/loans/schema";
 import { percentInput } from "@/features/loans/calculations";
+import { useLoanHistory } from "./use-loan-history";
 
 export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; onClose: () => void; onEdit: () => void; onPay: () => void }) {
   const t = useTranslations("Loans");
+  const ta = useTranslations("Activity");
   const locale = useLocale();
   const { walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ kind: "cancel" } | { kind: "void"; transactionId: string; revision: number } | null>(null);
-  const live = item.events.filter((e) => e.event === "repayment" && e.deletedAt === null);
-  const latest = live.reduce<(typeof live)[number] | null>((last, e) => !last || e.sequence > last.sequence ? e : last, null);
+  const history = useLoanHistory(item);
+  const live = (history.page?.rows ?? []).filter((e) => e.event === "repayment" && e.deletedAt === null);
+  const latest = item.latestLivePayment ?? live.reduce<(typeof live)[number] | null>((last, e) => !last || e.sequence > last.sequence ? e : last, null);
+  const livePaymentCount = item.livePaymentCount ?? live.length;
   const run = (operation: () => Promise<LoanActionResult>) => {
     setError(null);
     startTransition(async () => {
@@ -58,21 +62,24 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
         </div> : null}
         <section aria-label={t("history")} className="flex flex-col gap-2">
           <h2 className="text-[17px] font-semibold">{t("history")}</h2>
-          {!item.events.length ? <p className="text-sm text-muted-foreground">{t("noHistory")}</p> : <ol className="divide-y divide-border">
-            {item.events.map((event) => <li key={event.transactionId} className="flex flex-col gap-1 py-3 text-sm">
+          {!history.page && !history.failed ? <div className="h-24 animate-pulse rounded-lg bg-accent" /> : null}
+          {history.page?.rows.length === 0 ? <p className="text-sm text-muted-foreground">{t("noHistory")}</p> : <ol className="divide-y divide-border">
+            {history.page?.rows.map((event) => <li key={event.transactionId} className="flex flex-col gap-1 py-3 text-sm">
               <div className="flex flex-wrap justify-between gap-2"><span>{date(event.occurredOn)} · {t(event.event)}</span><Amount minor={event.flow === "in" ? event.amountMinor : -event.amountMinor} currency={item.currency} sign /></div>
               <p className="text-muted-foreground"><bdi>{walletById(event.walletId)?.name}</bdi>{event.deletedAt ? <> · {t("voided")}</> : null}</p>
               {event.event === "repayment" ? <p className="flex flex-wrap gap-x-3 text-muted-foreground"><span>{t("principalPart")} {money(event.principalMinor)}</span><span>{t("feePart")} {money(event.feeMinor)}</span></p> : null}
-              {event.deletedAt && event.event === "repayment" && !item.deletedAt && !live.some((e) => e.sequence > event.sequence) ? <Button variant="outline" disabled={pending} onClick={() => run(() => restoreLoanPayment(event.transactionId, event.revision))}>{t("restore")}</Button> : null}
+              {event.deletedAt && event.event === "repayment" && !item.deletedAt && (!latest || latest.sequence < event.sequence) ? <Button variant="outline" disabled={pending} onClick={() => run(() => restoreLoanPayment(event.transactionId, event.revision))}>{t("restore")}</Button> : null}
             </li>)}
           </ol>}
+          {history.failed ? <p role="alert" className="text-sm text-over">{ta("loadFailed")}</p> : null}
+          {history.failed || history.page?.next !== null && history.page !== null ? <Button variant="outline" disabled={history.pending || pending} onClick={history.loadMore}>{ta("loadMore")}</Button> : null}
         </section>
         {error ? <p role="alert" className="text-sm">{error}</p> : null}
         {!item.deletedAt ? <div className="flex flex-col gap-2">
           <Button variant="outline" onClick={onEdit}>{t("edit")}</Button>
           {latest ? <Button variant="outline" onClick={() => setConfirm({ kind: "void", transactionId: latest.transactionId, revision: latest.revision })} disabled={pending}>{t("void")}</Button> : null}
           {item.remainingMinor === 0 ? <Button variant="outline" disabled={pending} onClick={() => run(() => setLoanArchived(item.id, !item.archivedAt))}>{t(item.archivedAt ? "unarchive" : "archive")}</Button> : null}
-          {!live.length ? <Button variant="outline" disabled={pending} onClick={() => setConfirm({ kind: "cancel" })}>{t("cancelLoan")}</Button> : null}
+          {livePaymentCount === 0 ? <Button variant="outline" disabled={pending} onClick={() => setConfirm({ kind: "cancel" })}>{t("cancelLoan")}</Button> : null}
         </div> : null}
       </div>
     </SheetShell>

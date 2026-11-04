@@ -25,7 +25,7 @@ it("retains the original receipt request after an unknown result even when new s
   mocks.receive.mockResolvedValueOnce({ok:false,error:"failed"});
   const rendered=render(view());
   fireEvent.click(screen.getByRole("button",{name:"Got salary"}));
-  fireEvent.click(screen.getByRole("button",{name:"Confirm salary"}));
+  fireEvent.click(await screen.findByRole("button",{name:"Confirm salary"}));
   await waitFor(()=>expect(screen.getByRole("button",{name:"Retry same salary"}).matches(":disabled")).toBe(false));
   const first=mocks.receive.mock.calls[0][0];
   expect(first.expectedCycleId).toBe(id);
@@ -38,7 +38,7 @@ it("returns stale receipt confirmation to review without automatically recording
   mocks.receive.mockResolvedValue({ok:false,error:"cycleChanged"});
   render(view());
   fireEvent.click(screen.getByRole("button",{name:"Got salary"}));
-  fireEvent.click(screen.getByRole("button",{name:"Confirm salary"}));
+  fireEvent.click(await screen.findByRole("button",{name:"Confirm salary"}));
   await waitFor(()=>expect(mocks.refresh).toHaveBeenCalledOnce());
   expect(mocks.receive).toHaveBeenCalledOnce();
   expect(mocks.toast.error).toHaveBeenCalledWith(messages.Salary.cycleChanged);
@@ -48,7 +48,7 @@ it.each(["salary cleared","wallet archived","wallet removed"])("keeps the uncert
   mocks.receive.mockResolvedValueOnce({ok:false,error:"failed"});
   const rendered=render(view());
   fireEvent.click(screen.getByRole("button",{name:"Got salary"}));
-  fireEvent.click(screen.getByRole("button",{name:"Confirm salary"}));
+  fireEvent.click(await screen.findByRole("button",{name:"Confirm salary"}));
   await waitFor(()=>expect(screen.getByRole("button",{name:"Retry same salary"}).matches(":disabled")).toBe(false));
   const first=mocks.receive.mock.calls[0][0];
   mocks.appData.mockReturnValue({salary:change==="salary cleared"?null:{amountMinor:180000,walletId:"bank"},
@@ -69,7 +69,7 @@ it("keeps salary setup locked when provider configuration disappears during a pe
   mocks.receive.mockImplementationOnce(()=>new Promise((resolve)=>{finish=resolve;}));
   const rendered=render(view());
   fireEvent.click(screen.getByRole("button",{name:"Got salary"}));
-  fireEvent.click(screen.getByRole("button",{name:"Confirm salary"}));
+  fireEvent.click(await screen.findByRole("button",{name:"Confirm salary"}));
   await waitFor(()=>expect(mocks.receive).toHaveBeenCalledOnce());
   const original=mocks.receive.mock.calls[0][0];
   mocks.appData.mockReturnValue({salary:null,timezone:"Asia/Beirut",walletById:()=>undefined});

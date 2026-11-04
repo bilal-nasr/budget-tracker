@@ -36,7 +36,7 @@ export function LoanPaymentSheet({ item, onClose }: { item: Loan; onClose: () =>
   });
   const minor = parseAmount(text, item.currency);
   const split = minor === null ? null : allocateRepayment(minor, item.principalRemainingMinor, item.feeRemainingMinor);
-  const latestDate = item.events.filter((e) => e.event === "repayment" && e.deletedAt === null).reduce((d, e) => e.occurredOn > d ? e.occurredOn : d, item.openedOn);
+  const latestDate = item.latestPaymentOn ?? item.events.filter((e) => e.event === "repayment" && e.deletedAt === null).reduce((d, e) => e.occurredOn > d ? e.occurredOn : d, item.openedOn);
   const input = loanPaymentSchema.safeParse({ requestId, loanId: item.id, walletId, amountMinor: minor, occurredOn: date });
   const valid = split !== null && input.success && date >= latestDate && date <= todayIn(timezone) && item.deletedAt === null && usable.some((w) => w.id === walletId);
   const submit = () => {

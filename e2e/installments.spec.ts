@@ -102,7 +102,7 @@ test("partial SYP installment suggests the remaining target without mixing walle
   await expect(row).toContainText("Part paid");
   await row.getByRole("button",{name:"Pay Synthetic phone again",exact:true}).click();
   const dialog=page.getByRole("dialog",{name:"Pay Synthetic phone",exact:true});
-  await expect(dialog.getByLabel("Amount")).toHaveValue("5");
+  await expect(dialog.getByLabel("Amount")).toHaveValue("500");
   await expect(dialog.getByRole("radio",{name:/USD|LBP/})).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });

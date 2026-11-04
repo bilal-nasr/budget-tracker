@@ -24,30 +24,18 @@ import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CURRENCIES, formatAmount } from "@/lib/money";
 
-export function HomeView({
-  recent,
-  salaryStatus,
-  fixed,
-  installments,
-  budgets,
-  cycleUnavailable = false,
-}: {
-  recent: Transaction[];
-  salaryStatus: SalaryStatus;
-  fixed: FixedExpense[];
-  installments: Installment[];
-  budgets: MonthBudgets[];
-  cycleUnavailable?: boolean;
+export function HomeView({ recent, commitments, budgetSummary }: {
+  recent: React.ReactNode;
+  commitments: React.ReactNode;
+  budgetSummary: React.ReactNode;
 }) {
   const t = useTranslations("Home");
   const { wallets } = useAppData();
-  const { openDetail, openWallet, openAdd } = useComposer();
+  const { openWallet } = useComposer();
   const active = wallets.filter((w) => !w.archived);
   const hasArchived = wallets.some((w) => w.archived);
   const totals = totalsByCurrency(active);
   const held = CURRENCIES.filter((currency) => active.some((wallet) => wallet.currency === currency));
-  const tb = useTranslations("Budgets");
-  const overCount = budgets.reduce((n, b) => n + b.rows.filter(isOver).length, 0);
 
   return (
     <>
@@ -63,25 +51,7 @@ export function HomeView({
                 <Amount minor={totals[currency]} currency={currency} />
               </p>
             ))}
-            {budgets.length > 0 ? (
-              <div className="mt-3 flex flex-col gap-1 text-[15px]">
-                {budgets.map((b) => {
-                  const left = b.totalLimitMinor - b.totalSpentMinor;
-                  return (
-                    <p key={b.currency} className="text-shell-muted">
-                      {left >= 0 ? t("leftToSpend") : t("overBudget")}{" "}
-                      <Amount minor={Math.abs(left)} currency={b.currency} className="font-semibold text-shell-foreground" />
-                    </p>
-                  );
-                })}
-                {overCount > 0 ? (
-                  <Link href="/budgets" className="inline-flex min-h-11 items-center gap-2 font-medium text-shell-foreground underline underline-offset-4">
-                    <TriangleAlert aria-hidden className="size-4" />
-                    {tb("overCount", { count: overCount })}
-                  </Link>
-                ) : null}
-              </div>
-            ) : null}
+            {budgetSummary}
           </>
         )}
       </ScreenHeader>
@@ -103,30 +73,8 @@ export function HomeView({
           />
         ) : (
           <>
-            {cycleUnavailable ? <CycleLoadError /> : <>
-              <SalaryCard status={salaryStatus} />
-              <FixedCard items={fixed} installments={installments} />
-            </>}
-            <section aria-labelledby="h-recent" className="flex flex-col gap-2">
-              <div className="flex items-baseline justify-between">
-                <h2 id="h-recent" className="text-[17px] font-semibold">{t("recent")}</h2>
-                <Link href="/activity" className="inline-flex min-h-11 items-center text-[14px] text-muted-foreground underline underline-offset-4">
-                  {t("seeAll")}
-                </Link>
-              </div>
-              {recent.length === 0 ? (
-                <div className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-4">
-                  <p className="text-[15px] text-muted-foreground">{t("noActivity")}</p>
-                  <Button onClick={() => openAdd()}>{t("logFirst")}</Button>
-                </div>
-              ) : (
-                <ul className="overflow-hidden rounded-xl border border-border bg-card">
-                  {recent.map((row) => (
-                    <TransactionRow key={row.id} transaction={row} onOpen={openDetail} />
-                  ))}
-                </ul>
-              )}
-            </section>
+            {commitments}
+            {recent}
 
             <section aria-labelledby="h-wallets" className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between">
@@ -155,4 +103,69 @@ export function HomeView({
       </PageBody>
     </>
   );
+}
+
+export function HomeBudgetSummary({ budgets }: { budgets: MonthBudgets[] }) {
+  const t = useTranslations("Home");
+  const tb = useTranslations("Budgets");
+  const overCount = budgets.reduce((n, b) => n + b.rows.filter(isOver).length, 0);
+  return <>
+    {budgets.length > 0 ? (
+      <div className="mt-3 flex flex-col gap-1 text-[15px]">
+        {budgets.map((b) => {
+          const left = b.totalLimitMinor - b.totalSpentMinor;
+          return (
+            <p key={b.currency} className="text-shell-muted">
+              {left >= 0 ? t("leftToSpend") : t("overBudget")}{" "}
+              <Amount minor={Math.abs(left)} currency={b.currency} className="font-semibold text-shell-foreground" />
+            </p>
+          );
+        })}
+        {overCount > 0 ? (
+          <Link href="/budgets" className="inline-flex min-h-11 items-center gap-2 font-medium text-shell-foreground underline underline-offset-4">
+            <TriangleAlert aria-hidden className="size-4" />
+            {tb("overCount", { count: overCount })}
+          </Link>
+        ) : null}
+      </div>
+    ) : null}
+  </>;
+}
+
+export function HomeCommitments({ salaryStatus, fixed, installments, cycleUnavailable }: {
+  salaryStatus: SalaryStatus; fixed: FixedExpense[]; installments: Installment[]; cycleUnavailable: boolean;
+}) {
+  return <>
+    {cycleUnavailable ? <CycleLoadError /> : <>
+      <SalaryCard status={salaryStatus} />
+      <FixedCard items={fixed} installments={installments} />
+    </>}
+  </>;
+}
+
+export function HomeRecent({ recent }: { recent: Transaction[] }) {
+  const t = useTranslations("Home");
+  const { openDetail, openAdd } = useComposer();
+  return <>
+    <section aria-labelledby="h-recent" className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between">
+        <h2 id="h-recent" className="text-[17px] font-semibold">{t("recent")}</h2>
+        <Link href="/activity" className="inline-flex min-h-11 items-center text-[14px] text-muted-foreground underline underline-offset-4">
+          {t("seeAll")}
+        </Link>
+      </div>
+      {recent.length === 0 ? (
+        <div className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-4">
+          <p className="text-[15px] text-muted-foreground">{t("noActivity")}</p>
+          <Button onClick={() => openAdd()}>{t("logFirst")}</Button>
+        </div>
+      ) : (
+        <ul className="overflow-hidden rounded-xl border border-border bg-card">
+          {recent.map((row) => (
+            <TransactionRow key={row.id} transaction={row} onOpen={openDetail} />
+          ))}
+        </ul>
+      )}
+    </section>
+  </>;
 }
