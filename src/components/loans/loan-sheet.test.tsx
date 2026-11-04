@@ -1,0 +1,44 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { NextIntlClientProvider } from "next-intl";
+import type { ReactNode } from "react";
+import en from "@/messages/en.json";
+const state = vi.hoisted(() => ({ create: vi.fn(), wallets: [] as { id: string; name: string; currency: string; archived: boolean }[], categories: [] as { id: string; kind: string; parentId: null; archivedAt: null; nameEn: string }[] }));
+vi.mock("@/features/loans/actions", () => ({ createLoan: state.create, updateLoan: vi.fn() }));
+vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ wallets: state.wallets, categories: state.categories, timezone: "Asia/Beirut" }) }));
+vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ children, footer, onOpenChange }: { children: ReactNode; footer: ReactNode; onOpenChange: (open: boolean) => void }) => <section><button onClick={() => onOpenChange(false)}>Dismiss</button>{children}{footer}</section> }));
+vi.mock("@/components/categories/category-select", () => ({ CategorySelect: ({ label, value, onChange, categories }: { label: string; value: string; onChange: (value: string) => void; categories: { id: string; nameEn: string }[] }) => <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}><option value="" />{categories.map((c) => <option key={c.id} value={c.id}>{c.nameEn}</option>)}</select> }));
+import { LoanSheet } from "./loan-sheet";
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.wallets = [{ id: "aaaaaaaa-0000-4000-8000-000000000001", name: "Cash", currency: "USD", archived: false }];
+  state.categories = [{ id: "aaaaaaaa-0000-4000-8000-000000000002", kind: "expense", parentId: null, archivedAt: null, nameEn: "Fees" }];
+});
+afterEach(cleanup);
+it.each(["failed", "throw"])("freezes and retries the exact %s loan creation even after the provider catalogue disappears", async (outcome) => {
+  if (outcome === "throw") state.create.mockRejectedValueOnce(new Error("response lost"));
+  else state.create.mockResolvedValueOnce({ ok: false, error: "failed" });
+  state.create.mockResolvedValueOnce({ ok: true, id: "aaaaaaaa-0000-4000-8000-000000000003" });
+  const close = vi.fn();
+  const sheet = () => <NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanSheet item={null} onClose={close} /></NextIntlClientProvider>;
+  const view = render(sheet());
+  fireEvent.change(screen.getByLabelText(en.Loans.name), { target: { value: "Synthetic loan" } });
+  fireEvent.change(screen.getByLabelText(en.Loans.principal), { target: { value: "1000" } });
+  fireEvent.change(screen.getByLabelText(en.Loans.percent), { target: { value: "7.25" } });
+  fireEvent.click(screen.getByRole("radio", { name: en.Loans.new }));
+  fireEvent.change(screen.getByLabelText(en.Loans.category), { target: { value: state.categories[0].id } });
+  fireEvent.click(screen.getByRole("button", { name: en.Loans.save }));
+  await waitFor(() => expect(screen.getByText(en.Loans.errorUncertain)).toBeTruthy());
+  const original = state.create.mock.calls[0][0];
+  expect(original.principalMinor).toBe(100000);
+  expect(screen.getByLabelText(en.Loans.principal).matches(":disabled")).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(close).not.toHaveBeenCalled();
+  state.wallets = []; state.categories = [];
+  view.rerender(sheet());
+  fireEvent.click(screen.getByRole("button", { name: en.Loans.retrySame }));
+  await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  expect(state.create.mock.calls[1][0]).toEqual(original);
+});

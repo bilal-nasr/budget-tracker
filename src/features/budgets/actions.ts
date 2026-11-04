@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { actionClient, type ActionResult } from "@/lib/supabase/action";
 import { budgetEditSchema, type BudgetEdit } from "./schema";
+import { categoryReferenceError } from "@/features/categories/errors";
 
 /**
  * Saves changed limits. Each one is written as a row starting this month, so
@@ -25,7 +26,7 @@ export async function saveBudgets(input: BudgetEdit): Promise<ActionResult> {
     })),
     { onConflict: "user_id,category_id,currency,starts_month" },
   );
-  if (error) return { ok: false, error: "failed" };
+  if (error) return { ok: false, error: categoryReferenceError(error) ?? "failed" };
   revalidatePath("/", "layout");
   return { ok: true };
 }

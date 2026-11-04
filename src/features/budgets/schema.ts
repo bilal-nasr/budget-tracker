@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_MINOR, type Currency } from "@/lib/money";
+import { CURRENCIES, MAX_MINOR, type Currency } from "@/lib/money";
 
 export type BudgetRow = {
   categoryId: string;
@@ -25,7 +25,7 @@ export type MonthBudgets = {
 
 export const budgetEditSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-  currency: z.enum(["USD", "LBP"]),
+  currency: z.enum(CURRENCIES),
   /** One entry per changed category. A null limit removes the budget from this month on. */
   limits: z
     .array(

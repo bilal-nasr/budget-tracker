@@ -7,11 +7,13 @@ import { expectNoHorizontalOverflow } from "./support";
 const segment = (scope: Locator | Page, name: string) => scope.locator("label").filter({ hasText: new RegExp(`^${name}$`) });
 const card = (page: Page) => page.getByRole("region", { name: "Fixed expenses" });
 
-test("installment row shows what is left and a Pay button; paid-off ones are collapsed", async ({ page }) => {
+test("installment row shows what is left and a paid badge and explicit Pay again; paid-off ones are collapsed", async ({ page }) => {
   await page.goto("/en");
   const row = card(page).getByRole("list", { name: "Installments" }).getByRole("listitem").filter({ hasText: "Laptop" });
   await expect(row).toContainText(/\$900\.00\W+left of\W+\$1,200\.00/);
-  await expect(row.getByRole("button", { name: "Pay Laptop" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Pay Laptop again", exact: true })).toBeVisible();
+  await expect(row).toContainText("Paid for this salary");
+  await expect(row.getByRole("button", { name: "Pay Laptop", exact: true })).toHaveCount(0);
   await expect(row.getByRole("meter")).toHaveAttribute("aria-valuenow", "25");
   await expect(card(page).getByText("Fridge")).toHaveCount(0);
   await card(page).getByRole("button", { name: "Paid off (1)" }).click();
@@ -21,7 +23,7 @@ test("installment row shows what is left and a Pay button; paid-off ones are col
 
 test("Pay sheet pre-fills the monthly amount, offers only same-currency wallets, blocks overpaying", async ({ page }) => {
   await page.goto("/en");
-  await page.getByRole("button", { name: "Pay Laptop" }).click();
+  await page.getByRole("button", { name: "Pay Laptop again", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Pay Laptop" });
   await expect(dialog.getByLabel("Amount")).toHaveValue("100");
   await expect(dialog.getByRole("radio", { name: /Bank · USD/ })).toBeChecked();
@@ -33,6 +35,13 @@ test("Pay sheet pre-fills the monthly amount, offers only same-currency wallets,
   await dialog.getByLabel("Amount").fill("100");
   await dialog.getByRole("radio", { name: /Cash · USD/ }).click();
   await dialog.getByRole("button", { name: "Record payment" }).click();
+  const extra = page.getByRole("dialog", { name: "Another payment before your next salary?" });
+  await expect(extra).toContainText("another expense");
+  await expect(page.getByText(/preview without a database/i)).toHaveCount(0);
+  await extra.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(extra).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Record payment" }).click();
+  await extra.getByRole("button", { name: "Record another payment" }).click();
   await expect(page.getByText(/preview without a database/i)).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
@@ -79,9 +88,36 @@ test("deleting an installment asks first and says its payments stay", async ({ p
 test("arabic installment row is RTL with LTR amounts and no overflow", async ({ page }) => {
   await page.goto("/ar");
   const row = card(page).page().getByRole("region", { name: "المصاريف الثابتة" });
-  await expect(row.getByRole("button", { name: "دفع Laptop" })).toBeVisible();
-  await row.getByRole("button", { name: "دفع Laptop" }).click();
+  await expect(row.getByRole("button", { name: "دفع Laptop مرة أخرى", exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "دفع Laptop مرة أخرى", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "دفع Laptop" });
   await expect(dialog.getByLabel("المبلغ")).toHaveValue("100");
   await expectNoHorizontalOverflow(page);
+});
+
+
+test("partial SYP installment suggests the remaining target without mixing wallet currencies", async ({ page }) => {
+  await page.goto("/en");
+  const row = card(page).getByRole("list",{name:"Installments"}).getByRole("listitem").filter({hasText:"Synthetic phone"});
+  await expect(row).toContainText("Part paid");
+  await row.getByRole("button",{name:"Pay Synthetic phone again",exact:true}).click();
+  const dialog=page.getByRole("dialog",{name:"Pay Synthetic phone",exact:true});
+  await expect(dialog.getByLabel("Amount")).toHaveValue("5");
+  await expect(dialog.getByRole("radio",{name:/USD|LBP/})).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+});
+
+test("history opens the actual itemized payment and preserves its name in Edit",async({page})=>{
+  await page.goto("/en");
+  await page.getByRole("button",{name:"Edit Laptop",exact:true}).click();
+  const history=page.getByRole("region",{name:"Payment history"});
+  await history.getByRole("listitem").first().getByRole("button").click();
+  const detail=page.getByRole("dialog",{name:"Details",exact:true});
+  await expect(detail).toContainText("Laptop payment");
+  await expect(detail).toContainText("Device installment");
+  await expect(detail).toContainText("Accessories installment");
+  await expect(detail.getByRole("button",{name:"Duplicate",exact:true})).toHaveCount(0);
+  await detail.getByRole("button",{name:"Edit",exact:true}).click();
+  await expect(page.getByRole("dialog").getByLabel("Name",{exact:true})).toHaveValue("Laptop payment");
+  await expect(page.getByRole("dialog").getByLabel("Description",{exact:true}).first()).toHaveValue("Device installment");
 });

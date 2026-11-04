@@ -90,9 +90,25 @@ Ten notes from the owner (2026-11-03), planned task by task in [`docs/plans/`](p
 - [x] [08 Budgets](plans/08-budgets.md): implements the budget items of Phase 4 below.
 - [x] [09 Sign-up](plans/09-signup.md): open sign-up with email verification. Changes the single-owner rule; needs an SMTP provider first.
 
-## Phase 4: Categories & budgets ☐ (budget items planned in [plans/08](plans/08-budgets.md))
+## Phase 3c: Owner feedback round 3
 
-- [ ] Categories manager (Settings): bilingual names, icon, colour, one subcategory level, archive, reorder.
+Implementation plans and integrated verification are recorded in [round 3](plans/round-3/README.md). The owner approved all eight features plus the additional Move UX change, followed by a combined commit and push.
+
+- Category CRUD with archive/restore for used categories and retained budgets/history.
+- Optional descriptive expense items, atomic saves and revision-aware Undo.
+- Persistent auth refresh cookies and a native 30-day session timebox configuration.
+- Cashier tender/change with actual wallet movements and confirmed currency conversion.
+- Installment paid status per salary receipt cycle, with deliberate repeat payment.
+- Current/new SYP currency and compact Move selectors with explicit received-amount editing.
+- Borrowed/lent loans with a one-time percentage fee and fee-only reporting.
+- Shared Arabic numeric input direction, touch-selection and raw-draft handling.
+
+Round-3 migrations are included in source and tested locally; this work does not apply them to production. Hosted Auth timebox configuration and a physical-iPhone native-keyboard check remain deployment/device verification steps.
+
+## Phase 4: Categories & budgets ◐
+
+- [x] Categories manager (Settings): bilingual names, motif, colour, unused deletion, archive/restore and protected history.
+- [ ] Category hierarchy editor and manual reorder (existing hierarchy references remain protected).
 - [x] Migration `20261110000200_budgets.sql` (`budgets`, `month_budgets`, `month_category_spend`, carry-forward) + `supabase/tests/budgets.test.sql`. Not yet applied or run.
 - [x] Budgets screen: month switcher, currency segment, category rows with progress and over-limit state, category month detail.
 - [x] Edit budgets sheet with running total.
@@ -131,7 +147,7 @@ Acceptance: installs to the home screen on iPhone and Android and opens straight
 
 ## Later (not scheduled)
 
-Recurring transactions & bills · CSV export/import · savings goals · loans (I owe / owed to me) · offline add queue · passkey sign-in · more accounts / household sharing · receipt photo · quick-entry by text ("taxi 200k").
+Recurring transactions & bills · CSV export/import · savings goals · offline add queue · passkey sign-in · more accounts / household sharing · receipt photo · quick-entry by text ("taxi 200k").
 
 ## Working agreements
 

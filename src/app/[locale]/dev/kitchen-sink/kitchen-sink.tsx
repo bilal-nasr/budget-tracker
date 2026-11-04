@@ -26,7 +26,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { Link, usePathname } from "@/i18n/navigation";
-import type { Currency } from "@/lib/money";
+import { CURRENCIES, currencyPrefix, type Currency } from "@/lib/money";
 
 type Kind = "expense" | "income" | "move";
 
@@ -125,6 +125,9 @@ export function KitchenSink() {
         </p>
         <p className="mt-5 text-[28px] leading-tight font-bold tracking-tight">
           <Amount minor={3150000} currency="LBP" />
+        </p>
+        <p className="mt-3 text-[28px] leading-tight font-bold tracking-tight">
+          <Amount minor={1250} currency="SYP" />
         </p>
         <TileBar
           tone="shell"
@@ -284,12 +287,12 @@ export function KitchenSink() {
               />
               <div className="flex items-center justify-between gap-3 py-3.5">
                 <p className={`amount flex items-baseline gap-1 text-[46px] leading-none font-bold tracking-tight ${typed === "" ? "text-muted-foreground" : ""}`}>
-                  <span className="text-[28px] font-semibold text-muted-foreground">{currency === "USD" ? "$" : "LBP"}</span>
+                  <span className="text-[28px] font-semibold text-muted-foreground">{currencyPrefix(currency)}</span>
                   {typed === "" ? "0" : typed}
                 </p>
-                <Button variant="outline" className="rounded-full" onClick={() => setCurrency(currency === "USD" ? "LBP" : "USD")}>
+                <Button variant="outline" className="rounded-full" onClick={() => setCurrency(CURRENCIES[(CURRENCIES.indexOf(currency) + 1) % CURRENCIES.length])}>
                   <span className="size-2.5 rounded-full bg-primary" aria-hidden />
-                  {currency === "USD" ? t("cashUsd") : t("cashLbp")}
+                  <bdi dir="ltr">{currency}</bdi>
                   <ChevronDown aria-hidden />
                 </Button>
               </div>

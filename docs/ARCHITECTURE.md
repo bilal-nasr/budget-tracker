@@ -49,6 +49,7 @@ NEXT_PUBLIC_SITE_URL=                   # e.g. https://example.com/budget
 - Signing in before confirming returns `email_not_confirmed`; the sign-in form says so and offers to resend the link. A wrong password and an unknown email give the same message.
 - Accounts are isolated by RLS (`user_id = (select auth.uid())` on every table); `supabase/tests/isolation.test.sql` checks that one account cannot read or write another's data. A bootstrap trigger gives each new user a profile and starter categories.
 - `proxy.ts` refreshes the session on every request (`getClaims`, verified locally) and redirects signed-out visitors to `/[locale]/sign-in`; sign-in, sign-up and check-email are public.
+- Session refresh runs before locale middleware snapshots request headers. Every final rewrite/redirect preserves refreshed or deleted cookies and the SDK's cache-protection headers; confirmation/recovery redirects are private/no-store. Auth cookies persist across normal browser restarts. The local absolute session timebox is 720 hours, while access JWTs stay at 3600 seconds and refresh tokens rotate. Timebox/revocation take effect on refresh, with an already-issued JWT retaining its remaining lifetime. Hosted Auth needs its own supported 720-hour timebox setting (Pro+); local TOML never configures production Auth.
 - Hosted setup needs a custom SMTP provider: Supabase's built-in mailer only sends to the project's own team members and is heavily rate-limited.
 - Bot protection: set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to show a Cloudflare Turnstile check on sign-in and sign-up (the token also goes with "send the link again"). It only helps when captcha protection is also turned on in the Supabase dashboard (Authentication > Bot and Abuse Protection) with the Turnstile secret; also lower the email rate limit there. Without both, anyone can trigger confirmation emails to any address.
 - Confirmation redirects use `NEXT_PUBLIC_SITE_URL` (not the request's own address, which is internal behind a proxy or in Docker).
@@ -106,6 +107,18 @@ Rules:
 - Client components are islands: the add sheet, charts, month switcher, filters.
 
 ## 5. Data model
+
+### Owner-feedback extensions
+
+The append-only migrations are the authoritative implemented schema; the original phase sketch below includes future concepts. Current ledger kinds are `expense`, `income`, `transfer` and `loan` (an exchange is a transfer with two currencies).
+
+- `src/lib/currency.ts` defines USD cents, whole-lira LBP and current/new SYP qirsh. `money.ts` is the public parse/format boundary. Exact products and rounding use BigInt; TypeScript targets ES2020, within the installed Next.js browser baseline.
+- Category reads keep the full historical catalogue separate from active selection options. Removing a referenced category archives it; financial history is never reassigned or cascaded away. Archived budget limits remain until explicitly cleared.
+- `expense_items` are descriptive children of one expense. Their total cannot exceed purchase cost, and they never enter wallet or spending aggregates independently.
+- `transactions.revision` guards edits and lifecycle mutations. A draft UUID identifies retried creates; `save_transaction` atomically saves parent, items and optional settlement. Delete/restore require the exact captured revision.
+- Cashier fields separate purchase cost from actual tender and returned change. Wallet projections debit tender and credit change; spending still reads cost. Cross-currency settlement keeps its confirmed direct-rate snapshot.
+- Installment payments retain their salary receipt ID. Receipt cycles affect paid status, while lifetime principal and calendar-month expense reporting remain independent. Cycle-aware mutation paths lock profile, installment and transaction in that order.
+- Loans use separate records and managed ledger events with principal/fee splits. `reporting_entries` includes ordinary income/expense and only loan fees; loan principal affects wallet balances without inflating spending or income.
 
 All tables live in `public`, all have `user_id uuid not null default auth.uid() references auth.users`, and RLS policy `user_id = (select auth.uid())` for select/insert/update/delete. Amounts are `bigint` minor units with `check (amount_minor > 0)`; sign comes from `kind`, never from a negative number.
 
@@ -190,7 +203,7 @@ New-user bootstrap: an `after insert on auth.users` trigger creates `profiles` a
 
 ## 6. Money
 
-- `lib/money.ts` is the only place that parses or formats amounts. USD has 2 decimals, LBP has 0.
+- `lib/money.ts` is the parse/format boundary; `lib/currency.ts` owns currency metadata. USD and current/new SYP have 2 decimals, while LBP has 0. Exact rational calculations use BigInt in TypeScript and integer quotients in SQL.
 - Supabase returns `bigint` as a JS number; safe because amounts are capped at 10^15 minor units (< 2^53). Arithmetic is integer-only on minor units.
 - Parsing accepts Latin and Arabic-Indic digits, `,` / `٬` grouping, `.` / `٫` decimal.
 - Formatting uses `Intl.NumberFormat` with the profile's digit setting (`ar-u-nu-latn` vs `ar-u-nu-arab`), always `tabular-nums`, always wrapped in `<bdi dir="ltr">` so it never mirrors.

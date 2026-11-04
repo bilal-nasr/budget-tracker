@@ -26,9 +26,25 @@ select is((select currency::text from public.installments where name = 'Laptop')
   'currency is copied from the default wallet');
 
 create function pg_temp.pay(w uuid, amount bigint) returns void language sql as $f$
-  insert into public.transactions (kind, occurred_on, wallet_id, amount_minor, currency, category_id, source, installment_id)
-  select 'expense', current_date, w, amount, 'USD', i.category_id, 'installment', i.id
-  from public.installments i where i.name = 'Laptop'
+  -- These tests deliberately record another payment to exercise the principal
+  -- cap. Supply the actual current receipt and acknowledge the last live payment
+  -- so the newer repeat guard does not mask the principal/currency assertions.
+  insert into public.transactions (kind, occurred_on, wallet_id, amount_minor, currency, category_id,
+    source, installment_id, salary_cycle_id, installment_override_of)
+  select 'expense', current_date, w, amount, 'USD', i.category_id, 'installment', i.id, s.id, p.id
+  from public.installments i
+  left join lateral (
+    select t.id from public.transactions t
+    where t.user_id = i.user_id and t.source = 'salary' and t.kind::text = 'income' and t.deleted_at is null
+    order by t.created_at desc,t.id desc limit 1
+  ) s on true
+  left join lateral (
+    select t.id from public.transactions t
+    where t.user_id = i.user_id and t.installment_id = i.id and t.deleted_at is null
+      and t.salary_cycle_id is not distinct from s.id
+    order by t.created_at desc,t.id desc limit 1
+  ) p on true
+  where i.name = 'Laptop'
 $f$;
 
 select lives_ok($$select pg_temp.pay('a1000000-0000-4000-8000-000000000001', 40000)$$, 'first payment fits');
@@ -37,7 +53,7 @@ select lives_ok($$select pg_temp.pay('a1000000-0000-4000-8000-000000000002', 600
 select throws_ok($$select pg_temp.pay('a1000000-0000-4000-8000-000000000001', 1)$$, null, 'exceeds remaining',
   'a payment above the remainder is refused');
 
-select is((select remaining_minor from public.installment_progress), 0::bigint, 'nothing left');
+select is((select remaining_minor from public.installment_progress), 0::numeric, 'nothing left');
 
 -- Raising a payment above the remainder is refused too; soft-deleting frees the room.
 select throws_ok($$update public.transactions set amount_minor = 40001 where amount_minor = 40000$$, null,
@@ -46,9 +62,7 @@ select lives_ok($$update public.transactions set deleted_at = now() where amount
 select lives_ok($$select pg_temp.pay('a1000000-0000-4000-8000-000000000001', 40000)$$, 'room is free again');
 
 select throws_ok(
-  $$insert into public.transactions (kind, occurred_on, wallet_id, amount_minor, currency, category_id, installment_id)
-    select 'expense', current_date, 'a1000000-0000-4000-8000-000000000003', 100, 'LBP', i.category_id, i.id
-    from public.installments i where i.name = 'Laptop'$$,
+  $$select pg_temp.pay('a1000000-0000-4000-8000-000000000003', 100)$$,
   null, 'wallet currency does not match the installment', 'a payment from an LBP wallet is refused');
 
 select throws_ok($$update public.installments set total_minor = 50000 where name = 'Laptop'$$, null,

@@ -1,10 +1,11 @@
-import { signedMinor, type Transaction } from "./schema";
+import { reportingMinor, type Transaction } from "./schema";
+import { CURRENCIES, emptyCurrencyTotals, sumMinor, type Currency } from "@/lib/money";
 
 export type DayGroup = {
   date: string;
   rows: Transaction[];
   /** Net per currency for the day. Never combined. */
-  totals: { USD: number; LBP: number };
+  totals: Record<Currency, number>;
 };
 
 /** Groups newest-first rows into days. Input order is preserved. */
@@ -13,12 +14,16 @@ export function groupByDay(rows: readonly Transaction[]): DayGroup[] {
   for (const row of rows) {
     let group = groups[groups.length - 1];
     if (!group || group.date !== row.occurredOn) {
-      group = { date: row.occurredOn, rows: [], totals: { USD: 0, LBP: 0 } };
+      group = { date: row.occurredOn, rows: [], totals: emptyCurrencyTotals() };
       groups.push(group);
     }
     group.rows.push(row);
-    // A move between wallets is neither income nor spending.
-    if (row.kind !== "transfer") group.totals[row.currency] += signedMinor(row);
+  }
+  for (const group of groups) for (const currency of CURRENCIES) {
+    // Purchase cost and realized loan fees count; principal/tender/change do not.
+    group.totals[currency] = sumMinor(group.rows
+      .filter((row) => row.currency === currency)
+      .map(reportingMinor));
   }
   return groups;
 }

@@ -17,7 +17,7 @@ import type { Installment } from "@/features/installments/schema";
 import { deleteTransaction } from "@/features/transactions/actions";
 import { todayIn } from "@/features/transactions/group";
 import { summarizeFixed } from "@/features/fixed/summary";
-import { formatAmount, type Currency } from "@/lib/money";
+import { CURRENCIES, formatAmount } from "@/lib/money";
 
 function shortDate(date: string, locale: string): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -40,6 +40,9 @@ export function FixedCard({
   installments: Installment[];
 }) {
   const t = useTranslations("Fixed");
+  const ti = useTranslations("Installments");
+  const tb = useTranslations("Breakdown");
+  const tc = useTranslations("Categories");
   const locale = useLocale();
   const { walletById, categoryById, timezone, salary } = useAppData();
   const { openFixed } = useComposer();
@@ -58,7 +61,7 @@ export function FixedCard({
       const result = await payFixedExpense(item.id);
       setBusyId(null);
       if (!result.ok) {
-        toast.error(result.error === "notConfigured" ? t("errorPreview") : t("errorPay"));
+        toast.error(result.error === "notConfigured" ? t("errorPreview") : result.error === "categoryUnavailable" ? tc("errorUnavailable") : t("errorPay"));
         return;
       }
       const id = result.id;
@@ -66,7 +69,8 @@ export function FixedCard({
         action: {
           label: t("undo"),
           onClick: async () => {
-            await deleteTransaction(id);
+            const undone = await deleteTransaction(id, result.revision);
+            if (!undone.ok) toast.error(undone.error === "conflict" ? tb("conflict") : t("errorPay"));
           },
         },
       });
@@ -76,8 +80,8 @@ export function FixedCard({
   // Currencies are never combined.
   const summary = summarizeFixed(items, walletById, salary, installments);
   const left = summary.left;
-  const leftCurrencies = (["USD", "LBP"] as Currency[]).filter((c) => left[c] > 0);
-  const currencies = (["USD", "LBP"] as Currency[]).filter((c) => summary.total[c] > 0);
+  const leftCurrencies = CURRENCIES.filter((c) => left[c] > 0);
+  const currencies = CURRENCIES.filter((c) => summary.total[c] > 0);
 
   return (
     <section aria-labelledby="h-fixed" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -127,7 +131,7 @@ export function FixedCard({
                     <span className="block truncate font-medium">
                       <bdi>{item.name}</bdi>
                     </span>
-                    <span className="block truncate text-[13px] text-muted-foreground">
+                    <span className="block text-[13px] text-muted-foreground">
                       {wallet ? <Amount minor={item.amountMinor} currency={wallet.currency} /> : null} ·{" "}
                       <bdi>{wallet?.name}</bdi>
                       {item.dueDay ? ` · ${t("due", { day: item.dueDay })}` : ""}
@@ -156,13 +160,14 @@ export function FixedCard({
       ) : null}
 
       <InstallmentsList items={installments} />
+      {installments.length > 0 ? <p className="text-[13px] text-muted-foreground">{ti("summaryHelp")}</p> : null}
 
       {items.length > 0 || installments.length > 0 ? (
         <div className="flex flex-col gap-3 border-t border-border pt-3">
           <dl className="flex flex-col gap-1.5 text-[15px]">
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <dt className="text-muted-foreground">{t("total")}</dt>
-              <dd className="text-end font-semibold">
+              <dd className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-end font-semibold">
                 {currencies.map((c, i) => (
                   <span key={c}>
                     {i > 0 ? " · " : ""}
@@ -172,7 +177,7 @@ export function FixedCard({
               </dd>
             </div>
             {summary.salaryAfter ? (
-              <div className="flex items-baseline justify-between gap-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <dt className="text-muted-foreground">
                   {summary.salaryAfter.minor < 0 ? t("salaryShort") : t("salaryAfter")}
                 </dt>
@@ -192,9 +197,9 @@ export function FixedCard({
               </div>
             ) : null}
           </dl>
-          {summary.salaryAfter?.excludesOther ? (
+          {summary.salaryAfter && summary.salaryAfter.excludedCurrencies.length > 0 ? (
             <p className="text-[13px] text-muted-foreground">
-              {t("excludesOther", { currency: summary.salaryAfter.currency === "USD" ? "LBP" : "USD" })}
+              {t("excludesOther", { currencies: new Intl.ListFormat(locale, { type: "conjunction" }).format(summary.salaryAfter.excludedCurrencies.map((currency) => `⁦${currency}⁩`)) })}
             </p>
           ) : null}
           <div className="flex flex-col gap-1.5">

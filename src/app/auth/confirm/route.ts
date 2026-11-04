@@ -2,6 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { safeNext, siteBase } from "@/features/auth/redirect";
 import { createClient } from "@/lib/supabase/server";
 
+function privateRedirect(url: URL) {
+  return NextResponse.redirect(url, {
+    headers: {
+      "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
+      Expires: "0",
+      Pragma: "no-cache",
+    },
+  });
+}
+
 /**
  * The link in the confirmation and password-reset emails lands here. Verifying the token signs the
  * person in, then they continue to `next` (onboarding for a new account).
@@ -18,9 +28,9 @@ export async function GET(request: NextRequest) {
   if (tokenHash && (type === "email" || type === "recovery")) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error) return NextResponse.redirect(new URL(next, origin));
+    if (!error) return privateRedirect(new URL(next, origin));
   }
   // Expired, reused or malformed link. A reset link goes back to ask for a new one.
   const retry = type === "recovery" ? "forgot-password" : "sign-in";
-  return NextResponse.redirect(new URL(`/${locale}/${retry}?error=link`, origin));
+  return privateRedirect(new URL(`/${locale}/${retry}?error=link`, origin));
 }

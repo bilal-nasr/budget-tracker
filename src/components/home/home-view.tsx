@@ -10,6 +10,7 @@ import { ScreenHeader } from "@/components/shell/screen-header";
 import { TransactionRow } from "@/components/transactions/transaction-row";
 import { FixedCard } from "@/components/fixed/fixed-card";
 import { SalaryCard } from "@/components/salary/salary-card";
+import { CycleLoadError } from "@/components/installments/cycle-load-error";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import type { FixedExpense } from "@/features/fixed/schema";
@@ -21,6 +22,7 @@ import type { Transaction } from "@/features/transactions/schema";
 import { totalsByCurrency } from "@/features/wallets/schema";
 import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CURRENCIES, formatAmount } from "@/lib/money";
 
 export function HomeView({
   recent,
@@ -28,12 +30,14 @@ export function HomeView({
   fixed,
   installments,
   budgets,
+  cycleUnavailable = false,
 }: {
   recent: Transaction[];
   salaryStatus: SalaryStatus;
   fixed: FixedExpense[];
   installments: Installment[];
   budgets: MonthBudgets[];
+  cycleUnavailable?: boolean;
 }) {
   const t = useTranslations("Home");
   const { wallets } = useAppData();
@@ -41,7 +45,7 @@ export function HomeView({
   const active = wallets.filter((w) => !w.archived);
   const hasArchived = wallets.some((w) => w.archived);
   const totals = totalsByCurrency(active);
-  const has = (c: "USD" | "LBP") => active.some((w) => w.currency === c);
+  const held = CURRENCIES.filter((currency) => active.some((wallet) => wallet.currency === currency));
   const tb = useTranslations("Budgets");
   const overCount = budgets.reduce((n, b) => n + b.rows.filter(isOver).length, 0);
 
@@ -54,16 +58,11 @@ export function HomeView({
         ) : (
           <>
             <h1 className="sr-only">{t("leadLabel")}</h1>
-            {has("USD") ? (
-              <p className="mt-1 text-[40px] leading-[1.1] font-bold tracking-tight">
-                <Amount minor={totals.USD} currency="USD" />
+            {held.map((currency, index) => (
+              <p key={currency} className={cn("font-bold tracking-tight", formatAmount(totals[currency], currency).length > 23 ? "mt-2 text-base leading-tight" : formatAmount(totals[currency], currency).length > 16 ? "mt-2 text-xl leading-tight" : index > 0 ? "mt-3 text-[28px] leading-tight" : "mt-1 text-[40px] leading-[1.1]")}>
+                <Amount minor={totals[currency]} currency={currency} />
               </p>
-            ) : null}
-            {has("LBP") ? (
-              <p className={cn("font-bold tracking-tight", has("USD") ? "mt-3 text-[28px] leading-tight" : "mt-1 text-[40px] leading-[1.1]")}>
-                <Amount minor={totals.LBP} currency="LBP" />
-              </p>
-            ) : null}
+            ))}
             {budgets.length > 0 ? (
               <div className="mt-3 flex flex-col gap-1 text-[15px]">
                 {budgets.map((b) => {
@@ -104,8 +103,10 @@ export function HomeView({
           />
         ) : (
           <>
-            <SalaryCard status={salaryStatus} />
-            <FixedCard items={fixed} installments={installments} />
+            {cycleUnavailable ? <CycleLoadError /> : <>
+              <SalaryCard status={salaryStatus} />
+              <FixedCard items={fixed} installments={installments} />
+            </>}
             <section aria-labelledby="h-recent" className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between">
                 <h2 id="h-recent" className="text-[17px] font-semibold">{t("recent")}</h2>

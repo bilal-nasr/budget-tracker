@@ -9,8 +9,9 @@ test("wallets are grouped by currency with separate totals", async ({ page }) =>
   await page.goto("/en/wallets");
   await expect(page.getByRole("heading", { name: "USD", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "LBP", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "SYP", exact: true })).toBeVisible();
   // Never a combined total: exactly one "Total" per currency group.
-  await expect(page.getByText(/^Total/)).toHaveCount(2);
+  await expect(page.getByText(/^Total/)).toHaveCount(3);
   await expectNoHorizontalOverflow(page);
 });
 

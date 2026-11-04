@@ -7,7 +7,8 @@ import { getInstallments } from "@/features/installments/queries";
 import { getProfile } from "@/features/profile/queries";
 import { todayIn } from "@/features/transactions/group";
 import { getWallets } from "@/features/wallets/queries";
-import type { Currency } from "@/lib/money";
+import { CURRENCIES, isCurrency, type Currency } from "@/lib/money";
+import { availableBudgetCurrencies } from "@/features/budgets/rows";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -20,16 +21,15 @@ export default async function BudgetsPage({ params, searchParams }: PageProps<"/
   const rawMonth = typeof query.month === "string" ? query.month : "";
   const month = MONTH.test(rawMonth) ? rawMonth : todayIn(profile.timezone).slice(0, 7);
 
-  // Only currencies the owner actually holds money in.
-  const held = (["USD", "LBP"] as Currency[]).filter((c) => wallets.some((w) => !w.archived && w.currency === c));
-  const requested = query.currency === "LBP" || query.currency === "USD" ? query.currency : null;
-  const currency: Currency = requested && held.includes(requested) ? requested : (held[0] ?? "USD");
-
-  const [data, fixed, installments] = await Promise.all([
-    getMonthBudgets(month, currency),
+  const [months, fixed, installments] = await Promise.all([
+    Promise.all(CURRENCIES.map((currency) => getMonthBudgets(month, currency))),
     getFixedExpenses(profile.timezone),
     getInstallments(profile.timezone),
   ]);
+  const held = availableBudgetCurrencies(wallets, months);
+  const requested = isCurrency(query.currency) ? query.currency : null;
+  const currency: Currency = requested && held.includes(requested) ? requested : (held[0] ?? "USD");
+  const data = months.find((data) => data.currency === currency)!;
   const salaryAfter = summarizeFixed(fixed, (id) => wallets.find((w) => w.id === id), profile.salary, installments)
     .salaryAfter;
 

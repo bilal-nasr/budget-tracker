@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./support";
+import en from "../src/messages/en.json";
+import ar from "../src/messages/ar.json";
 
 // Demo data (no Supabase keys): salary is $1,800.00 into the demo Bank wallet.
 
@@ -16,7 +18,7 @@ test("salary card shows the fixed amount, wallet and a Got salary button", async
 test("Got salary opens a confirmation with the amount and wallet, Cancel adds nothing", async ({ page }) => {
   await page.goto("/en");
   await page.getByRole("region", { name: "Monthly salary" }).getByRole("button", { name: "Got salary" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add this month's salary?" });
+  const dialog = page.getByRole("dialog", { name: en.Salary.confirmTitle });
   await expect(dialog).toContainText("$1,800.00");
   await expect(dialog).toContainText("Bank");
   await dialog.getByRole("button", { name: "Cancel" }).click();
@@ -34,7 +36,7 @@ test("confirming calls the action (preview mode says it cannot save)", async ({ 
 test("arabic confirmation is RTL with an LTR amount and no overflow", async ({ page }) => {
   await page.goto("/ar");
   await page.getByRole("region", { name: "الراتب الشهري" }).getByRole("button", { name: "استلمت الراتب" }).click();
-  const dialog = page.getByRole("dialog", { name: "إضافة راتب هذا الشهر؟" });
+  const dialog = page.getByRole("dialog", { name: ar.Salary.confirmTitle });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("$1,800.00");
   expect(await dialog.evaluate((el) => getComputedStyle(el).direction)).toBe("rtl");

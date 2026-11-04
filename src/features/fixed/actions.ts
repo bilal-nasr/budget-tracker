@@ -6,6 +6,7 @@ import { getProfile } from "@/features/profile/queries";
 import { todayIn } from "@/features/transactions/group";
 import { actionClient, type ActionResult } from "@/lib/supabase/action";
 import { fixedInputSchema, type FixedInput } from "./schema";
+import { categoryReferenceError } from "@/features/categories/errors";
 
 const idSchema = z.uuid();
 
@@ -25,7 +26,7 @@ export async function createFixedExpense(input: FixedInput): Promise<ActionResul
   const { error } = await ctx.supabase
     .from("fixed_expenses")
     .insert({ ...row(parsed.data), position: Math.floor(Date.now() / 1000) });
-  if (error) return { ok: false, error: "failed" };
+  if (error) return { ok: false, error: categoryReferenceError(error) ?? "failed" };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -36,7 +37,7 @@ export async function updateFixedExpense(id: string, input: FixedInput): Promise
   const ctx = await actionClient();
   if (ctx.error) return { ok: false, error: ctx.error };
   const { error } = await ctx.supabase.from("fixed_expenses").update(row(parsed.data)).eq("id", id);
-  if (error) return { ok: false, error: "failed" };
+  if (error) return { ok: false, error: categoryReferenceError(error) ?? "failed" };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -57,7 +58,7 @@ export async function deleteFixedExpense(id: string): Promise<ActionResult> {
  * its wallet. Amount, wallet and category come from the saved template, never
  * from the client.
  */
-export async function payFixedExpense(id: string): Promise<ActionResult<{ id: string }>> {
+export async function payFixedExpense(id: string): Promise<ActionResult<{ id: string; revision: number }>> {
   if (!idSchema.safeParse(id).success) return { ok: false, error: "invalid" };
   const ctx = await actionClient();
   if (ctx.error) return { ok: false, error: ctx.error };
@@ -83,9 +84,11 @@ export async function payFixedExpense(id: string): Promise<ActionResult<{ id: st
       source: "fixed",
       fixed_expense_id: item.id,
     })
-    .select("id")
+    .select("id, revision")
     .single();
-  if (error || !data) return { ok: false, error: "failed" };
+  if (error || !data || !Number.isInteger(data.revision) || data.revision < 1 || data.revision > 2_147_483_647) {
+    return { ok: false, error: categoryReferenceError(error) ?? "failed" };
+  }
   revalidatePath("/", "layout");
-  return { ok: true, id: data.id };
+  return { ok: true, id: data.id, revision: data.revision };
 }

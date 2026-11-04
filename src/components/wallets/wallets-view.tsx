@@ -9,20 +9,22 @@ import { useComposer } from "@/components/shell/composer";
 import { EmptyState } from "@/components/shell/empty-state";
 import { Button } from "@/components/ui/button";
 import { totalsByCurrency, type Wallet } from "@/features/wallets/schema";
-import type { Currency } from "@/lib/money";
+import { CURRENCIES } from "@/lib/money";
+import { Link } from "@/i18n/navigation";
 
 const ICON = { cash: Banknote, bank: Landmark, card: CreditCard } as const;
 
 /** Wallets grouped by currency, each group with its own total. Currencies are never combined. */
 export function WalletsView() {
   const t = useTranslations("Wallets");
+  const loans = useTranslations("Loans");
   const { wallets } = useAppData();
   const { openWallet } = useComposer();
   const active = wallets.filter((w) => !w.archived);
   const archived = wallets.filter((w) => w.archived);
   const [showArchived, setShowArchived] = useState(false);
   const totals = totalsByCurrency(active);
-  const groups = (["USD", "LBP"] as Currency[])
+  const groups = CURRENCIES
     .map((currency) => ({ currency, items: active.filter((w) => w.currency === currency) }))
     .filter((g) => g.items.length > 0);
 
@@ -55,6 +57,7 @@ export function WalletsView() {
   if (active.length === 0) {
     return (
       <div className="flex flex-col gap-6">
+        <Link href="/loans" className="inline-flex min-h-11 items-center self-start text-primary underline underline-offset-4">{loans("title")}</Link>
         <EmptyState
           title={t("emptyTitle")}
           body={archived.length > 0 ? t("emptyArchived") : t("emptyBody")}
@@ -69,9 +72,9 @@ export function WalletsView() {
     <div className="flex flex-col gap-6">
       {groups.map(({ currency, items }) => (
         <section key={currency} aria-labelledby={`w-${currency}`} className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <h2 id={`w-${currency}`} className="text-[17px] font-semibold">
-              {currency}
+              <bdi dir="ltr">{currency}</bdi>
             </h2>
             <p className="text-[15px] text-muted-foreground">
               {t("total")} <Amount minor={totals[currency]} currency={currency} className="font-semibold text-foreground" />
@@ -84,6 +87,7 @@ export function WalletsView() {
           </ul>
         </section>
       ))}
+      <Link href="/loans" className="inline-flex min-h-11 items-center self-start text-primary underline underline-offset-4">{loans("title")}</Link>
       <Button variant="outline" onClick={() => openWallet(null)} className="self-start">
         <Plus aria-hidden />
         {t("add")}
@@ -101,7 +105,7 @@ function WalletRow({ wallet, onOpen }: { wallet: Wallet; onOpen: () => void }) {
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-h-[60px] w-full items-center gap-3 px-3.5 py-2 text-start hover:bg-accent/50 active:bg-accent"
+        className="flex min-h-[60px] w-full flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2 text-start hover:bg-accent/50 active:bg-accent"
       >
         <span className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-secondary text-primary">
           <Icon aria-hidden className="size-5" />
@@ -112,7 +116,7 @@ function WalletRow({ wallet, onOpen }: { wallet: Wallet; onOpen: () => void }) {
           </span>
           <span className="block text-[13px] text-muted-foreground">{t(wallet.kind)}</span>
         </span>
-        <Amount minor={wallet.balanceMinor} currency={wallet.currency} className="font-semibold" />
+        <Amount minor={wallet.balanceMinor} currency={wallet.currency} className="ms-auto max-w-full text-[15px] font-semibold" />
       </button>
     </li>
   );

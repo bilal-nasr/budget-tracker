@@ -1,35 +1,57 @@
+import { normalizeNumericDigits } from "@/lib/numeric-text";
+import { CURRENCY_DECIMALS, MAX_MINOR, MAX_RATE, currencyPrefix, isCurrency, type Currency } from "./currency";
+
+export {
+  CURRENCIES, CURRENCY_DECIMALS, MAX_MINOR, MAX_RATE, currencyPrefix,
+  emptyCurrencyTotals, isCurrency, supportsUsdLbpRate,
+} from "./currency";
+export type { Currency } from "./currency";
+
 /**
- * Exact money handling. Amounts are integer minor units: USD cents, LBP whole
- * lira. This module never adds two currencies.
+ * Integer minor units: USD cents, LBP whole lira, SYP current-pound qirsh.
+ * Callers may sum only amounts denominated in the same currency.
  */
-export type Currency = "USD" | "LBP";
 export type Digits = "latin" | "arabic";
 
-export const CURRENCY_DECIMALS: Readonly<Record<Currency, 0 | 2>> = {
-  USD: 2,
-  LBP: 0,
-};
-export const MAX_MINOR = 1_000_000_000_000_000; // 1e15, < 2^53
+export class MoneyRangeError extends RangeError {
+  constructor() {
+    super("Amount is outside the supported integer money range");
+    this.name = "MoneyRangeError";
+  }
+}
 
-const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+/** Read database integers before any Number conversion can silently round them. */
+export function readMinor(value: number | string): number {
+  if (typeof value === "number" && !Number.isSafeInteger(value)) throw new MoneyRangeError();
+  if (typeof value === "string" && !/^-?\d+$/.test(value)) throw new MoneyRangeError();
+  const minor = BigInt(value);
+  if (minor < -BigInt(MAX_MINOR) || minor > BigInt(MAX_MINOR)) throw new MoneyRangeError();
+  return Number(minor);
+}
+
+/** Exact same-currency accumulation; check the final sum so cancellation works. */
+export function sumMinor(values: readonly number[]): number {
+  const total = values.reduce((sum, value) => sum + BigInt(readMinor(value)), BigInt(0));
+  if (total < -BigInt(MAX_MINOR) || total > BigInt(MAX_MINOR)) throw new MoneyRangeError();
+  return Number(total);
+}
 
 function normalizeDigits(input: string): string {
-  return input
-    .replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)))
+  return normalizeNumericDigits(input)
     .replace(/٫/g, ".")
     .replace(/[٬,\s]/g, "");
 }
 
 /** Parses a user-typed amount ("12.5", "١٢٫٥٠", "1,200") into minor units. Null if invalid. */
 export function parseAmount(input: string, currency: Currency): number | null {
+  if (!isCurrency(currency)) return null;
   const text = normalizeDigits(input.trim());
   const decimals = CURRENCY_DECIMALS[currency];
   const pattern = decimals === 0 ? /^\d{1,16}$/ : /^\d{1,16}(\.\d{1,2})?$/;
   if (!pattern.test(text)) return null;
   const [whole, fraction = ""] = text.split(".");
-  const minor =
-    Number(whole) * 10 ** decimals + Number(fraction.padEnd(decimals, "0") || 0);
-  return Number.isSafeInteger(minor) && minor <= MAX_MINOR ? minor : null;
+  const minor = BigInt(whole) * BigInt(10 ** decimals) + BigInt(fraction.padEnd(decimals, "0") || 0);
+  return minor <= BigInt(MAX_MINOR) ? Number(minor) : null;
 }
 
 /** Formats minor units for display. Wrap the result in <bdi dir="ltr"> in the UI. */
@@ -38,24 +60,31 @@ export function formatAmount(
   currency: Currency,
   options: { digits?: Digits; sign?: boolean } = {},
 ): string {
+  const prefix = currencyPrefix(currency);
+  const checked = readMinor(minor);
   const decimals = CURRENCY_DECIMALS[currency];
   const locale = options.digits === "arabic" ? "ar-u-nu-arab" : "en-US";
-  const value = Math.abs(minor) / 10 ** decimals;
-  const body = new Intl.NumberFormat(locale, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
-  const sign = minor < 0 ? "−" : options.sign && minor > 0 ? "+" : "";
-  return currency === "USD" ? `${sign}$${body}` : `${sign}LBP ${body}`;
+  const absolute = BigInt(Math.abs(checked));
+  const scale = BigInt(10 ** decimals);
+  const whole = new Intl.NumberFormat(locale).format(absolute / scale);
+  const fraction = String(absolute % scale).padStart(decimals, "0");
+  const localizedFraction = options.digits === "arabic"
+    ? fraction.replace(/\d/g, (digit) => "٠١٢٣٤٥٦٧٨٩"[Number(digit)])
+    : fraction;
+  const body = decimals === 0 ? whole : `${whole}${options.digits === "arabic" ? "٫" : "."}${localizedFraction}`;
+  const sign = checked < 0 ? "−" : options.sign && checked > 0 ? "+" : "";
+  return `${sign}${prefix}${currency === "USD" ? "" : " "}${body}`;
 }
 
 /** Minor units back to the editable text a person would type ("54.2", "400000"). */
 export function toInputText(minor: number, currency: Currency): string {
+  if (!isCurrency(currency)) throw new RangeError("Unsupported currency");
   const decimals = CURRENCY_DECIMALS[currency];
-  const abs = Math.abs(minor);
+  const abs = BigInt(Math.abs(readMinor(minor)));
   if (decimals === 0) return String(abs);
-  const whole = Math.floor(abs / 100);
-  const fraction = String(abs % 100).padStart(2, "0").replace(/0+$/, "");
+  const scale = BigInt(10 ** decimals);
+  const whole = abs / scale;
+  const fraction = String(abs % scale).padStart(decimals, "0").replace(/0+$/, "");
   return fraction ? `${whole}.${fraction}` : String(whole);
 }
 
@@ -65,8 +94,6 @@ export function groupTyped(typed: string): string {
   const grouped = (whole || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return fraction === undefined ? grouped : `${grouped}.${fraction}`;
 }
-
-export const MAX_RATE = 10_000_000; // LBP per 1 USD
 
 /** Parses a typed rate ("89,500", "٨٩٥٠٠") into whole LBP per dollar, 1..MAX_RATE. Null if invalid. */
 export function parseRate(input: string): number | null {
@@ -80,9 +107,12 @@ export function parseRate(input: string): number | null {
  * Converts between USD and LBP at a rate of LBP per 1 USD, rounding half up.
  * USD to LBP: cents × rate ÷ 100. LBP to USD: lira × 100 ÷ rate. Integer math
  * only (BigInt), so large lira amounts keep every digit. Null if the result is
- * above MAX_MINOR. The same currency comes back unchanged.
+ * above MAX_MINOR. USD/LBP identity is allowed; every SYP call returns null.
  */
 export function convertAtRate(minor: number, from: Currency, to: Currency, lbpPerUsd: number): number | null {
+  if ((from !== "USD" && from !== "LBP") || (to !== "USD" && to !== "LBP")) return null;
+  if (!Number.isSafeInteger(minor) || minor < 0 || minor > MAX_MINOR
+      || !Number.isSafeInteger(lbpPerUsd) || lbpPerUsd < 1 || lbpPerUsd > MAX_RATE) return null;
   if (from === to) return minor;
   const m = BigInt(minor);
   const r = BigInt(lbpPerUsd);

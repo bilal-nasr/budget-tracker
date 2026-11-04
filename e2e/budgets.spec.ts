@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./support";
 
 // Demo data (no Supabase keys), USD this month: Groceries $340 of $300 (over), Eating out $95 of $80 (over),
-// Transport $42 of $120, Health $0 of $60, Fun $15 with no budget. Total limit $560, spent $492.
+// Transport $42 of $120, Health $0 of $60, Fun $15 with no budget. A loan repayment adds $50 fee only.
+// Total limit $560, spent $542; the repayment's $600 principal is excluded.
 // LBP: Transport 700,000 of 1,000,000. Limits start two months back; earlier months are empty.
 
 test("budgets show spent, left and over-budget with an icon and text", async ({ page }) => {
@@ -19,8 +20,8 @@ test("budgets show spent, left and over-budget with an icon and text", async ({ 
 
 test("summary band shows spent against the total limit", async ({ page }) => {
   await page.goto("/en/budgets");
-  await expect(page.locator("header")).toContainText("$492.00");
-  await expect(page.locator("header")).toContainText(/of\W+\$560\.00\W+·\W+\$68\.00\W+left/);
+  await expect(page.locator("header")).toContainText("$542.00");
+  await expect(page.locator("header")).toContainText(/of\W+\$560\.00\W+·\W+\$18\.00\W+left/);
 });
 
 test("currency switch shows LBP budgets only", async ({ page }) => {
@@ -75,7 +76,7 @@ test("edit sheet shows limits, a running total and salary after fixed", async ({
 test("Home shows what is left to spend and links over-budget categories to Budgets", async ({ page }) => {
   await page.goto("/en");
   const header = page.locator("header");
-  await expect(header).toContainText(/Left to spend this month\W+\$68\.00/);
+  await expect(header).toContainText(/Left to spend this month\W+\$18\.00/);
   await expect(header).toContainText(/Left to spend this month\W+LBP 300,000/);
   await header.getByRole("link", { name: "2 categories are over budget" }).click();
   await expect(page).toHaveURL(/\/en\/budgets/);

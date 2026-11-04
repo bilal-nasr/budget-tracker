@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { clearSalary, saveSalary } from "@/features/salary/actions";
-import { parseAmount, toInputText } from "@/lib/money";
+import { CURRENCY_DECIMALS, parseAmount, toInputText } from "@/lib/money";
 
 function Form({ onClose }: { onClose: () => void }) {
   const t = useTranslations("Salary");
+  const tCurrencies = useTranslations("Currencies");
   const { wallets, salary, walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const usable = wallets.filter((w) => !w.archived);
@@ -21,7 +22,7 @@ function Form({ onClose }: { onClose: () => void }) {
   const wallet = walletById(walletId);
   const currency = wallet?.currency ?? "USD";
   const [amount, setAmount] = useState(
-    salary && wallet ? toInputText(salary.amountMinor, wallet.currency) : "",
+    salary && wallet?.id === salary.walletId ? toInputText(salary.amountMinor, wallet.currency) : "",
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -58,7 +59,7 @@ function Form({ onClose }: { onClose: () => void }) {
         label={t("amount")}
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        inputMode={currency === "USD" ? "decimal" : "numeric"}
+        inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
         placeholder="0"
         autoComplete="off"
         dir="ltr"
@@ -74,8 +75,8 @@ function Form({ onClose }: { onClose: () => void }) {
               role="radio"
               aria-checked={w.id === walletId}
               onClick={() => {
+                if (w.currency !== currency) setAmount("");
                 setWalletId(w.id);
-                if (w.currency === "LBP") setAmount((v) => v.split(".")[0]);
               }}
               className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
             >
@@ -84,6 +85,7 @@ function Form({ onClose }: { onClose: () => void }) {
           ))}
         </div>
         <p className="text-[13px] text-muted-foreground">{t("walletHelp")}</p>
+        <p className="text-[13px] text-muted-foreground">{tCurrencies("reenterAmount", { currency })}</p>
       </div>
 
       {error ? (

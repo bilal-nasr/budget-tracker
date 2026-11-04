@@ -22,7 +22,7 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 
 /**
  * In-sheet keypad for touch devices. Keys are 56px tall, laid out left-to-right
- * in every language (numbers never mirror). LBP gets a "000" key, USD a ".".
+ * in every language (numbers never mirror). Whole-unit currencies get "000".
  */
 export function AmountKeypad({
   value,
@@ -55,9 +55,9 @@ export function AmountKeypad({
       <button
         type="button"
         className={cn(keyClass, "text-2xl font-semibold text-foreground")}
-        onClick={() => press(currency === "LBP" ? "000" : ".")}
+        onClick={() => press(CURRENCY_DECIMALS[currency] === 0 ? "000" : ".")}
       >
-        {currency === "LBP" ? "000" : "."}
+        {CURRENCY_DECIMALS[currency] === 0 ? "000" : "."}
       </button>
       <button type="button" className={keyClass} onClick={() => press("0")}>
         0

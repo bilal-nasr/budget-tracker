@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useAppData } from "@/components/providers/app-data";
 import { CategorySelect } from "@/components/categories/category-select";
+import { categoryOptions } from "@/features/categories/schema";
 import { InstallmentForm } from "@/components/installments/installment-sheet";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
@@ -11,17 +12,20 @@ import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from "@/features/fixed/actions";
 import type { FixedExpense } from "@/features/fixed/schema";
-import { parseAmount, toInputText } from "@/lib/money";
+import { CURRENCY_DECIMALS, parseAmount, toInputText } from "@/lib/money";
+import { parseOptionalDay } from "@/lib/numeric-text";
 
 export type FixedSheetState = { item: FixedExpense | null };
 
 function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => void }) {
   const t = useTranslations("Fixed");
+  const tCurrencies = useTranslations("Currencies");
+  const tc = useTranslations("Categories");
   const tAdd = useTranslations("Add");
   const { wallets, categories, walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const usable = wallets.filter((w) => !w.archived || w.id === item?.walletId);
-  const expenseCategories = categories.filter((c) => c.kind === "expense");
+  const expenseCategories = categoryOptions(categories, "expense", item?.categoryId);
 
   const [name, setName] = useState(item?.name ?? "");
   const [walletId, setWalletId] = useState(item?.walletId ?? usable[0]?.id ?? "");
@@ -35,18 +39,17 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
 
   const minor = amount.trim() === "" ? null : parseAmount(amount, currency);
   const amountError = amount.trim() !== "" && minor === null ? t("errorAmount") : null;
-  const dayNumber = dueDay.trim() === "" ? null : Number(dueDay);
-  const dayError =
-    dayNumber !== null && (!Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 31) ? t("errorDay") : null;
+  const { value: dayNumber, invalid: invalidDay } = parseOptionalDay(dueDay);
+  const dayError = invalidDay ? t("errorDay") : null;
   const canSave =
-    name.trim() !== "" && minor !== null && minor > 0 && wallet !== undefined && categoryId !== "" && !dayError;
+    name.trim() !== "" && minor !== null && minor > 0 && wallet !== undefined && expenseCategories.some((c) => c.id === categoryId) && !dayError;
 
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
     startTransition(async () => {
       const result = await action();
       if (!result.ok) {
-        setError(result.error === "notConfigured" ? t("errorPreview") : t("errorFailed"));
+        setError(result.error === "notConfigured" ? t("errorPreview") : result.error === "categoryUnavailable" ? tc("errorUnavailable") : t("errorFailed"));
         return;
       }
       onClose();
@@ -88,7 +91,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
               aria-checked={w.id === walletId}
               onClick={() => {
                 setWalletId(w.id);
-                if (w.currency === "LBP") setAmount((v) => v.split(".")[0]);
+                if (w.currency !== currency) setAmount("");
               }}
               className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
             >
@@ -100,9 +103,10 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
       </div>
       <TextField
         label={t("amount")}
+        description={tCurrencies("reenterAmount", { currency })}
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        inputMode={currency === "USD" ? "decimal" : "numeric"}
+        inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
         placeholder="0"
         autoComplete="off"
         dir="ltr"
@@ -119,7 +123,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         <TextField
           label={t("dueDay")}
           value={dueDay}
-          onChange={(e) => setDueDay(e.target.value.replace(/\D/g, "").slice(0, 2))}
+          onChange={(e) => setDueDay(e.target.value)}
           inputMode="numeric"
           placeholder="1 - 31"
           autoComplete="off"
