@@ -13,7 +13,13 @@ describe("cash settlement", () => {
   it("requires exact reconciliation, including exact tender without change", () => {
     expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", settlement: { tenderMinor: 1250, change: null } })).toEqual({ ok: true });
     expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", settlement: { tenderMinor: 2000, change: null } })).toEqual({ ok: false, reason: "mismatch" });
-    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrency: "LBP", settlement: { tenderMinor: 2000, change: { walletId, amountMinor: 671250 } } })).toEqual({ ok: false, reason: "rate" });
+    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrency: "LBP", settlement: { tenderMinor: 2000, change: { walletId, amountMinor: 671250 } } })).toEqual({ ok: true });
+  });
+  it.each([ ["USD", "LBP"], ["LBP", "USD"], ["USD", "SYP"], ["SYP", "LBP"] ] as const)("records actual %s paid and %s change without a rate", (payCurrency, changeCurrency) => {
+    expect(validateSettlement({ costMinor: 400, payCurrency, changeCurrency,
+      settlement: { tenderMinor: 500, change: { walletId, amountMinor: 10000 } } })).toEqual({ ok: true });
+    expect(validateSettlement({ costMinor: 500, payCurrency, changeCurrency,
+      settlement: { tenderMinor: 500, change: { walletId, amountMinor: 10000 } } })).toEqual({ ok: false, reason: "mismatch" });
   });
   it("uses half-up rounding once and preserves actual cash", () => {
     const r = { ...rate, quoteMajorNumerator: 200 };

@@ -28,6 +28,13 @@ describe("settlement row boundary", () => {
     expect(readSettlementSnapshot({ ...empty, tender_minor: 1250 }, context)).toEqual({ tenderMinor: 1250, change: null });
     expect(readSettlementSnapshot({ ...empty, tender_minor: 2000, change_wallet_id: walletId, change_minor: "750", change_currency: "USD" }, context)).toEqual({ tenderMinor: 2000, change: { walletId, amountMinor: 750, currency: "USD" } });
   });
+  it.each(["LBP", "SYP"] as const)("reads and serializes actual %s change without a quote", (currency) => {
+    const snapshot = readSettlementSnapshot({ ...empty, tender_minor: 2000, change_wallet_id: walletId,
+      change_minor: 10000, change_currency: currency }, context)!;
+    expect(snapshot).toEqual({ tenderMinor: 2000, change: { walletId, amountMinor: 10000, currency } });
+    expect(serializeSettlement(settlementInputFromSnapshot(snapshot))).toEqual({ tenderMinor: 2000,
+      change: { walletId, amountMinor: 10000 } });
+  });
   it("rejects unsafe or malformed numeric data before Number can round it", () => {
     for (const value of ["9007199254740993", 9007199254740992, "1e3", "12.50", Infinity, MAX_MINOR + 1, {}, true]) {
       expect(() => readSettlementSnapshot({ ...row, tender_minor: value }, context)).toThrow(SettlementSnapshotError);

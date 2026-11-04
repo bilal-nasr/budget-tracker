@@ -31,9 +31,9 @@ describe("cash settlement fields", () => {
     expect(screen.getByRole("option", { name: "ليرة · LBP" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });
-  it("parses an actual-cash draft, requires confirmation and an active receiver", () => {
+  it("parses actual cash without a rate and requires an active receiver", () => {
     expect(parseSettlementDraft(draft, usd.currency, 1250, [usd, lbp]).ok).toBe(true);
-    expect(parseSettlementDraft({ ...draft, rateConfirmed: false }, usd.currency, 1250, [usd, lbp])).toEqual({ ok: false, error: "rate" });
+    expect(parseSettlementDraft({ ...draft, rateText: "", rateConfirmed: false }, usd.currency, 1250, [usd, lbp])).toEqual({ ok: true, settlement: { tenderMinor: 2000, change: { walletId: lbp.id, amountMinor: 671250 } } });
     expect(parseSettlementDraft(draft, usd.currency, 1250, [usd, { ...lbp, archived: true }])).toEqual({ ok: false, error: "walletUnavailable" });
     expect(parseSettlementDraft({ ...draft, enabled: false }, usd.currency, 1250, [])).toEqual({ ok: true, settlement: null });
   });
@@ -44,17 +44,14 @@ describe("cash settlement fields", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: labels.title }));
     expect(onChange.mock.calls[0][0].enabled).toBe(true);
   });
-  it("explains disabled currencies without an active wallet", () => {
-    const create = vi.fn();
-    render(<CashSettlementFields draft={draft} payCurrency="USD" costMinor={1250} wallets={[usd, { ...lbp, archived: true }]} labels={labels} onChange={vi.fn()} onCreateWallet={create} />);
+  it("disables unavailable currencies without wallet-creation prompts or rate controls", () => {
+    render(<CashSettlementFields draft={draft} payCurrency="USD" costMinor={1250} wallets={[usd, { ...lbp, archived: true }]} labels={labels} onChange={vi.fn()} onCreateWallet={vi.fn()} />);
     expect((screen.getByRole("option", { name: "LBP" }) as HTMLOptionElement).disabled).toBe(true);
-    expect(screen.getByText(labels.needWallet("LBP"))).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: labels.createWallet }));
-    expect(create).toHaveBeenCalledOnce();
-  });
-  it("explains unavailable currencies even before they are selected", () => {
-    render(<CashSettlementFields draft={{ ...draft, changeCurrency: "USD", changeWalletId: usd.id, changeText: "7.50" }} payCurrency="USD" costMinor={1250} wallets={[usd]} labels={labels} onChange={vi.fn()} onCreateWallet={vi.fn()} />);
-    expect(screen.getByText(labels.needWallet("LBP"))).toBeTruthy();
+    expect(screen.queryByText(labels.needWallet("LBP"))).toBeNull();
+    expect(screen.queryByText(labels.needWallet("SYP"))).toBeNull();
+    expect(screen.queryByRole("button", { name: labels.createWallet })).toBeNull();
+    expect(screen.queryByLabelText(labels.rate)).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: labels.confirmRate })).toBeNull();
   });
   it("invalidates receiving amount and confirmation on currency changes", () => {
     const onChange = vi.fn();
@@ -63,7 +60,7 @@ describe("cash settlement fields", () => {
     expect(onChange.mock.calls[0][0]).toMatchObject({ changeCurrency: "USD", changeText: "", changeWalletId: usd.id, rateConfirmed: false, rateText: "" });
   });
   it("uses LTR text money fields inside Arabic context and rejects discrepancies", () => {
-    render(<div dir="rtl"><CashSettlementFields draft={{ ...draft, tenderText: "21" }} payCurrency="USD" costMinor={1250} wallets={[usd, lbp]} labels={{ ...labels, tender: "المبلغ المدفوع" }} onChange={vi.fn()} onCreateWallet={vi.fn()} /></div>);
+    render(<div dir="rtl"><CashSettlementFields draft={{ ...draft, tenderText: "12" }} payCurrency="USD" costMinor={1250} wallets={[usd, lbp]} labels={{ ...labels, tender: "المبلغ المدفوع" }} onChange={vi.fn()} onCreateWallet={vi.fn()} /></div>);
     const input = screen.getByLabelText("المبلغ المدفوع");
     expect(input.getAttribute("dir")).toBe("ltr");
     expect(input.getAttribute("type")).toBe("text");

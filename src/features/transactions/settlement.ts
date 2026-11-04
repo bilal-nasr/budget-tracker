@@ -98,7 +98,9 @@ export function validateSettlement(input: {
     if (change.rate) return { ok: false, reason: "rate" };
   } else {
     if (!settlementRatePair(payCurrency, changeCurrency)) return { ok: false, reason: "unsupportedPair" };
-    if (!change.rate) return { ok: false, reason: "rate" };
+    // Actual cross-currency cash movements need no manually supplied quote.
+    // Older snapshots with a quote still retain their reconciliation checks.
+    if (!change.rate) return tenderMinor > costMinor ? { ok: true } : { ok: false, reason: "mismatch" };
     const converted = convertSettlementMinor(value, changeCurrency, payCurrency, change.rate);
     if (converted === null) return { ok: false, reason: "rate" };
     value = converted;

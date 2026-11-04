@@ -2,9 +2,8 @@
 
 import { useId } from "react";
 import { TextField } from "@/components/ui/text-field";
-import { Button } from "@/components/ui/button";
 import { CURRENCY_DECIMALS, parseAmount, toInputText, type Currency } from "@/lib/money";
-import { parseSettlementRate, settlementRatePair, settlementRateText, validateSettlement, type CashSettlementInput, type SettlementError } from "@/features/transactions/settlement";
+import { settlementRateText, validateSettlement, type CashSettlementInput, type SettlementError } from "@/features/transactions/settlement";
 import type { SettlementSnapshot } from "@/features/transactions/settlement-serialization";
 
 export type SettlementWallet = { id: string; name: string; currency: Currency; archived: boolean };
@@ -59,11 +58,16 @@ export function parseSettlementDraft(
   if (changeMinor > 0) {
     const receiver = wallets.find((w) => w.id === draft.changeWalletId && w.currency === draft.changeCurrency);
     if (!receiver) return { ok: false, error: "walletUnavailable" };
-    if (draft.changeCurrency !== payCurrency) {
-      const rate = parseSettlementRate(draft.rateText, payCurrency, draft.changeCurrency);
-      if (!rate || !draft.rateConfirmed) return { ok: false, error: "rate" };
-      change = { walletId: receiver.id, amountMinor: changeMinor, rate };
-    } else change = { walletId: receiver.id, amountMinor: changeMinor };
+    change = { walletId: receiver.id, amountMinor: changeMinor };
+    // Retain historical quotes only when editing the exact original money.
+    // New and financially changed settlements record actual cash without a quote.
+    const originalRate = editContext?.original.settlement?.change?.rate;
+    if (originalRate) {
+      const historicalChange = { ...change, rate: originalRate };
+      if (unchangedFinancials(editContext, payCurrency, costMinor, { tenderMinor, change: historicalChange }, draft.changeCurrency)) {
+        change = historicalChange;
+      }
+    }
     if (receiver.archived && !unchangedFinancials(editContext, payCurrency, costMinor, { tenderMinor, change }, draft.changeCurrency)) {
       return { ok: false, error: "walletUnavailable" };
     }
@@ -74,7 +78,7 @@ export function parseSettlementDraft(
 }
 
 /** Controlled optional section. All copy is provided by bilingual message integration. */
-export function CashSettlementFields({ draft, payCurrency, costMinor, wallets, labels, onChange, onCreateWallet, disabled = false, editContext }: {
+export function CashSettlementFields({ draft, payCurrency, costMinor, wallets, labels, onChange, disabled = false, editContext }: {
   draft: CashSettlementDraft; payCurrency: Currency; costMinor: number | null;
   wallets: readonly SettlementWallet[]; labels: CashSettlementLabels;
   onChange: (draft: CashSettlementDraft) => void; onCreateWallet: () => void; disabled?: boolean;
@@ -82,11 +86,8 @@ export function CashSettlementFields({ draft, payCurrency, costMinor, wallets, l
 }) {
   const id = useId();
   const currencies = Object.keys(CURRENCY_DECIMALS) as Currency[];
-  const missingCurrencies = currencies.filter((c) => !wallets.some((w) => !w.archived && w.currency === c));
   const originalChange = editContext?.original.settlement?.change;
   const receivers = wallets.filter((w) => w.currency === draft.changeCurrency && (!w.archived || w.id === originalChange?.walletId));
-  const cross = payCurrency !== draft.changeCurrency;
-  const pair = settlementRatePair(payCurrency, draft.changeCurrency);
   const parsed = parseSettlementDraft(draft, payCurrency, costMinor, wallets, editContext);
   const selectClass = "h-12 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-base text-foreground focus-visible:outline-2 focus-visible:outline-ring";
   const change = (patch: Partial<CashSettlementDraft>) => onChange({ ...draft, ...patch });
@@ -112,12 +113,6 @@ export function CashSettlementFields({ draft, payCurrency, costMinor, wallets, l
               {currencies.map((c) => <option key={c} value={c} disabled={!wallets.some((w) => !w.archived && w.currency === c) && originalChange?.currency !== c}>{c}</option>)}
             </select>
           </label>
-          {missingCurrencies.length > 0 ? (
-            <div className="flex flex-col gap-2 text-sm">
-              {missingCurrencies.map((c) => <p key={c}>{labels.needWallet(c)}</p>)}
-              <Button type="button" variant="outline" className="self-start" onClick={onCreateWallet}>{labels.createWallet}</Button>
-            </div>
-          ) : null}
           <TextField type="text" label={labels.change} value={draft.changeText} placeholder="0" onChange={(e) => change({ changeText: e.target.value })} dir="ltr" inputMode={CURRENCY_DECIMALS[draft.changeCurrency] ? "decimal" : "numeric"} autoComplete="off" />
           {receivers.length > 0 ? (
             <label htmlFor={`${id}-wallet`} className="flex flex-col gap-1.5 text-sm font-medium">
@@ -127,16 +122,6 @@ export function CashSettlementFields({ draft, payCurrency, costMinor, wallets, l
                 {receivers.map((w) => <option key={w.id} value={w.id} disabled={w.archived && !parsed.ok}>{w.name} · {w.currency}</option>)}
               </select>
             </label>
-          ) : null}
-          {cross && pair ? (
-            <div className="flex flex-col gap-2">
-              <bdi dir="ltr" className="text-sm text-muted-foreground">1 {pair.base} = R {pair.quote}</bdi>
-              <TextField type="text" label={labels.rate} value={draft.rateText} onChange={(e) => change({ rateText: e.target.value, rateConfirmed: false })} dir="ltr" inputMode="decimal" autoComplete="off" />
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-                <input type="checkbox" className="size-5 accent-primary" checked={draft.rateConfirmed} onChange={(e) => change({ rateConfirmed: e.target.checked })} />
-                {labels.confirmRate}
-              </label>
-            </div>
           ) : null}
           {!parsed.ok ? <p role="alert" className="text-sm font-medium">{labels.errors[parsed.error]}</p> : null}
         </div>

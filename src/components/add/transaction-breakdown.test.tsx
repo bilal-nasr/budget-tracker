@@ -283,7 +283,7 @@ describe("cashier aggregate integration", () => {
     mount({ mode: "edit", initial: cashSaved }, locale);
     expect((screen.getByLabelText(m.Cashier.tender) as HTMLInputElement).value).toBe("20");
     expect((screen.getByLabelText(m.Cashier.change) as HTMLInputElement).value).toBe("97500");
-    expect((screen.getByLabelText(m.Cashier.rate) as HTMLInputElement).value).toBe("13000");
+    expect(screen.queryByLabelText(m.Cashier.rate)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: m.Add.saveChanges }));
     await waitFor(() => expect(mock.updateTransaction).toHaveBeenCalledWith(id, expect.objectContaining({
       amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
@@ -300,21 +300,21 @@ describe("cashier aggregate integration", () => {
       amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
     }), 17));
   });
-  it("requires reconfirmation on duplicate and submits the fresh draft UUID", async () => {
+  it("duplicates actual cash without rate confirmation and submits the fresh draft UUID", async () => {
     const fresh = "00000000-0000-4000-8000-000000000098";
     mount({ mode: "add", initial: cashSaved, draftId: fresh });
-    expect((screen.getByRole("button", { name: en.Add.save }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("checkbox", { name: en.Cashier.confirmRate }));
+    expect((screen.getByRole("button", { name: en.Add.save }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole("checkbox", { name: en.Cashier.confirmRate })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: en.Add.save }));
     await waitFor(() => expect(mock.createTransaction).toHaveBeenCalledWith(expect.objectContaining({ amountMinor: 1250,
       settlement: expect.objectContaining({ tenderMinor: 2000 }),
     }), fresh));
   });
-  it("preserves the cashier draft when requesting a new receiving wallet", () => {
+  it("keeps the cashier draft without a wallet-creation prompt", () => {
     const openWallet = vi.fn();
     wrap(<TransactionSheet state={{ mode: "edit", initial: cashSaved }} onClose={mock.close} onCreateWallet={openWallet} />);
-    fireEvent.click(screen.getByRole("button", { name: en.Cashier.createWallet }));
-    expect(openWallet).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: en.Cashier.createWallet })).toBeNull();
+    expect(openWallet).not.toHaveBeenCalled();
     expect(mock.close).not.toHaveBeenCalled();
     expect((screen.getByLabelText(en.Cashier.tender) as HTMLInputElement).value).toBe("20");
   });
