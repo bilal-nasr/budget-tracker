@@ -19,5 +19,5 @@ export type ReceiptInput = z.infer<typeof receiptSchema>;
 export type PendingReceipt = { id: string; amountMinor: number; occurredOn: string; walletId: string };
 export type PendingPayment = {
   id: string; client: string; project: string; currency: Currency; totalMinor: number; receivedMinor: number;
-  remainingMinor: number; dueOn: string | null; revision: number; hasReceiptHistory: boolean; receipts: PendingReceipt[];
+  remainingMinor: number; dueOn: string | null; revision: number; hasReceiptHistory: boolean;
 };

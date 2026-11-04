@@ -18,29 +18,32 @@ async function readAll<T>(page: (from: number, to: number) => PromiseLike<{ data
   }
 }
 
+const DEMO_PAYMENT_ID = "ab000000-0000-4000-8000-000000000001";
+
+/** Job summaries only. Receipt history loads per job on demand (getPendingReceipts). */
 export async function getPendingPayments(): Promise<PendingPayment[]> {
   if (!supabaseConfigured()) return [{
-    id: "ab000000-0000-4000-8000-000000000001", client: "Demo client", project: "Website design", currency: "USD",
+    id: DEMO_PAYMENT_ID, client: "Demo client", project: "Website design", currency: "USD",
     totalMinor: 60000, receivedMinor: 20000, remainingMinor: 40000, dueOn: null, revision: 1, hasReceiptHistory: true,
-    receipts: [{ id: "ab000000-0000-4000-8000-000000000002", amountMinor: 20000, occurredOn: "2026-11-01", walletId: "00000000-0000-4000-8000-000000000001" }],
   }];
   const db = await createClient();
-  const [jobs, receipts] = await Promise.all([
-    readAll<JobRow>((from, to) => db.from("pending_payment_progress").select("id,client,project,currency,total_minor,received_minor,remaining_minor,due_on,revision,has_receipt_history").is("deleted_at", null).order("created_at", { ascending: false }).order("id").range(from, to)),
-    readAll<ReceiptRow>((from, to) => db.from("transactions").select("id,pending_payment_id,amount_minor,occurred_on,wallet_id").not("pending_payment_id", "is", null).is("deleted_at", null).order("occurred_on", { ascending: false }).order("created_at", { ascending: false }).order("id").range(from, to)),
-  ]);
-  const history = new Map<string, PendingReceipt[]>();
-  for (const receipt of receipts) {
-    const group = history.get(receipt.pending_payment_id) ?? [];
-    group.push({ id: receipt.id, amountMinor: readMinor(receipt.amount_minor), occurredOn: receipt.occurred_on, walletId: receipt.wallet_id });
-    history.set(receipt.pending_payment_id, group);
-  }
+  const jobs = await readAll<JobRow>((from, to) => db.from("pending_payment_progress").select("id,client,project,currency,total_minor,received_minor,remaining_minor,due_on,revision,has_receipt_history").is("deleted_at", null).order("created_at", { ascending: false }).order("id").range(from, to));
   return jobs.map((job) => {
     if (!isCurrency(job.currency)) throw new Error("Invalid pending payment currency");
     return {
       id: job.id, client: job.client, project: job.project, currency: job.currency, totalMinor: readMinor(job.total_minor),
       receivedMinor: readMinor(job.received_minor), remainingMinor: readMinor(job.remaining_minor), dueOn: job.due_on, revision: job.revision,
-      hasReceiptHistory: job.has_receipt_history, receipts: history.get(job.id) ?? [],
+      hasReceiptHistory: job.has_receipt_history,
     };
   });
+}
+
+/** Live receipts of one job, newest first. RLS limits rows to the signed-in owner. */
+export async function getPendingReceipts(paymentId: string): Promise<PendingReceipt[]> {
+  if (!supabaseConfigured()) return paymentId === DEMO_PAYMENT_ID
+    ? [{ id: "ab000000-0000-4000-8000-000000000002", amountMinor: 20000, occurredOn: "2026-11-01", walletId: "00000000-0000-4000-8000-000000000001" }]
+    : [];
+  const db = await createClient();
+  const receipts = await readAll<ReceiptRow>((from, to) => db.from("transactions").select("id,pending_payment_id,amount_minor,occurred_on,wallet_id").eq("pending_payment_id", paymentId).is("deleted_at", null).order("occurred_on", { ascending: false }).order("created_at", { ascending: false }).order("id").range(from, to));
+  return receipts.map((receipt) => ({ id: receipt.id, amountMinor: readMinor(receipt.amount_minor), occurredOn: receipt.occurred_on, walletId: receipt.wallet_id }));
 }

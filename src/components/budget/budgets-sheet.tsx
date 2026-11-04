@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { saveBudgets } from "@/features/budgets/actions";
 import type { MonthBudgets } from "@/features/budgets/schema";
-import { categoryName } from "@/features/categories/schema";
+import { categoryName } from "@/features/categories/catalogue";
 import { CURRENCY_DECIMALS, MoneyRangeError, parseAmount, sumMinor, toInputText } from "@/lib/money";
 import { numericInputClassName, numericInputProps } from "@/components/ui/text-field";
 

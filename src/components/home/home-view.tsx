@@ -19,7 +19,7 @@ import type { MonthBudgets } from "@/features/budgets/schema";
 import { isOver } from "@/features/budgets/rows";
 import type { SalaryStatus } from "@/features/salary/schema";
 import type { Transaction } from "@/features/transactions/schema";
-import { totalsByCurrency } from "@/features/wallets/schema";
+import { totalsByCurrency } from "@/features/wallets/totals";
 import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CURRENCIES, formatAmount } from "@/lib/money";

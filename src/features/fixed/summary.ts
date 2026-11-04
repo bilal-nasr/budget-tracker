@@ -1,4 +1,4 @@
-import { dueThisCycle, type Installment } from "@/features/installments/schema";
+import { dueThisCycle, type Installment } from "@/features/installments/cycle";
 import type { Wallet } from "@/features/wallets/schema";
 import { CURRENCIES, emptyCurrencyTotals, sumMinor, type Currency } from "@/lib/money";
 import type { FixedExpense } from "./schema";

@@ -8,6 +8,7 @@ import {
   type ExpenseItemDraft,
   type ExpenseItem,
 } from "./breakdown";
+import { isExpenseItemInput } from "./breakdown-summary";
 
 const item = (amountMinor: number) => ({ description: "Phone credits", amountMinor });
 const draft = (amountText = "20", description = "Phone credits"): ExpenseItemDraft => ({
@@ -33,6 +34,18 @@ describe("expense item input", () => {
     for (const key of ["userId", "walletId", "currency", "items", "parentId", "categoryId"]) {
       expect(expenseItemInputSchema.safeParse({ ...item(1), [key]: "forged" }).success).toBe(false);
     }
+  });
+});
+
+describe("zod-free item check", () => {
+  // summarizeBreakdown ships to Home without zod; it must agree with the schema.
+  it.each([
+    ["Phone credits", 1], ["  Phone credits  ", 2000], ["a".repeat(140), MAX_MINOR], [" a".repeat(70), 5],
+    ["", 1], [" \n\t ", 1], ["a".repeat(141), 1], [" x ", 1], ["Phone", 0], ["Phone", -1], ["Phone", 0.5],
+    ["Phone", MAX_MINOR + 1], ["Phone", Number.MAX_SAFE_INTEGER + 1], ["Phone", Infinity], ["Phone", NaN],
+  ])("matches expenseItemInputSchema for %j / %s", (description, amountMinor) => {
+    expect(isExpenseItemInput({ description, amountMinor }))
+      .toBe(expenseItemInputSchema.safeParse({ description, amountMinor }).success);
   });
 });
 

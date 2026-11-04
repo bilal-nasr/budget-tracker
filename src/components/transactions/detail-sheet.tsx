@@ -9,11 +9,12 @@ import { useAppData } from "@/components/providers/app-data";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
-import { categoryName } from "@/features/categories/schema";
+import { categoryName } from "@/features/categories/catalogue";
 import { deleteTransaction, restoreTransaction } from "@/features/transactions/actions";
-import { signedMinor, type Transaction } from "@/features/transactions/schema";
+import { signedMinor } from "@/features/transactions/amounts";
+import type { Transaction } from "@/features/transactions/schema";
 import { ExpenseBreakdown } from "./expense-breakdown";
-import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-fields";
+import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-labels";
 import { Link } from "@/i18n/navigation";
 import { CashSettlementSummary } from "./cash-settlement-summary";
 

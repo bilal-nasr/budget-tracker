@@ -19,7 +19,7 @@ import { todayIn } from "@/features/transactions/group";
 import { summarizeFixed } from "@/features/fixed/summary";
 import { CURRENCIES, formatAmount } from "@/lib/money";
 import { ExpenseBreakdown } from "@/components/transactions/expense-breakdown";
-import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-fields";
+import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-labels";
 
 function shortDate(date: string, locale: string): string {
   const [y, m, d] = date.split("-").map(Number);

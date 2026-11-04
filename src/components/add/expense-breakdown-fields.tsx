@@ -2,7 +2,6 @@
 
 import { useId, useRef, useState } from "react";
 import { ChevronDown, CircleAlert, Plus, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
@@ -13,24 +12,8 @@ import {
   type ExpenseItemDraft,
 } from "@/features/transactions/breakdown";
 import { CURRENCY_DECIMALS, parseAmount, type Currency } from "@/lib/money";
-
-/** Copy is supplied by the translated parent; this component owns no locale. */
-export type ExpenseBreakdownLabels = {
-  title: string;
-  description: string;
-  amount: string;
-  addItem: string;
-  removeItem: (index: number) => string;
-  itemCount: (count: number) => string;
-  itemizedTotal: string;
-  remainder: string;
-  fullyItemized: string;
-  exceedsTotal: string;
-  invalidItem: string;
-  invalidDescription: string;
-  invalidAmount: string;
-  maxItems: string;
-};
+import type { ExpenseBreakdownLabels } from "./expense-breakdown-labels";
+export { useExpenseBreakdownLabels, type ExpenseBreakdownLabels } from "./expense-breakdown-labels";
 
 export type ExpenseBreakdownFieldsProps = {
   currency: Currency;
@@ -40,17 +23,6 @@ export type ExpenseBreakdownFieldsProps = {
   labels: ExpenseBreakdownLabels;
   disabled?: boolean;
 };
-
-export function useExpenseBreakdownLabels(): ExpenseBreakdownLabels {
-  const t = useTranslations("Breakdown");
-  return {
-    title: t("title"), description: t("description"), amount: t("amount"), addItem: t("addItem"),
-    removeItem: (index) => t("removeItem", { index }), itemCount: (count) => t("itemCount", { count }),
-    itemizedTotal: t("itemizedTotal"), remainder: t("remainder"), fullyItemized: t("fullyItemized"),
-    exceedsTotal: t("exceedsTotal"), invalidItem: t("invalidItem"), invalidDescription: t("invalidDescription"),
-    invalidAmount: t("invalidAmount"), maxItems: t("maxItems"),
-  };
-}
 
 /** Optional, controlled composition of one expense. Saving is the parent's job. */
 export function ExpenseBreakdownFields({

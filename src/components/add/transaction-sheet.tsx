@@ -26,7 +26,7 @@ import {
 } from "@/features/transactions/actions";
 import type { Transaction, TransactionInput } from "@/features/transactions/schema";
 import { parseExpenseItemDrafts, type ExpenseItemDraft } from "@/features/transactions/breakdown";
-import { categoryOptions } from "@/features/categories/schema";
+import { categoryOptions } from "@/features/categories/catalogue";
 import { CURRENCY_DECIMALS, convertAtRate, currencyPrefix, groupTyped, parseAmount, parseRate, supportsUsdLbpRate, toInputText, type Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 

@@ -12,7 +12,7 @@ import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { payInstallment } from "@/features/installments/actions";
-import { canPayNormally, paymentAmountDefault, type Installment } from "@/features/installments/schema";
+import { canPayNormally, paymentAmountDefault, type Installment } from "@/features/installments/cycle";
 import { cyclePaymentInputSchema, type CyclePaymentInput } from "@/features/installments/cycle-input";
 import { deleteTransaction } from "@/features/transactions/actions";
 import { todayIn } from "@/features/transactions/group";

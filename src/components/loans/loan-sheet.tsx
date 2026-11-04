@@ -15,7 +15,7 @@ import { createLoan, updateLoan } from "@/features/loans/actions";
 import { loanErrorKey } from "@/features/loans/errors";
 import { todayIn } from "@/features/transactions/group";
 import { CURRENCY_DECIMALS, parseAmount, toInputText } from "@/lib/money";
-import { activeCategories } from "@/features/categories/schema";
+import { activeCategories } from "@/features/categories/catalogue";
 import { useRouter } from "@/i18n/navigation";
 import { useLoanSubmission } from "./use-loan-submission";
 

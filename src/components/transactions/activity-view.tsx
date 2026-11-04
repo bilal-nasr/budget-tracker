@@ -11,7 +11,7 @@ import { TransactionRow } from "@/components/transactions/transaction-row";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { categoryName } from "@/features/categories/schema";
+import { categoryName } from "@/features/categories/catalogue";
 import { loadTransactions } from "@/features/transactions/actions";
 import { addDays, groupByDay, todayIn } from "@/features/transactions/group";
 import type { Cursor, Filters, Page } from "@/features/transactions/schema";

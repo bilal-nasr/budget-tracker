@@ -9,9 +9,11 @@ import { isRtl, routing } from "@/i18n/routing";
 import "../globals.css";
 
 // One family designed for Latin and Arabic together, so mixed lines match.
+// `subsets` only picks what is preloaded: the Arabic face is still declared and
+// loads when Arabic text renders, so English pages skip its 23 KB download.
 const sans = Readex_Pro({
   variable: "--font-sans",
-  subsets: ["latin", "arabic"],
+  subsets: ["latin"],
   display: "swap",
 });
 

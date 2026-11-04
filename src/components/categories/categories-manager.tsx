@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimistic, useRef, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -9,14 +10,18 @@ import { Segmented } from "@/components/ui/segmented";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { restoreCategory } from "@/features/categories/actions";
 import { categoryErrorMessageKey } from "@/features/categories/messages";
-import { activeCategories, categoryName, type Category } from "@/features/categories/schema";
-import { CategorySheet } from "./category-sheet";
+import { activeCategories, categoryName, type Category } from "@/features/categories/catalogue";
+
+// The editor loads on first open, then stays mounted for its exit animation.
+const CategorySheet = dynamic(() => import("./category-sheet").then((m) => m.CategorySheet));
 
 export function CategoriesManager({ categories }: { categories: Category[] }) {
   const t = useTranslations("Categories");
   const locale = useLocale();
   const [kind, setKind] = useState<Category["kind"]>("expense");
-  const [editor, setEditor] = useState<{ category: Category | null } | null>(null);
+  const [editor, setEditorState] = useState<{ category: Category | null } | null>(null);
+  const [editorMounted, setEditorMounted] = useState(false);
+  const setEditor = (next: { category: Category | null } | null) => { if (next) setEditorMounted(true); setEditorState(next); };
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const addRef = useRef<HTMLButtonElement>(null);
@@ -55,7 +60,7 @@ export function CategoriesManager({ categories }: { categories: Category[] }) {
         </ul>
       </details> : null}
       {error ? <p role="alert" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm">{error}</p> : null}
-      <CategorySheet open={editor !== null} category={editor?.category ?? null} kind={kind} onOpenChange={(open) => { if (!open) setEditor(null); }} onOptimisticUpdate={updateOptimistic} />
+      {editorMounted ? <CategorySheet open={editor !== null} category={editor?.category ?? null} kind={kind} onOpenChange={(open) => { if (!open) setEditor(null); }} onOptimisticUpdate={updateOptimistic} /> : null}
     </div>
   );
 }

@@ -8,7 +8,8 @@ import { useAppData } from "@/components/providers/app-data";
 import { useComposer } from "@/components/shell/composer";
 import { EmptyState } from "@/components/shell/empty-state";
 import { Button } from "@/components/ui/button";
-import { totalsByCurrency, type Wallet } from "@/features/wallets/schema";
+import { totalsByCurrency } from "@/features/wallets/totals";
+import type { Wallet } from "@/features/wallets/schema";
 import { CURRENCIES } from "@/lib/money";
 import { Link } from "@/i18n/navigation";
 

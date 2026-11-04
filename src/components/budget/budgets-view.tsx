@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { isOver } from "@/features/budgets/rows";
 import type { BudgetRow, MonthBudgets } from "@/features/budgets/schema";
-import { categoryName } from "@/features/categories/schema";
+import { categoryName } from "@/features/categories/catalogue";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { formatAmount, type Currency } from "@/lib/money";
 

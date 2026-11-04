@@ -4,7 +4,7 @@ import { useId } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { categoryName, type Category } from "@/features/categories/schema";
+import { categoryName, type Category } from "@/features/categories/catalogue";
 
 /**
  * Compact category picker: one 48px field that opens a list, instead of a grid

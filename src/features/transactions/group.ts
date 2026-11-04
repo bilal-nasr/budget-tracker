@@ -1,4 +1,5 @@
-import { reportingMinor, type Transaction } from "./schema";
+import { reportingMinor } from "./amounts";
+import type { Transaction } from "./schema";
 import { CURRENCIES, emptyCurrencyTotals, sumMinor, type Currency } from "@/lib/money";
 
 export type DayGroup = {

@@ -11,7 +11,7 @@ import { TextField } from "@/components/ui/text-field";
 import { recordPendingReceipt } from "@/features/pending-payments/actions";
 import { receiptSchema, type PendingPayment, type ReceiptInput } from "@/features/pending-payments/schema";
 import { pendingErrorKey } from "@/features/pending-payments/errors";
-import { categoryName } from "@/features/categories/schema";
+import { categoryName } from "@/features/categories/catalogue";
 import { todayIn } from "@/features/transactions/group";
 import { CURRENCY_DECIMALS, parseAmount } from "@/lib/money";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -29,7 +29,7 @@ export function ReceiptSheet({ item, onClose }: { item: PendingPayment; onClose:
   const [categoryId, setCategoryId] = useState(income.find((category) => category.nameEn !== "Salary")?.id ?? income[0]?.id ?? "");
   const [date, setDate] = useState(todayIn(timezone));
   const formId = useId();
-  const submission = useLoanSubmission<ReceiptInput, { id: string }>(recordPendingReceipt, () => { onClose(); toast(t("recorded")); router.refresh(); });
+  const submission = useLoanSubmission<ReceiptInput, { id: string }>(recordPendingReceipt, () => { onClose(); toast(t("recorded")); });
   const amount = parseAmount(text, item.currency);
   const parsed = receiptSchema.safeParse({ requestId, paymentId: item.id, walletId, categoryId, amountMinor: amount, occurredOn: date });
   const valid = parsed.success && amount !== null && amount <= item.remainingMinor && date <= todayIn(timezone)

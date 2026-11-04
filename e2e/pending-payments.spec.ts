@@ -8,6 +8,11 @@ for (const locale of ["en", "ar"] as const) {
     await page.getByRole("link", { name: ar ? "دفعات منتظرة" : "Pending payments", exact: true }).click();
     await expect(page.getByRole("heading", { name: ar ? "دفعات منتظرة" : "Pending payments", exact: true })).toBeVisible();
     await expect(page.getByText("Website design", { exact: true })).toBeVisible();
+    // Receipt history loads on first open, then shows its count.
+    const history = page.locator("details").filter({ has: page.getByText(ar ? "سجل الدفعات المستلمة" : "Receipt history") });
+    await history.locator("summary").click();
+    await expect(history.getByText("$200.00", { exact: true })).toBeVisible();
+    await expect(history.locator("summary")).toHaveText(ar ? "سجل الدفعات المستلمة (1)" : "Receipt history (1)");
     await page.screenshot({ path: testInfo.outputPath(`pending-${locale}.png`), fullPage: true, animations: "disabled" });
     await page.getByRole("button", { name: ar ? "تسجيل دفعة مستلمة" : "Record receipt", exact: true }).click();
     const dialog = page.getByRole("dialog");

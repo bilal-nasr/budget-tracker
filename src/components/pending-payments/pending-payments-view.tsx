@@ -1,27 +1,30 @@
 "use client";
 import { useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
 import { Button } from "@/components/ui/button";
-import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { EmptyState } from "@/components/shell/empty-state";
 import { deletePendingPayment } from "@/features/pending-payments/actions";
 import { pendingErrorKey } from "@/features/pending-payments/errors";
 import type { PendingPayment } from "@/features/pending-payments/schema";
 import { todayIn } from "@/features/transactions/group";
 import { CURRENCIES, sumMinor } from "@/lib/money";
-import { Link, useRouter } from "@/i18n/navigation";
-import { PaymentSheet } from "./payment-sheet";
-import { ReceiptSheet } from "./receipt-sheet";
+import { Link } from "@/i18n/navigation";
+import { PendingReceiptHistory } from "./pending-receipt-history";
+
+// Sheets load on first open; the list renders without their code.
+const PaymentSheet = dynamic(() => import("./payment-sheet").then((m) => m.PaymentSheet));
+const ReceiptSheet = dynamic(() => import("./receipt-sheet").then((m) => m.ReceiptSheet));
+const ConfirmSheet = dynamic(() => import("@/components/ui/confirm-sheet").then((m) => m.ConfirmSheet));
 
 export function PendingPaymentsView({ payments }: { payments: PendingPayment[] }) {
   const t = useTranslations("PendingPayments");
   const locale = useLocale();
-  const router = useRouter();
-  const { timezone, walletById } = useAppData();
+  const { timezone } = useAppData();
   const [sheet, setSheet] = useState<{ mode: "create" | "edit" | "receive" | "delete"; id?: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -36,7 +39,7 @@ export function PendingPaymentsView({ payments }: { payments: PendingPayment[] }
       try {
         const result = await deletePendingPayment(current.id, current.revision);
         if (!result.ok) { setDeleteError(t(pendingErrorKey(result.error))); return; }
-        close(); toast(t("deleted")); router.refresh();
+        close(); toast(t("deleted"));
       } catch { setDeleteError(t("errorFailed")); }
     });
   };
@@ -56,15 +59,7 @@ export function PendingPaymentsView({ payments }: { payments: PendingPayment[] }
       <Button variant="outline" onClick={() => setSheet({ mode: "edit", id: item.id })}>{t("edit")}</Button>
       {!item.hasReceiptHistory ? <Button variant="ghost" onClick={() => setSheet({ mode: "delete", id: item.id })}>{t("delete")}</Button> : null}
     </div>
-    {item.receipts.length ? <details className="border-t border-border pt-1">
-      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">{t("history")} ({item.receipts.length})</summary>
-      <ul>{item.receipts.map((receipt) => <li key={receipt.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-border py-3 text-sm">
-        <span className="min-w-0"><time dateTime={receipt.occurredOn}>{formatDate(receipt.occurredOn)}</time>{walletById(receipt.walletId) ? <bdi className="block break-words text-muted-foreground">{walletById(receipt.walletId)?.name}</bdi> : null}</span>
-        <Amount minor={receipt.amountMinor} currency={item.currency} />
-      </li>)}</ul>
-      <p className="text-sm text-muted-foreground">{t("historyHelp")}</p>
-      <Link href="/activity?kind=income" className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4">{t("activity")}</Link>
-    </details> : null}
+    {item.receivedMinor > 0 ? <PendingReceiptHistory key={`${item.id}:${item.revision}:${item.receivedMinor}`} item={item} formatDate={formatDate} /> : null}
   </li>)}</ul>;
   return <>
     <div className="flex flex-col gap-6">

@@ -5,8 +5,9 @@ import { useLocale, useTranslations } from "next-intl";
 import { useAppData } from "@/components/providers/app-data";
 import { Amount } from "@/components/money/amount";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
-import { categoryName } from "@/features/categories/schema";
-import { signedMinor, type Transaction } from "@/features/transactions/schema";
+import { categoryName } from "@/features/categories/catalogue";
+import { signedMinor } from "@/features/transactions/amounts";
+import type { Transaction } from "@/features/transactions/schema";
 import { cn } from "@/lib/utils";
 
 /**

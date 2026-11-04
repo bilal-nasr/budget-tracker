@@ -23,6 +23,7 @@ it("opens a compact editor with a single-language name and all eight existing mo
   mock.createCategory.mockResolvedValue({ ok: false, error: "notConfigured" });
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Add category" }));
+  await screen.findByRole("dialog"); // the editor loads on first open
   expect(screen.getAllByRole("radio").length).toBe(13); // 2 kind + 8 tile + 3 color
   fireEvent.change(screen.getByLabelText("Arabic name"), { target: { value: "هدايا" } });
   fireEvent.click(screen.getByRole("button", { name: "Save category" }));
@@ -34,7 +35,7 @@ it("confirms removal and explains history, budget and template behavior", async 
   mock.removeCategory.mockResolvedValue({ ok: false, error: "inUse" });
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Edit Food" }));
-  fireEvent.click(screen.getByRole("button", { name: "Remove category" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Remove category" }));
   expect(screen.getByRole("dialog", { name: "Remove this category?" }).textContent).toContain("Existing budget limits continue");
   expect(mock.removeCategory).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
@@ -49,12 +50,12 @@ it("rolls back a failed archive restore and shows the duplicate recovery", async
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("already has this name"));
   await waitFor(() => expect(screen.getByRole("button", { name: "Restore Food" })).toBeTruthy());
 });
-it("uses Arabic labels and isolates a custom category name", () => {
+it("uses Arabic labels and isolates a custom category name", async () => {
   mount("ar");
   const edit = screen.getByRole("button", { name: "تعديل طعام" });
   expect(edit.querySelector("bdi")?.textContent).toBe("طعام");
   fireEvent.click(edit);
-  expect(screen.getByLabelText("الاسم بالعربية")).toBeTruthy();
+  expect(await screen.findByLabelText("الاسم بالعربية")).toBeTruthy();
   expect(screen.getByRole("radio", { name: "معيّن" })).toBeTruthy();
 });
 
@@ -62,7 +63,7 @@ it("retains editor input when a request is interrupted", async () => {
   mock.createCategory.mockRejectedValue(new Error("connection lost"));
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Add category" }));
-  fireEvent.change(screen.getByLabelText("English name"), { target: { value: "Travel" } });
+  fireEvent.change(await screen.findByLabelText("English name"), { target: { value: "Travel" } });
   fireEvent.click(screen.getByRole("button", { name: "Save category" }));
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("could not be saved"));
   expect((screen.getByLabelText("English name") as HTMLInputElement).value).toBe("Travel");

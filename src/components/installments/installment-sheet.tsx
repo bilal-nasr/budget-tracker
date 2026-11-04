@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { CategorySelect } from "@/components/categories/category-select";
-import { categoryOptions } from "@/features/categories/schema";
+import { categoryOptions } from "@/features/categories/catalogue";
 import { useAppData } from "@/components/providers/app-data";
 import { InstallmentHistory } from "./installment-history";
 import { Button } from "@/components/ui/button";

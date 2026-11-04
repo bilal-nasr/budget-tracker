@@ -6,6 +6,7 @@ export { transactionWriteInputSchema as transactionInputSchema } from "./mutatio
 export type { TransactionWriteInput as TransactionInput } from "./mutation-input";
 export { expenseItemInputSchema } from "./breakdown";
 export type { ExpenseItem, ExpenseItemInput, ExpenseItemDraft } from "./breakdown";
+export { signedMinor, reportingMinor } from "./amounts";
 
 /** Kinds a person enters through the Add sheet's category flow. */
 export const txnKindSchema = z.enum(["expense", "income"]);
@@ -95,14 +96,3 @@ export const filtersSchema = z.object({
 export type Filters = z.infer<typeof filtersSchema>;
 
 export type Page = { rows: Transaction[]; next: Cursor | null };
-
-/** Signed amount in the row's own wallet: income is positive, expenses and money leaving are negative. */
-export const signedMinor = (t: Pick<Transaction, "kind" | "amountMinor"> & Partial<Pick<Transaction, "loanFlow">>) =>
-  t.kind === "income" || (t.kind === "loan" && t.loanFlow === "in") ? t.amountMinor : -t.amountMinor;
-
-/** Cost/income reporting, distinct from full signed loan cash movement. */
-export function reportingMinor(t: Transaction): number {
-  if (t.kind === "income" || t.kind === "expense") return signedMinor(t);
-  if (t.kind === "loan" && t.loanEvent === "repayment") return t.loanFlow === "in" ? (t.loanFeeMinor ?? 0) : -(t.loanFeeMinor ?? 0);
-  return 0;
-}

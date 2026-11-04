@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useLocale } from "next-intl";
 import type { ComposerPreset, ComposerState } from "@/components/add/transaction-sheet";
@@ -15,7 +15,8 @@ import type { Installment } from "@/features/installments/schema";
 import type { Transaction } from "@/features/transactions/schema";
 import type { Wallet } from "@/features/wallets/schema";
 
-const TransactionSheet = dynamic(() => import("@/components/add/transaction-sheet").then((m) => m.TransactionSheet));
+const loadTransactionSheet = () => import("@/components/add/transaction-sheet");
+const TransactionSheet = dynamic(() => loadTransactionSheet().then((m) => m.TransactionSheet));
 const DetailSheet = dynamic(() => import("@/components/transactions/detail-sheet").then((m) => m.DetailSheet));
 const WalletSheet = dynamic(() => import("@/components/wallets/wallet-sheet").then((m) => m.WalletSheet));
 const SalarySheet = dynamic(() => import("@/components/salary/salary-sheet").then((m) => m.SalarySheet));
@@ -62,6 +63,19 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
   const [installment, setInstallment, installmentMounted] = useSheetState<InstallmentSheetState | null>(null);
   const [installmentPay, setInstallmentPay, installmentPayMounted] = useSheetState<InstallmentPayState | null>(null);
   const [budgets, setBudgets, budgetsMounted] = useSheetState<BudgetsSheetState | null>(null);
+
+  // Add is the main flow: fetch its code once the page is idle so the first tap
+  // never waits on the network. Skipped when the visitor asked to save data.
+  useEffect(() => {
+    if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) return;
+    const warm = () => { loadTransactionSheet().catch(() => {}); };
+    if ("requestIdleCallback" in window) {
+      const id = requestIdleCallback(warm, { timeout: 4000 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(warm, 2000);
+    return () => clearTimeout(id);
+  }, []);
 
   const openAdd = useCallback((preset?: ComposerPreset) => setAdd({ mode: "add", draftId: crypto.randomUUID(), preset }), [setAdd]);
   const openDetail = useCallback((t: Transaction) => setDetail(t), [setDetail]);

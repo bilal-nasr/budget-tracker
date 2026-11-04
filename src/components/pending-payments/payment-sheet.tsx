@@ -24,7 +24,7 @@ export function PaymentSheet({ item, onClose }: { item: PendingPayment | null; o
   const [dueOn, setDueOn] = useState(item?.dueOn ?? "");
   const submission = useLoanSubmission<PendingPaymentInput, object>(
     (input) => item ? updatePendingPayment(item.id, item.revision, input) : createPendingPayment(input),
-    () => { onClose(); toast(t("saved")); router.refresh(); },
+    () => { onClose(); toast(t("saved")); },
   );
   const minor = parseAmount(text, currency);
   const parsed = pendingPaymentSchema.safeParse({ requestId, client, project, currency, totalMinor: minor, dueOn: dueOn || null });

@@ -31,6 +31,7 @@
     "wallets": "Go to Wallets",
     "categories": "Manage categories",
     "history": "Receipt history",
+    "historyUnavailable": "Receipt history could not be loaded.",
     "historyHelp": "Edit or delete a receipt from Activity; the remaining balance updates automatically.",
     "activity": "Go to Activity",
     "emptyTitle": "Keep track of work awaiting payment",

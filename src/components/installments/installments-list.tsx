@@ -8,7 +8,7 @@ import { Amount } from "@/components/money/amount";
 import { useDisplayPrefs } from "@/components/providers/display-prefs";
 import { useComposer } from "@/components/shell/composer";
 import { Button } from "@/components/ui/button";
-import { dueThisCycle, type Installment } from "@/features/installments/schema";
+import { dueThisCycle, type Installment } from "@/features/installments/cycle";
 import { formatAmount } from "@/lib/money";
 import { cn } from "@/lib/utils";
 

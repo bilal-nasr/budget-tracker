@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useAppData } from "@/components/providers/app-data";
 import { CategorySelect } from "@/components/categories/category-select";
-import { categoryOptions } from "@/features/categories/schema";
+import { categoryOptions } from "@/features/categories/catalogue";
 import { InstallmentForm } from "@/components/installments/installment-sheet";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";

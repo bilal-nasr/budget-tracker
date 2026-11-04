@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { Plus, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { Amount } from "@/components/money/amount";
@@ -8,9 +9,11 @@ import { EmptyState } from "@/components/shell/empty-state";
 import { summarizeLoans } from "@/features/loans/calculations";
 import type { Loan } from "@/features/loans/schema";
 import type { Currency } from "@/lib/money";
-import { LoanSheet } from "./loan-sheet";
-import { LoanDetailSheet } from "./loan-detail-sheet";
-import { LoanPaymentSheet } from "./loan-payment-sheet";
+
+// Sheets load on first open; the list renders without their code.
+const LoanSheet = dynamic(() => import("./loan-sheet").then((m) => m.LoanSheet));
+const LoanDetailSheet = dynamic(() => import("./loan-detail-sheet").then((m) => m.LoanDetailSheet));
+const LoanPaymentSheet = dynamic(() => import("./loan-payment-sheet").then((m) => m.LoanPaymentSheet));
 
 export function LoansView({ loans, initialLoanId }: { loans: Loan[]; initialLoanId?: string }) {
   const t = useTranslations("Loans");
