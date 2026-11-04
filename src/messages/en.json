@@ -665,6 +665,12 @@
     "summary": "Cash settlement"
   },
   "Loans": {
+    "deleteLoan": "Delete loan permanently",
+    "deleteLoanTitle": "Permanently delete this loan?",
+    "deleteLoanHelp": "This permanently removes the loan and all linked transactions, including the principal movement and payments. Their wallet effects and fee reporting will be reversed. This cannot be undone.",
+    "deletePayment": "Delete payment",
+    "deletePaymentTitle": "Permanently delete this payment?",
+    "deletePaymentHelp": "This permanently removes this payment and reverses its wallet movement and fee reporting. An active payment's amount returns to the loan balance. Other payments keep their recorded principal and fee amounts. This cannot be undone.",
     "monthlyPayment": "Monthly payment (optional)",
     "paymentCount": "Number of payments",
     "countHelp": "Include the final payment. Enter 1 to 1,200 payments.",

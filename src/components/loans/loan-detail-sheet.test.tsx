@@ -4,17 +4,52 @@ import { afterEach, expect, it, vi } from "vitest";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
 import en from "@/messages/en.json";
+import ar from "@/messages/ar.json";
 import { demoLoans } from "@/lib/demo-data";
 
-const state = vi.hoisted(() => ({ load: vi.fn(), voidPayment: vi.fn() }));
+const state = vi.hoisted(() => ({ load: vi.fn(), voidPayment: vi.fn(), deleteLoan: vi.fn(), deletePayment: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/features/loans/history-actions", () => ({ loadLoanHistory: state.load }));
-vi.mock("@/features/loans/actions", () => ({ cancelLoan: vi.fn(), restoreLoanPayment: vi.fn(), setLoanArchived: vi.fn(), voidLoanPayment: state.voidPayment }));
+vi.mock("@/features/loans/actions", () => ({ cancelLoan: vi.fn(), restoreLoanPayment: vi.fn(), setLoanArchived: vi.fn(), voidLoanPayment: state.voidPayment, deleteLoan: state.deleteLoan, deleteLoanPayment: state.deletePayment }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ open, children, footer }: { open: boolean; children: ReactNode; footer?: ReactNode }) => open ? <section>{children}{footer}</section> : null }));
 vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ walletById: () => ({ name: "Synthetic wallet" }) }) }));
 import { LoanDetailSheet } from "./loan-detail-sheet";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+it.each(["en", "ar"] as const)("only offers permanent loan deletion after archive and confirms before deleting (%s)", async (locale) => {
+  const messages = locale === "ar" ? ar : en;
+  const onClose = vi.fn();
+  const base = { ...demoLoans()[0], events: [], historyComplete: true };
+  const view = render(<NextIntlClientProvider locale={locale} messages={messages}><LoanDetailSheet item={base} onClose={onClose} onEdit={vi.fn()} onPay={vi.fn()} /></NextIntlClientProvider>);
+  expect(screen.queryByRole("button", { name: messages.Loans.deleteLoan })).toBeNull();
+  view.rerender(<NextIntlClientProvider locale={locale} messages={messages}><LoanDetailSheet item={{ ...base, remainingMinor: 0, archivedAt: "2026-11-04T00:00:00Z" }} onClose={onClose} onEdit={vi.fn()} onPay={vi.fn()} /></NextIntlClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: messages.Loans.deleteLoan }));
+  expect(state.deleteLoan).not.toHaveBeenCalled();
+  expect(screen.getByText(messages.Loans.deleteLoanHelp)).toBeTruthy();
+  state.deleteLoan.mockResolvedValue({ ok: true });
+  fireEvent.click(screen.getAllByRole("button", { name: messages.Loans.deleteLoan }).at(-1)!);
+  await waitFor(() => expect(state.deleteLoan).toHaveBeenCalledWith(base.id));
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+});
+
+it("allows permanently deleting an older payment with its revision and keeps failures visible", async () => {
+  const base = demoLoans()[0];
+  const old = { transactionId: "old", revision: 4, loanId: base.id, event: "repayment" as const, flow: "out" as const,
+    sequence: 1, walletId: base.walletId, occurredOn: "2026-01-02", amountMinor: 100, principalMinor: 100, feeMinor: 0,
+    categoryId: base.feeCategoryId, deletedAt: null };
+  const onClose = vi.fn();
+  const item = { ...base, events: [old], historyComplete: true, livePaymentCount: 40,
+    latestLivePayment: { transactionId: "latest", revision: 7, sequence: 42 } };
+  state.deletePayment.mockResolvedValue({ ok: false, error: "conflict" });
+  render(<NextIntlClientProvider locale="en" messages={en}><LoanDetailSheet item={item} onClose={onClose} onEdit={vi.fn()} onPay={vi.fn()} /></NextIntlClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Delete payment" }));
+  expect(state.deletePayment).not.toHaveBeenCalled();
+  fireEvent.click(screen.getAllByRole("button", { name: "Delete payment" }).at(-1)!);
+  await waitFor(() => expect(state.deletePayment).toHaveBeenCalledWith("old", 4));
+  expect(onClose).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.getAllByRole("alert").some((node) => node.textContent === en.Loans.errorConflict)).toBe(true));
+});
 
 it("keeps Cancel and older Restore unavailable when newer live payments are outside the loaded history page", async () => {
   const base = demoLoans()[0];

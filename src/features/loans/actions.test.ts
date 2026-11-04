@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.invalidate }));
 vi.mock("@/lib/supabase/action", () => ({ actionClient: mocks.ctx }));
 vi.mock("@/features/profile/queries", () => ({ getProfile: async () => ({ timezone: "Asia/Beirut" }) }));
-import { cancelLoan, createLoan, recordLoanPayment, restoreLoanPayment, setLoanArchived, updateLoan, voidLoanPayment } from "./actions";
+import { cancelLoan, createLoan, deleteLoan, deleteLoanPayment, recordLoanPayment, restoreLoanPayment, setLoanArchived, updateLoan, voidLoanPayment } from "./actions";
 
 const id = "aaaaaaaa-0000-4000-8000-000000000001";
 const input = { requestId: id, name: "Loan", direction: "borrowed" as const, principalMinor: 10000, feeBps: 500,
@@ -15,6 +15,22 @@ beforeEach(() => {
   mocks.rpc.mockResolvedValue({ data: [{ id, revision: 1 }], error: null });
 });
 describe("loan action boundary", () => {
+  it("validates permanent deletion and delegates to atomic lifecycle RPCs", async () => {
+    expect(await deleteLoan("bad")).toEqual({ ok: false, error: "invalid" });
+    expect(await deleteLoanPayment(id, 0)).toEqual({ ok: false, error: "invalid" });
+    expect(await deleteLoanPayment("bad", 1)).toEqual({ ok: false, error: "invalid" });
+    expect(mocks.ctx).not.toHaveBeenCalled();
+    expect(await deleteLoan(id)).toEqual({ ok: true });
+    expect(mocks.rpc).toHaveBeenLastCalledWith("delete_loan", { p_id: id });
+    expect(await deleteLoanPayment(id, 3)).toEqual({ ok: true });
+    expect(mocks.rpc).toHaveBeenLastCalledWith("delete_loan_payment", { p_transaction_id: id, p_expected_revision: 3 });
+    expect(mocks.invalidate).toHaveBeenCalledTimes(2);
+  });
+  it("does not invalidate after rejected permanent deletion", async () => {
+    mocks.rpc.mockResolvedValue({ error: { message: "loan.inUse" } });
+    expect(await deleteLoan(id)).toEqual({ ok: false, error: "inUse" });
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+  });
   it("rejects bad terms before contacting the database", async () => {
     expect(await createLoan({ ...input, principalMinor: 0 })).toEqual({ ok: false, error: "invalid" });
     expect(mocks.ctx).not.toHaveBeenCalled();

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { TileBar } from "@/components/budget/tile-bar";
-import { cancelLoan, restoreLoanPayment, setLoanArchived, voidLoanPayment, type LoanActionResult } from "@/features/loans/actions";
+import { cancelLoan, deleteLoan, deleteLoanPayment, restoreLoanPayment, setLoanArchived, voidLoanPayment, type LoanActionResult } from "@/features/loans/actions";
 import { loanErrorKey } from "@/features/loans/errors";
 import type { Loan } from "@/features/loans/schema";
 import { percentInput } from "@/features/loans/calculations";
@@ -20,17 +20,20 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
   const { walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: "cancel" } | { kind: "void"; transactionId: string; revision: number } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: "cancel" | "deleteLoan" } | { kind: "void" | "deletePayment"; transactionId: string; revision: number } | null>(null);
   const history = useLoanHistory(item);
   const live = (history.page?.rows ?? []).filter((e) => e.event === "repayment" && e.deletedAt === null);
   const latest = item.latestLivePayment ?? live.reduce<(typeof live)[number] | null>((last, e) => !last || e.sequence > last.sequence ? e : last, null);
   const livePaymentCount = item.livePaymentCount ?? live.length;
-  const run = (operation: () => Promise<LoanActionResult>) => {
+  const run = (operation: () => Promise<LoanActionResult>, closeOnSuccess = false) => {
     setError(null);
     startTransition(async () => {
       const result = await operation();
       if (!result.ok) { setError(t(loanErrorKey(result.error))); return; }
       setConfirm(null);
+      // The action revalidates the loan list and wallet balances. Reopening the
+      // detail loads fresh history, including deletions from older history pages.
+      if (closeOnSuccess) onClose();
     });
   };
   const date = (value: string) => new Intl.DateTimeFormat(locale === "ar" ? "ar-u-nu-latn" : "en", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
@@ -69,6 +72,7 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
               <p className="text-muted-foreground"><bdi>{walletById(event.walletId)?.name}</bdi>{event.deletedAt ? <> · {t("voided")}</> : null}</p>
               {event.event === "repayment" ? <p className="flex flex-wrap gap-x-3 text-muted-foreground"><span>{t("principalPart")} {money(event.principalMinor)}</span><span>{t("feePart")} {money(event.feeMinor)}</span></p> : null}
               {event.deletedAt && event.event === "repayment" && !item.deletedAt && (!latest || latest.sequence < event.sequence) ? <Button variant="outline" disabled={pending} onClick={() => run(() => restoreLoanPayment(event.transactionId, event.revision))}>{t("restore")}</Button> : null}
+              {event.event === "repayment" ? <Button variant="outline" disabled={pending} onClick={() => { setError(null); setConfirm({ kind: "deletePayment", transactionId: event.transactionId, revision: event.revision }); }}>{t("deletePayment")}</Button> : null}
             </li>)}
           </ol>}
           {history.failed ? <p role="alert" className="text-sm text-over">{ta("loadFailed")}</p> : null}
@@ -81,12 +85,20 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
           {item.remainingMinor === 0 ? <Button variant="outline" disabled={pending} onClick={() => run(() => setLoanArchived(item.id, !item.archivedAt))}>{t(item.archivedAt ? "unarchive" : "archive")}</Button> : null}
           {livePaymentCount === 0 ? <Button variant="outline" disabled={pending} onClick={() => setConfirm({ kind: "cancel" })}>{t("cancelLoan")}</Button> : null}
         </div> : null}
+        {item.archivedAt ? <Button variant="destructive" disabled={pending} onClick={() => { setError(null); setConfirm({ kind: "deleteLoan" }); }}>{t("deleteLoan")}</Button> : null}
       </div>
     </SheetShell>
-    <ConfirmSheet open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)} title={t(confirm?.kind === "void" ? "voidTitle" : "cancelTitle")}
-      confirmLabel={t(confirm?.kind === "void" ? "void" : "cancelLoan")} cancelLabel={t("cancel")} pending={pending}
-      onConfirm={() => run(() => confirm?.kind === "void" ? voidLoanPayment(confirm.transactionId, confirm.revision) : cancelLoan(item.id))}>
-      <p>{t(confirm?.kind === "void" ? "voidHelp" : item.creationMode === "new" ? "cancelNewHelp" : "cancelExistingHelp")}</p>
+    <ConfirmSheet open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)} title={t(confirm?.kind === "deleteLoan" ? "deleteLoanTitle" : confirm?.kind === "deletePayment" ? "deletePaymentTitle" : confirm?.kind === "void" ? "voidTitle" : "cancelTitle")}
+      confirmLabel={t(confirm?.kind === "deleteLoan" ? "deleteLoan" : confirm?.kind === "deletePayment" ? "deletePayment" : confirm?.kind === "void" ? "void" : "cancelLoan")} cancelLabel={t("cancel")} pending={pending}
+      tone={confirm?.kind === "deleteLoan" || confirm?.kind === "deletePayment" ? "danger" : "default"}
+      onConfirm={() => {
+        if (!confirm) return;
+        if (confirm.kind === "deleteLoan") run(() => deleteLoan(item.id), true);
+        else if (confirm.kind === "deletePayment") run(() => deleteLoanPayment(confirm.transactionId, confirm.revision), true);
+        else if (confirm.kind === "void") run(() => voidLoanPayment(confirm.transactionId, confirm.revision));
+        else run(() => cancelLoan(item.id));
+      }}>
+      <p>{t(confirm?.kind === "deleteLoan" ? "deleteLoanHelp" : confirm?.kind === "deletePayment" ? "deletePaymentHelp" : confirm?.kind === "void" ? "voidHelp" : item.creationMode === "new" ? "cancelNewHelp" : "cancelExistingHelp")}</p>
       {error ? <p role="alert">{error}</p> : null}
     </ConfirmSheet>
   </>;

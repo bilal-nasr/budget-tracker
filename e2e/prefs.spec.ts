@@ -3,6 +3,35 @@ import { expect, test } from "@playwright/test";
 const switchToArabic = (page: import("@playwright/test").Page) =>
   page.getByRole("radiogroup", { name: "Language" }).getByText("العربية").click();
 
+test("Arabic persists through navigation, reloads, and a new browser session", async ({ page, context, browser, baseURL }) => {
+  await page.goto("/en/settings");
+  await switchToArabic(page);
+  await expect(page).toHaveURL(/\/ar\/settings/);
+  await page.goto("/ar/wallets");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+
+  const cookie = (await context.cookies()).find(({ name }) => name === "NEXT_LOCALE");
+  expect(cookie?.value).toBe("ar");
+  expect(cookie?.path).toBe("/");
+  expect(cookie?.expires).toBeGreaterThan(Date.now() / 1000 + 60 * 60 * 24 * 364);
+
+  // Browser restarts retain persistent cookies, but discard session cookies.
+  const state = await context.storageState();
+  const reopened = await browser.newContext({
+    baseURL,
+    storageState: { ...state, cookies: state.cookies.filter(({ expires }) => expires > Date.now() / 1000) },
+  });
+  try {
+    const tab = await reopened.newPage();
+    await tab.goto("/");
+    await expect(tab).toHaveURL(/\/ar\/?$/);
+    await expect(tab.locator("html")).toHaveAttribute("dir", "rtl");
+  } finally {
+    await reopened.close();
+  }
+});
+
 test("system theme on a dark phone stays dark after switching to Arabic", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/en/settings");

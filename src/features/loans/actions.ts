@@ -77,3 +77,13 @@ export async function setLoanArchived(id: string, archived: boolean): Promise<Lo
   if (!idSchema.safeParse(id).success || typeof archived !== "boolean") return { ok: false, error: "invalid" };
   return mutate("set_loan_archived", { p_id: id, p_archived: archived });
 }
+
+export async function deleteLoan(id: string): Promise<LoanActionResult> {
+  if (!idSchema.safeParse(id).success) return { ok: false, error: "invalid" };
+  return mutate("delete_loan", { p_id: id });
+}
+
+export async function deleteLoanPayment(transactionId: string, expectedRevision: number): Promise<LoanActionResult> {
+  if (!idSchema.safeParse(transactionId).success || !z.number().int().positive().safeParse(expectedRevision).success) return { ok: false, error: "invalid" };
+  return mutate("delete_loan_payment", { p_transaction_id: transactionId, p_expected_revision: expectedRevision });
+}
