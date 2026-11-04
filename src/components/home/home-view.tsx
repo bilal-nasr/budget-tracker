@@ -75,33 +75,41 @@ export function HomeView({ recent, commitments, budgetSummary }: {
           <>
             {commitments}
             {recent}
-
-            <section aria-labelledby="h-wallets" className="flex flex-col gap-2">
-              <div className="flex items-baseline justify-between">
-                <h2 id="h-wallets" className="text-[17px] font-semibold">{t("wallets")}</h2>
-                <Link href="/wallets" className="inline-flex min-h-11 items-center text-[14px] text-muted-foreground underline underline-offset-4">
-                  {t("manage")}
-                </Link>
-              </div>
-              <div className="-mx-4 flex snap-x snap-mandatory scroll-ps-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-                {active.map((w) => (
-                  <Link
-                    key={w.id}
-                    href={{ pathname: "/activity", query: { walletId: w.id } }}
-                    className="min-h-[72px] min-w-[140px] snap-start rounded-xl border border-border bg-card px-3.5 py-3"
-                  >
-                    <span className="block truncate text-[13px] text-muted-foreground">
-                      <bdi>{w.name}</bdi> · {w.currency}
-                    </span>
-                    <Amount minor={w.balanceMinor} currency={w.currency} className="text-lg font-semibold" />
-                  </Link>
-                ))}
-              </div>
-            </section>
           </>
         )}
       </PageBody>
     </>
+  );
+}
+
+function HomeWallets() {
+  const t = useTranslations("Home");
+  const { wallets } = useAppData();
+  const active = wallets.filter((w) => !w.archived);
+
+  return (
+    <section aria-labelledby="h-wallets" className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between">
+        <h2 id="h-wallets" className="text-[17px] font-semibold">{t("wallets")}</h2>
+        <Link href="/wallets" className="inline-flex min-h-11 items-center text-[14px] text-muted-foreground underline underline-offset-4">
+          {t("manage")}
+        </Link>
+      </div>
+      <div className="-mx-4 flex snap-x snap-mandatory scroll-ps-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+        {active.map((w) => (
+          <Link
+            key={w.id}
+            href={{ pathname: "/activity", query: { walletId: w.id } }}
+            className="min-h-[72px] min-w-[140px] snap-start rounded-xl border border-border bg-card px-3.5 py-3"
+          >
+            <span className="block truncate text-[13px] text-muted-foreground">
+              <bdi>{w.name}</bdi> · {w.currency}
+            </span>
+            <Amount minor={w.balanceMinor} currency={w.currency} className="text-lg font-semibold" />
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -138,8 +146,9 @@ export function HomeCommitments({ salaryStatus, fixed, installments, cycleUnavai
   return <>
     {cycleUnavailable ? <CycleLoadError /> : <>
       <SalaryCard status={salaryStatus} />
-      <FixedCard items={fixed} installments={installments} />
     </>}
+    <HomeWallets />
+    {!cycleUnavailable && <FixedCard items={fixed} installments={installments} />}
   </>;
 }
 
