@@ -2,8 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getProfile } from "@/features/profile/queries";
-import { todayIn } from "@/features/transactions/group";
 import { actionClient, type ActionResult } from "@/lib/supabase/action";
 import { fixedInputSchema, type FixedInput } from "./schema";
 import { categoryReferenceError } from "@/features/categories/errors";
@@ -16,6 +14,7 @@ const row = (input: FixedInput) => ({
   wallet_id: input.walletId,
   category_id: input.categoryId,
   due_day: input.dueDay,
+  items: input.items ?? [],
 });
 
 export async function createFixedExpense(input: FixedInput): Promise<ActionResult> {
@@ -63,29 +62,9 @@ export async function payFixedExpense(id: string): Promise<ActionResult<{ id: st
   const ctx = await actionClient();
   if (ctx.error) return { ok: false, error: ctx.error };
 
-  const { data: item } = await ctx.supabase
-    .from("fixed_expenses")
-    .select("id, name, amount_minor, wallet_id, category_id")
-    .eq("id", id)
-    .maybeSingle();
-  if (!item) return { ok: false, error: "invalid" };
-
-  const profile = await getProfile();
-  const { data, error } = await ctx.supabase
-    .from("transactions")
-    .insert({
-      kind: "expense",
-      occurred_on: todayIn(profile.timezone),
-      wallet_id: item.wallet_id,
-      amount_minor: Number(item.amount_minor),
-      currency: "USD", // overwritten from the wallet by the database trigger
-      category_id: item.category_id,
-      note: item.name,
-      source: "fixed",
-      fixed_expense_id: item.id,
-    })
-    .select("id, revision")
-    .single();
+  const response = await ctx.supabase.rpc("pay_fixed_expense", { p_id: id });
+  const error = response.error;
+  const data = Array.isArray(response.data) ? response.data[0] : response.data;
   if (error || !data || !Number.isInteger(data.revision) || data.revision < 1 || data.revision > 2_147_483_647) {
     return { ok: false, error: categoryReferenceError(error) ?? "failed" };
   }

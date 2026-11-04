@@ -18,6 +18,8 @@ import { deleteTransaction } from "@/features/transactions/actions";
 import { todayIn } from "@/features/transactions/group";
 import { summarizeFixed } from "@/features/fixed/summary";
 import { CURRENCIES, formatAmount } from "@/lib/money";
+import { ExpenseBreakdown } from "@/components/transactions/expense-breakdown";
+import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-fields";
 
 function shortDate(date: string, locale: string): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -42,6 +44,7 @@ export function FixedCard({
   const t = useTranslations("Fixed");
   const ti = useTranslations("Installments");
   const tb = useTranslations("Breakdown");
+  const breakdownLabels = useExpenseBreakdownLabels();
   const tc = useTranslations("Categories");
   const locale = useLocale();
   const { walletById, categoryById, timezone, salary } = useAppData();
@@ -119,7 +122,7 @@ export function FixedCard({
             const category = categoryById(item.categoryId);
             const paid = item.paidOn !== null;
             return (
-              <li key={item.id} className="flex min-h-[64px] items-center gap-3 border-t border-border px-1 py-2 first:border-t-0">
+              <li key={item.id} className="flex min-h-[64px] flex-wrap items-center gap-3 border-t border-border px-1 py-2 first:border-t-0">
                 <button
                   type="button"
                   onClick={() => openFixed(item)}
@@ -153,6 +156,13 @@ export function FixedCard({
                     {busyId === item.id ? t("paying") : t("paid")}
                   </Button>
                 )}
+                {wallet && item.items && item.items.length > 0 ? (
+                  <details className="w-full text-sm">
+                    <summary className="cursor-pointer py-2 font-medium">{tb("title")}</summary>
+                    <ExpenseBreakdown items={item.items.map((line, position) => ({ ...line, id: `${item.id}-${position}`, position }))}
+                      parentMinor={item.amountMinor} currency={wallet.currency} labels={breakdownLabels} />
+                  </details>
+                ) : null}
               </li>
             );
           })}

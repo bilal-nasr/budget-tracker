@@ -14,7 +14,7 @@ export async function getFixedExpenses(timezone: string): Promise<FixedExpense[]
   const [items, paid] = await Promise.all([
     supabase
       .from("fixed_expenses")
-      .select("id, name, amount_minor, wallet_id, category_id, due_day")
+      .select("id, name, amount_minor, wallet_id, category_id, due_day, items")
       .order("position")
       .order("created_at"),
     supabase
@@ -42,5 +42,6 @@ export async function getFixedExpenses(timezone: string): Promise<FixedExpense[]
     categoryId: f.category_id,
     dueDay: f.due_day,
     paidOn: paidOn.get(f.id) ?? null,
+    items: f.items ?? [],
   }));
 }

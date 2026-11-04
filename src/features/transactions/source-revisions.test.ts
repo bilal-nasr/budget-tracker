@@ -25,11 +25,11 @@ describe.each([
   ["fixed", () => payFixedExpense(id)],
   ["installment", () => payInstallment({ requestId: id, salaryCycleId: null, overrideOfTransactionId: null, installmentId: id, walletId: id, amountMinor: 5000, occurredOn: "2026-11-04" })],
 ] as const)("%s source creation revision", (source, invoke) => {
-  it("returns the selected revision in the same insert response and preserves source metadata", async () => {
+  it("returns the final revision from the source writer", async () => {
     expect(await invoke()).toEqual({ ok: true, id, revision: 7 });
     if (source === "fixed") {
-      expect(written.select).toHaveBeenCalledExactlyOnceWith("id, revision");
-      expect(written.insert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ source }));
+      expect(mock.rpc).toHaveBeenCalledExactlyOnceWith("pay_fixed_expense", { p_id: id });
+      expect(written.insert).not.toHaveBeenCalled();
     } else {
       expect(mock.rpc).toHaveBeenCalledExactlyOnceWith(source === "salary" ? "receive_salary" : "record_installment_payment",
         expect.objectContaining({ p_request_id: id }));

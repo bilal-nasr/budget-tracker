@@ -14,6 +14,8 @@ import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from "@/fe
 import type { FixedExpense } from "@/features/fixed/schema";
 import { CURRENCY_DECIMALS, parseAmount, toInputText } from "@/lib/money";
 import { parseOptionalDay } from "@/lib/numeric-text";
+import { ExpenseBreakdownFields, useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-fields";
+import { parseExpenseItemDrafts, type ExpenseItemDraft } from "@/features/transactions/breakdown";
 
 export type FixedSheetState = { item: FixedExpense | null };
 
@@ -22,6 +24,8 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
   const tCurrencies = useTranslations("Currencies");
   const tc = useTranslations("Categories");
   const tAdd = useTranslations("Add");
+  const tb = useTranslations("Breakdown");
+  const breakdownLabels = useExpenseBreakdownLabels();
   const { wallets, categories, walletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const usable = wallets.filter((w) => !w.archived || w.id === item?.walletId);
@@ -36,13 +40,17 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
   const [dueDay, setDueDay] = useState(item?.dueDay ? String(item.dueDay) : "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [itemDrafts, setItemDrafts] = useState<ExpenseItemDraft[]>(() => (item?.items ?? []).map((line, index) => ({
+    key: `fixed-${index}`, description: line.description, amountText: toInputText(line.amountMinor, currency),
+  })));
 
   const minor = amount.trim() === "" ? null : parseAmount(amount, currency);
   const amountError = amount.trim() !== "" && minor === null ? t("errorAmount") : null;
   const { value: dayNumber, invalid: invalidDay } = parseOptionalDay(dueDay);
   const dayError = invalidDay ? t("errorDay") : null;
+  const breakdown = parseExpenseItemDrafts(currency, minor, itemDrafts);
   const canSave =
-    name.trim() !== "" && minor !== null && minor > 0 && wallet !== undefined && expenseCategories.some((c) => c.id === categoryId) && !dayError;
+    name.trim() !== "" && minor !== null && minor > 0 && wallet !== undefined && expenseCategories.some((c) => c.id === categoryId) && !dayError && breakdown.valid;
 
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
@@ -66,8 +74,8 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        if (!canSave || minor === null) return;
-        const input = { name: name.trim(), amountMinor: minor, walletId, categoryId, dueDay: dayNumber };
+        if (!canSave || minor === null || !breakdown.valid) return;
+        const input = { name: name.trim(), amountMinor: minor, walletId, categoryId, dueDay: dayNumber, items: breakdown.items };
         run(() => (item ? updateFixedExpense(item.id, input) : createFixedExpense(input)));
       }}
     >
@@ -89,6 +97,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
               type="button"
               role="radio"
               aria-checked={w.id === walletId}
+              disabled={pending || (w.currency !== currency && (itemDrafts.length > 0 || (item?.items?.length ?? 0) > 0))}
               onClick={() => {
                 setWalletId(w.id);
                 if (w.currency !== currency) setAmount("");
@@ -100,6 +109,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
           ))}
         </div>
         <p className="text-[13px] text-muted-foreground">{t("walletHelp")}</p>
+        {itemDrafts.length > 0 || (item?.items?.length ?? 0) > 0 ? <p className="text-[13px] text-muted-foreground">{tb("removeBeforeCurrencyChange")}</p> : null}
       </div>
       <TextField
         label={t("amount")}
@@ -132,6 +142,9 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         />
         <p className="text-[13px] text-muted-foreground">{t("dueHelp")}</p>
       </div>
+
+      <ExpenseBreakdownFields currency={currency} parentMinor={minor} items={itemDrafts}
+        onChange={setItemDrafts} labels={breakdownLabels} disabled={pending} />
 
       {error ? (
         <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p>
