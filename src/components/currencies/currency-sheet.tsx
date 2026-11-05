@@ -32,8 +32,8 @@ function Editor({ currency, onOpenChange }: { currency: CurrencyDefinition | nul
   const [pending, startTransition] = useTransition();
   const parsed = currencyInputSchema.safeParse({ code, symbol, decimalPlaces: Number(decimalPlaces) });
   const title = confirmingDelete
-    ? t("deleteTitle", { code: currency?.code ?? "" })
-    : currency ? t("editTitle", { code: currency.code }) : t("createTitle");
+    ? t.rich("deleteTitle", { code: currency?.code ?? "", bdi: (chunks) => <bdi dir="ltr">{chunks}</bdi> })
+    : currency ? t.rich("editTitle", { code: currency.code, bdi: (chunks) => <bdi dir="ltr">{chunks}</bdi> }) : t("createTitle");
 
   const save = () => {
     if (!parsed.success || pending) return;
@@ -69,6 +69,7 @@ function Editor({ currency, onOpenChange }: { currency: CurrencyDefinition | nul
     open
     onOpenChange={(next) => { if (!pending) onOpenChange(next); }}
     title={title}
+    description={!currency ? t("createCopy") : undefined}
     dismissible={!pending}
     footer={<div className="flex flex-col gap-2">
       {error ? <p role="alert" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm">{error}</p> : null}

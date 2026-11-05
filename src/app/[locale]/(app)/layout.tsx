@@ -15,7 +15,7 @@ export default async function AppLayout({ children, params }: LayoutProps<"/[loc
   setRequestLocale(locale);
   const [profile, walletContainers, currencies, categories] = await Promise.all([
     timed("layout.profile", getProfile),
-    timed("layout.wallets", getWallets),
+    timed("layout.wallets", () => getWallets({ includeDeleted: true, includeNeedsAttention: true, includeDisabledBalances: true })),
     timed("layout.currencies", getCurrencies),
     timed("layout.categories", getCategories),
   ]);

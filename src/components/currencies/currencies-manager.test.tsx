@@ -14,7 +14,7 @@ vi.mock("@/features/currencies/actions", () => ({
 vi.mock("./currency-sheet", () => ({ CurrencySheet: () => null }));
 vi.mock("@/i18n/navigation", () => ({ Link: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => <a href={href} {...props}>{children}</a> }));
 vi.mock("@/components/ui/sheet-shell", () => ({
-  SheetShell: ({ open, title, children, footer }: { open: boolean; title: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode }) => open ? <section aria-label={String(title)}>{children}{footer}</section> : null,
+  SheetShell: ({ open, title, children, footer }: { open: boolean; title: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode }) => open ? <section><h2>{title}</h2>{children}{footer}</section> : null,
 }));
 import { CurrenciesManager } from "./currencies-manager";
 
@@ -30,7 +30,7 @@ const usd: CurrencyDefinition = { code: "USD", symbol: "$", decimalPlaces: 2, di
 const jpy: CurrencyDefinition = { code: "JPY", symbol: "¥", decimalPlaces: 0, disabled: true, firstUsed: false };
 
 function renderManager(currencies: CurrencyDefinition[]) {
-  render(<NextIntlClientProvider locale="en" messages={en}><CurrenciesManager currencies={currencies} /></NextIntlClientProvider>);
+  return render(<NextIntlClientProvider locale="en" messages={en}><CurrenciesManager currencies={currencies} /></NextIntlClientProvider>);
 }
 
 it("orders enabled definitions before disabled ones without changing catalog order inside each group", () => {
@@ -57,20 +57,28 @@ it("shows actionable wallet blockers and does not attempt the disable write", as
 });
 
 it("confirms a safe disable and keeps the definition available as disabled history", async () => {
-  renderManager([eur, usd]);
+  const rendered = renderManager([eur, usd]);
+  actions.enabled.mockImplementation(async () => {
+    rendered.rerender(<NextIntlClientProvider locale="en" messages={en}><CurrenciesManager currencies={[{ ...eur, disabled: true }, usd]} /></NextIntlClientProvider>);
+    return { ok: true };
+  });
   fireEvent.click(screen.getByRole("button", { name: en.CurrencySettings.disableNamed.replace("{code}", "EUR") }));
   await screen.findByText(en.CurrencySettings.disableReady);
   fireEvent.click(await screen.findByRole("button", { name: en.CurrencySettings.confirmDisable }));
   await waitFor(() => expect(actions.enabled).toHaveBeenCalledWith("EUR", false));
-  expect(screen.getByTestId("currency-status-EUR").textContent).toContain(en.CurrencySettings.disabled);
+  await waitFor(() => expect(screen.getByTestId("currency-status-EUR").textContent).toContain(en.CurrencySettings.disabled));
 });
 
 it("re-enables directly without changing defaults or running disable inspection", async () => {
-  renderManager([eur, jpy]);
+  const rendered = renderManager([eur, jpy]);
+  actions.enabled.mockImplementation(async () => {
+    rendered.rerender(<NextIntlClientProvider locale="en" messages={en}><CurrenciesManager currencies={[eur, { ...jpy, disabled: false }]} /></NextIntlClientProvider>);
+    return { ok: true };
+  });
   fireEvent.click(screen.getByRole("button", { name: en.CurrencySettings.enableNamed.replace("{code}", "JPY") }));
   await waitFor(() => expect(actions.enabled).toHaveBeenCalledWith("JPY", true));
   expect(actions.inspect).not.toHaveBeenCalled();
-  expect(screen.getByTestId("currency-status-JPY").textContent).toContain(en.CurrencySettings.enabled);
+  await waitFor(() => expect(screen.getByTestId("currency-status-JPY").textContent).toContain(en.CurrencySettings.enabled));
 });
 
 it("fails closed and keeps the disable sheet open when inspection is unavailable", async () => {
@@ -78,7 +86,7 @@ it("fails closed and keeps the disable sheet open when inspection is unavailable
   renderManager([eur, usd]);
   fireEvent.click(screen.getByRole("button", { name: en.CurrencySettings.disableNamed.replace("{code}", "EUR") }));
   expect((await screen.findByRole("alert")).textContent).toContain(en.CurrencySettings.errorFailed);
-  expect(screen.getByRole("region", { name: en.CurrencySettings.disableTitle.replace("{code}", "EUR") })).toBeTruthy();
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Disable EUR?");
   expect(actions.enabled).not.toHaveBeenCalled();
 });
 
@@ -86,4 +94,41 @@ it("isolates currency codes and amount previews in Arabic", () => {
   render(<NextIntlClientProvider locale="ar" messages={ar}><CurrenciesManager currencies={[eur, usd]} /></NextIntlClientProvider>);
   expect(screen.getAllByTestId("currency-code")[0].getAttribute("dir")).toBe("ltr");
   expect(screen.getAllByText(/€/)[0].closest("bdi")?.getAttribute("dir")).toBe("ltr");
+});
+
+it("does not invent enabled state while waiting for authoritative server props", async () => {
+  renderManager([eur, jpy]);
+  fireEvent.click(screen.getByRole("button", { name: "Enable JPY" }));
+  await waitFor(() => expect(actions.enabled).toHaveBeenCalledWith("JPY", true));
+  expect(screen.getByTestId("currency-status-JPY").textContent).toBe(en.CurrencySettings.disabled);
+});
+
+it("shows blockers across wallets and future-writing features without a confirmation action", async () => {
+  actions.inspect.mockResolvedValue([
+    { kind: "nonzeroBalance", balanceId: "pocket-eur", walletId: "pocket", walletName: "Pocket" },
+    { kind: "salary", balanceId: "bank-eur", walletId: "bank", walletName: "Bank" },
+    { kind: "fixedExpense", id: "rent", name: "Rent", balanceId: "bank-eur" },
+    { kind: "installment", id: "phone", name: "Phone", balanceId: "pocket-eur" },
+    { kind: "loan", id: "loan", name: "Loan", balanceId: "bank-eur" },
+    { kind: "pendingPayment", id: "pending", label: "Client invoice" },
+    { kind: "budget", id: "budget", categoryId: "food", startsMonth: "2026-12-01" },
+  ]);
+  renderManager([eur, usd]);
+  fireEvent.click(screen.getByRole("button", { name: "Disable EUR" }));
+  expect(await screen.findByRole("link", { name: "Pocket" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Bank" })).toBeTruthy();
+  expect(screen.getByText(/Rent/)).toBeTruthy();
+  expect(screen.getByText(/Phone/)).toBeTruthy();
+  expect(screen.getByText(/2026-12/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: en.CurrencySettings.confirmDisable })).toBeNull();
+});
+
+it("keeps a rejected disable open without changing visible enabled state", async () => {
+  actions.enabled.mockResolvedValue({ ok: false, error: "currencyInUse" });
+  renderManager([eur, usd]);
+  fireEvent.click(screen.getByRole("button", { name: "Disable EUR" }));
+  fireEvent.click(await screen.findByRole("button", { name: en.CurrencySettings.confirmDisable }));
+  expect((await screen.findByRole("alert")).textContent).toBe(en.CurrencySettings.errorBlocked);
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Disable EUR?");
+  expect(screen.getByTestId("currency-status-EUR").textContent).toBe(en.CurrencySettings.enabled);
 });

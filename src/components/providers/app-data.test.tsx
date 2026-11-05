@@ -122,3 +122,61 @@ it("rejects live or nonempty wallets with null defaults", () => {
   expect(() => render(provider(<TombstoneProbe />, { walletContainers: [{ ...wallets[0], deleted: true, defaultBalanceId: null }] })))
     .toThrow("App wallet data unavailable");
 });
+
+function ViewsProbe() {
+  const data = useAppData();
+  return <output>{JSON.stringify({
+    ordinary: data.walletContainers.map((wallet) => ({ id: wallet.id, currencies: wallet.balances.map((balance) => balance.currency), default: wallet.defaultBalanceId })),
+    historical: data.balanceById("balance-jpy"),
+    deleted: data.walletById("deleted")?.id,
+    attention: data.walletById("attention")?.id,
+  })}</output>;
+}
+
+it("projects ordinary enabled balances while retaining disabled, deleted, and attention identities", () => {
+  const deleted = { ...emptyDeleted, id: "deleted" };
+  const attention = { ...wallets[0], id: "attention", needsAttention: true,
+    defaultBalanceId: "attention-eur", balances: [{ ...wallets[0].balances[0], id: "attention-eur", walletId: "attention" }] };
+  render(provider(<ViewsProbe />, { walletContainers: [...wallets, deleted, attention] }));
+  expect(JSON.parse(screen.getByRole("status").textContent ?? "{}")).toEqual({
+    ordinary: [{ id: "wallet-pocket", currencies: ["EUR"], default: "balance-eur" }],
+    historical: wallets[0].balances[1], deleted: "deleted", attention: "attention",
+  });
+});
+
+it("updates ordinary coverage and exact history on a complete server refresh without changing defaults", () => {
+  const rendered = render(provider(<ViewsProbe />));
+  rendered.rerender(provider(<ViewsProbe />, { currencies: currencies.map((currency) => ({ ...currency, disabled: false })) }));
+  expect(JSON.parse(screen.getByRole("status").textContent ?? "{}")).toEqual({
+    ordinary: [{ id: "wallet-pocket", currencies: ["EUR", "JPY"], default: "balance-eur" }],
+    historical: wallets[0].balances[1],
+  });
+});
+
+it.each(["missing", "duplicate", "detached", "disabledDefault"])("rejects canonical %s enabled coverage", (problem) => {
+  const wallet = { ...wallets[0], balances: wallets[0].balances.map((balance) => ({ ...balance })) };
+  if (problem === "missing") wallet.balances = wallet.balances.slice(0, 1);
+  if (problem === "duplicate") wallet.balances.push({ ...wallet.balances[0], id: "duplicate-currency" });
+  if (problem === "detached") wallet.balances[0].detached = true;
+  if (problem === "disabledDefault") wallet.defaultBalanceId = "balance-jpy";
+  expect(() => render(provider(<Probe />, { walletContainers: [wallet], currencies: problem === "missing" ? currencies.map((currency) => ({ ...currency, disabled: false })) : currencies }))).toThrow("App wallet data unavailable");
+});
+
+it("uses catalog order for ordinary balances independently of stored positions", () => {
+  const wallet = { ...wallets[0], balances: [...wallets[0].balances].reverse() };
+  render(provider(<ViewsProbe />, { walletContainers: [wallet], currencies: currencies.map((currency) => ({ ...currency, disabled: false })) }));
+  expect(JSON.parse(screen.getByRole("status").textContent ?? "{}").ordinary[0].currencies).toEqual(["EUR", "JPY"]);
+});
+
+it("requires a runtime catalog for canonical wallets rather than inventing built-in definitions", () => {
+  const wallet = { ...wallets[0], balances: ["USD", "LBP", "SYP"].map((currency, index) => ({ ...wallets[0].balances[0], currency, id: index === 0 ? "balance-eur" : `built-in-${currency}` })) };
+  expect(() => render(provider(<Probe />, { currencies: undefined, walletContainers: [wallet] }))).toThrow("App currency data unavailable");
+});
+
+it("keeps default-only compatibility explicitly behind the legacy wallet input", () => {
+  render(provider(<Probe />, {
+    currencies: undefined, walletContainers: undefined,
+    wallets: [{ id: "wallet-pocket", name: "Pocket", kind: "cash", currency: "USD", openingBalanceMinor: 0, balanceMinor: 1250, archived: false, position: 0 }],
+  }));
+  expect(JSON.parse(screen.getByRole("status").textContent ?? "{}").legacy).toBe("USD");
+});

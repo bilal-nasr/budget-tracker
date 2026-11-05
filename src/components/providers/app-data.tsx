@@ -9,6 +9,7 @@ import { isCurrency } from "@/lib/money";
 type AppData = {
   /** @deprecated Use walletContainers and exact balance IDs. */
   legacyWallets: Wallet[];
+  /** Ordinary active wallets with enabled balances in catalog order. */
   walletContainers: WalletContainer[];
   currencies: CurrencyDefinition[];
   enabledCurrencies: CurrencyDefinition[];
@@ -17,6 +18,7 @@ type AppData = {
   timezone: string;
   salary: { amountMinor: number; walletId: string } | null;
   usdLbpRate: number | null;
+  /** Complete canonical history, including disabled balances and tombstones. */
   walletById: (id: string) => WalletContainer | undefined;
   balanceById: (id: string) => WalletBalance | undefined;
   currencyByCode: (code: string) => CurrencyDefinition | undefined;
@@ -49,6 +51,8 @@ export function AppDataProvider({
   children: React.ReactNode;
 }) {
   const value = useMemo<AppData>(() => {
+    // Built-in defaults belong only to the transitional legacy input adapter.
+    if (containerInput && !currencyInput) throw new Error("App currency data unavailable");
     const currencies = currencyInput ?? DEFAULT_CURRENCIES.map((currency) => ({ ...currency }));
     let currencyIndex: ReadonlyMap<string, CurrencyDefinition>;
     try {
@@ -76,16 +80,27 @@ export function AppDataProvider({
     }));
     const walletIndex = new Map<string, WalletContainer>();
     const balanceIndex = new Map<string, WalletBalance>();
+    const enabledCurrencies = currencies.filter((currency) => !currency.disabled);
+    const currencyOrder = new Map(currencies.map((currency, index) => [currency.code, index]));
     for (const wallet of walletContainers) {
       if (walletIndex.has(wallet.id)) throw new Error("App wallet data unavailable");
       walletIndex.set(wallet.id, wallet);
+      const balanceCurrencies = new Set<string>();
       for (const balance of wallet.balances) {
         if (balance.walletId !== wallet.id || balanceIndex.has(balance.id)) throw new Error("App wallet data unavailable");
         if (!currencyIndex.has(balance.currency)) throw new Error("App currency data unavailable");
+        if (balanceCurrencies.has(balance.currency)) throw new Error("App wallet data unavailable");
+        balanceCurrencies.add(balance.currency);
+        if (containerInput && !wallet.deleted && balance.detached && !currencyIndex.get(balance.currency)!.disabled) throw new Error("App wallet data unavailable");
         balanceIndex.set(balance.id, balance);
       }
       const emptyTombstone = wallet.deleted && wallet.defaultBalanceId === null && wallet.balances.length === 0;
       if (!emptyTombstone && !wallet.balances.some((balance) => balance.id === wallet.defaultBalanceId)) throw new Error("App wallet data unavailable");
+      if (containerInput && !wallet.deleted) {
+        const defaultBalance = wallet.balances.find((balance) => balance.id === wallet.defaultBalanceId);
+        if (!defaultBalance || defaultBalance.detached || currencyIndex.get(defaultBalance.currency)!.disabled
+          || enabledCurrencies.some((currency) => !balanceCurrencies.has(currency.code))) throw new Error("App wallet data unavailable");
+      }
     }
     const legacyWallets = walletContainers.flatMap((wallet): Wallet[] => {
       const balance = wallet.defaultBalanceId === null ? undefined : balanceIndex.get(wallet.defaultBalanceId);
@@ -105,9 +120,13 @@ export function AppDataProvider({
     const c = new Map(categories.map((x) => [x.id, x]));
     return {
       legacyWallets,
-      walletContainers,
+      walletContainers: walletContainers.filter((wallet) => !wallet.deleted && !wallet.needsAttention).map((wallet) => ({
+        ...wallet,
+        balances: wallet.balances.filter((balance) => !balance.detached && !currencyIndex.get(balance.currency)!.disabled)
+          .sort((left, right) => currencyOrder.get(left.currency)! - currencyOrder.get(right.currency)!),
+      })),
       currencies,
-      enabledCurrencies: currencies.filter((currency) => !currency.disabled),
+      enabledCurrencies,
       categories,
       timezone,
       salary,

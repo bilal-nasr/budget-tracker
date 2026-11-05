@@ -33,16 +33,15 @@ function Blocker({ blocker }: { blocker: CurrencyDisableBlocker }) {
 
 export function CurrenciesManager({ currencies }: { currencies: CurrencyDefinition[] }) {
   const t = useTranslations("CurrencySettings");
-  const [catalog, setCatalog] = useState(currencies);
   const [editor, setEditor] = useState<CurrencyDefinition | "new" | null>(null);
   const [disable, setDisable] = useState<DisableState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const ordered = useMemo(() => [
-    ...catalog.filter((currency) => !currency.disabled),
-    ...catalog.filter((currency) => currency.disabled),
-  ], [catalog]);
-  const enabledCount = catalog.filter((currency) => !currency.disabled).length;
+    ...currencies.filter((currency) => !currency.disabled),
+    ...currencies.filter((currency) => currency.disabled),
+  ], [currencies]);
+  const enabledCount = currencies.filter((currency) => !currency.disabled).length;
 
   const beginDisable = (currency: CurrencyDefinition) => {
     if (currency.disabled || enabledCount <= 1 || pending) return;
@@ -71,7 +70,6 @@ export function CurrenciesManager({ currencies }: { currencies: CurrencyDefiniti
           else setError(message);
           return;
         }
-        setCatalog((current) => current.map((item) => item.code === currency.code ? { ...item, disabled: !enabled } : item));
         if (!enabled) setDisable(null);
       } catch {
         if (!enabled) setDisable((current) => current ? { ...current, error: t("errorFailed") } : current);
@@ -110,7 +108,7 @@ export function CurrenciesManager({ currencies }: { currencies: CurrencyDefiniti
     <SheetShell
       open={disable !== null}
       onOpenChange={(open) => { if (!open && !pending) setDisable(null); }}
-      title={t("disableTitle", { code: disable?.currency.code ?? "" })}
+      title={t.rich("disableTitle", { code: disable?.currency.code ?? "", bdi: (chunks) => <bdi dir="ltr">{chunks}</bdi> })}
       description={t("disableCopy")}
       dismissible={!pending}
       footer={disable ? <div className="flex flex-col gap-2">
