@@ -1,6 +1,6 @@
 "use client";
 
-import { Banknote, CreditCard, Landmark, Plus } from "lucide-react";
+import { Banknote, CreditCard, Info, Landmark, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Amount } from "@/components/money/amount";
@@ -22,12 +22,17 @@ export function WalletsView() {
   const payments = useTranslations("PendingPayments");
   const { walletContainers: wallets, needsAttentionWallets, enabledCurrencies } = useAppData();
   const { openWallet } = useComposer();
+  const [showInfo, setShowInfo] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const currency = enabledCurrencies.find((item) => item.code === selectedCode) ?? enabledCurrencies[0];
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      {currency ? <CurrencySelector currencies={enabledCurrencies} value={currency.code} onChange={setSelectedCode} label={t("displayCurrency")} /> : null}
-      <p className="text-sm text-muted-foreground">{t("currencyViewHelp")}</p>
+      <div className="flex items-end gap-2">
+        {currency ? <div className="min-w-0 flex-1"><CurrencySelector currencies={enabledCurrencies} value={currency.code} onChange={setSelectedCode} label={t("displayCurrency")} /></div> : null}
+        <button type="button" aria-label={t("moreInfo")} aria-expanded={showInfo} onClick={() => setShowInfo((v) => !v)}
+          className="grid size-14 shrink-0 place-items-center rounded-lg border border-input text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"><Info aria-hidden className="size-5" /></button>
+      </div>
+      {showInfo ? <p className="text-sm text-muted-foreground">{t("currencyViewHelp")}</p> : null}
       {wallets.length === 0 ? <EmptyState title={t("emptyTitle")} body={t("emptyBody")}
         action={<Button onClick={() => openWallet(null)}>{t("addFirst")}</Button>} /> : <>
         <WalletReorder>{(wallet) => <WalletRow wallet={wallet} currency={currency?.code} onOpen={() => openWallet(wallet)} />}</WalletReorder>

@@ -18,7 +18,7 @@ export function CurrencySelector({ currencies, value, onChange, label, disabled 
       <label htmlFor={id} className="text-sm font-medium">{label}</label>
       <select id={id} dir="ltr" value={value} disabled={disabled || enabled.length === 0}
         onChange={(event) => { if (enabled.some((currency) => currency.code === event.target.value)) onChange(event.target.value); }}
-        className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-input bg-background px-3 text-base focus-visible:ring-2 focus-visible:ring-ring">
+        className="h-14 w-full min-w-0 max-w-full rounded-lg border border-input bg-background px-4 text-lg font-semibold focus-visible:ring-2 focus-visible:ring-ring">
         {enabled.map((currency) => <option key={currency.code} value={currency.code}>{currency.code}</option>)}
       </select>
     </div>

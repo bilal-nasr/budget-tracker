@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { useMemo, useState, useTransition } from "react";
 import { ChevronRight, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -82,7 +83,7 @@ export function CurrenciesManager({ currencies }: { currencies: CurrencyDefiniti
     <p className="text-[15px] text-muted-foreground">{t("intro")}</p>
     <Button variant="outline" className="w-full gap-2" onClick={() => setEditor("new")}><Plus aria-hidden className="size-4" />{t("add")}</Button>
     <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-      {ordered.map((currency) => <li key={currency.code} data-testid="currency-row" className="flex min-h-20 items-center gap-3 px-3 py-2">
+      {ordered.map((currency) => <li key={currency.code} data-testid="currency-row" className={cn("flex min-h-20 items-center gap-3 px-3 py-2", currency.disabled && "bg-over-soft")}>
         <button type="button" aria-label={t("editNamed", { code: currency.code })} onClick={() => setEditor(currency)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-start focus-visible:outline-2 focus-visible:outline-ring">
           <span className="grid size-11 shrink-0 place-items-center rounded-full bg-secondary text-sm font-semibold"><bdi dir="ltr">{currency.symbol}</bdi></span>
           <span className="min-w-0 flex-1">

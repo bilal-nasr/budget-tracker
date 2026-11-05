@@ -252,8 +252,13 @@ function Form({ state, onClose, onReload }: { state: ComposerState; onClose: () 
   const changeWallet = (id: string) => {
     if (currencyLocked && !cashDraft.enabled && balanceOptionById(id)?.currency !== currency) { setError(tb("removeBeforeCurrencyChange")); return; }
     setBalanceId(id);
-    setPickWallet(false);
-    if (toBalanceId === id || (mode === "move" && app.balanceById(toBalanceId)?.walletId === app.balanceById(id)?.walletId) || (mode === "exchange" && app.balanceById(toBalanceId)?.walletId !== app.balanceById(id)?.walletId)) {
+    if (mode === "exchange") {
+      const kept = app.balanceById(toBalanceId);
+      if (!kept || kept.walletId !== app.balanceById(id)?.walletId || kept.id === id) {
+        setToBalanceId(app.walletById(app.balanceById(id)?.walletId ?? "")?.balances.find((b) => b.id !== id && !b.detached && !definition(b.currency).disabled)?.id ?? "");
+        resetReceived();
+      }
+    } else if (toBalanceId === id || (mode === "move" && app.balanceById(toBalanceId)?.walletId === app.balanceById(id)?.walletId)) {
       setToBalanceId("");
       resetReceived();
     }

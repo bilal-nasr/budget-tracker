@@ -1,5 +1,6 @@
 "use client";
 
+import { createContext, useContext, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
@@ -13,6 +14,7 @@ import { SalaryCard } from "@/components/salary/salary-card";
 import { CycleLoadError } from "@/components/installments/cycle-load-error";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
+import { cn } from "@/lib/utils";
 import type { FixedExpense } from "@/features/fixed/schema";
 import type { Installment } from "@/features/installments/schema";
 import type { MonthBudgets } from "@/features/budgets/schema";
@@ -27,12 +29,15 @@ export function HomeView({ recent, commitments, budgetSummary }: {
   budgetSummary: React.ReactNode;
 }) {
   const t = useTranslations("Home");
-  const { walletContainers: active, needsAttentionWallets, balanceById } = useAppData();
+  const { walletContainers: active, needsAttentionWallets, enabledCurrencies } = useAppData();
   const { openWallet } = useComposer();
   const hasAttention = needsAttentionWallets.length > 0;
+  const [picked, setPicked] = useState<string | null>(null);
+  const code = enabledCurrencies.find((c) => c.code === picked)?.code ?? enabledCurrencies[0]?.code ?? null;
+  const total = code ? active.reduce((sum, w) => sum + (w.balances.find((b) => b.currency === code)?.balanceMinor ?? 0), 0) : 0;
 
   return (
-    <>
+    <HomeCurrencyContext.Provider value={code}>
       <ScreenHeader>
         <p className="text-[15px] text-shell-muted">{t("leadLabel")}</p>
         {active.length === 0 ? (
@@ -40,13 +45,18 @@ export function HomeView({ recent, commitments, budgetSummary }: {
         ) : (
           <>
             <h1 className="sr-only">{t("leadLabel")}</h1>
-            {active.map((wallet) => {
-              const balance = wallet.defaultBalanceId ? balanceById(wallet.defaultBalanceId) : undefined;
-              return <div key={wallet.id} className="mt-3 min-w-0">
-                <p className="truncate text-sm text-shell-muted"><bdi>{wallet.name}</bdi></p>
-                {balance ? <Amount minor={balance.balanceMinor} currency={balance.currency} className="block max-w-full whitespace-normal! break-all text-2xl leading-tight font-bold" /> : null}
-              </div>;
-            })}
+            {enabledCurrencies.length > 1 ? (
+              <div role="tablist" aria-label={t("currency")} className="-mx-1 mt-3 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
+                {enabledCurrencies.map((c) => (
+                  <button key={c.code} type="button" role="tab" aria-selected={c.code === code} onClick={() => setPicked(c.code)}
+                    className={cn("min-h-11 shrink-0 rounded-full px-4 text-[15px] focus-visible:outline-2 focus-visible:outline-ring",
+                      c.code === code ? "bg-shell-foreground/15 font-semibold text-shell-foreground" : "text-shell-muted")}>
+                    <bdi dir="ltr">{c.code}</bdi>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {code ? <Amount minor={total} currency={code} className="mt-2 block max-w-full whitespace-normal! break-all text-3xl leading-tight font-bold" /> : null}
             {budgetSummary}
           </>
         )}
@@ -74,13 +84,14 @@ export function HomeView({ recent, commitments, budgetSummary }: {
           </>
         )}
       </PageBody>
-    </>
+    </HomeCurrencyContext.Provider>
   );
 }
 
 function HomeWallets() {
   const t = useTranslations("Home");
-  const { walletContainers: active, balanceById } = useAppData();
+  const { walletContainers: active } = useAppData();
+  const code = useContext(HomeCurrencyContext);
 
   return (
     <section aria-labelledby="h-wallets" className="flex flex-col gap-2">
@@ -92,7 +103,8 @@ function HomeWallets() {
       </div>
       <div className="-mx-4 flex snap-x snap-mandatory scroll-ps-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
         {active.map((w) => {
-          const balance = w.defaultBalanceId ? balanceById(w.defaultBalanceId) : undefined;
+          const balance = w.balances.find((b) => b.currency === code);
+          if (!balance) return null;
           return (
           <Link
             key={w.id}
@@ -109,6 +121,8 @@ function HomeWallets() {
     </section>
   );
 }
+
+const HomeCurrencyContext = createContext<string | null>(null);
 
 export function HomeBudgetSummary({ budgets }: { budgets: MonthBudgets[] }) {
   const t = useTranslations("Home");
