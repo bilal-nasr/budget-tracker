@@ -9,7 +9,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}));
 vi.mock("react", () => ({ cache: (fn: unknown) => fn }));
-vi.mock("@/lib/demo-data", () => ({ DEMO_WALLET_CONTAINERS: [{ id: "demo-wallet" }] }));
+vi.mock("@/lib/demo-data", () => ({ DEMO_WALLET_CONTAINERS: [
+  { id: "demo-active", deleted: false, needsAttention: false },
+  { id: "demo-attention", deleted: false, needsAttention: true },
+  { id: "demo-deleted", deleted: true, needsAttention: false },
+] }));
 vi.mock("@/lib/supabase/proxy", () => ({ supabaseConfigured: mocks.configured }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }));
 vi.mock("@/features/currencies/queries", () => ({ getCurrencies: mocks.getCurrencies }));
@@ -118,9 +122,15 @@ describe("getWallets", () => {
     await expect(getWallets()).rejects.toThrow("Invalid wallet data");
   });
 
-  it("returns valid nested demo containers when Supabase is not configured", async () => {
+  it("uses the same active-only default and independent visibility options for demo containers", async () => {
     mocks.configured.mockReturnValue(false);
-    await expect(getWallets()).resolves.toEqual([{ id: "demo-wallet" }]);
+    expect((await getWallets()).map((wallet) => wallet.id)).toEqual(["demo-active"]);
+    expect((await getWallets({ includeNeedsAttention: true })).map((wallet) => wallet.id))
+      .toEqual(["demo-active", "demo-attention"]);
+    expect((await getWallets({ includeDeleted: true })).map((wallet) => wallet.id))
+      .toEqual(["demo-active", "demo-deleted"]);
+    expect((await getWallets({ includeDeleted: true, includeNeedsAttention: true })).map((wallet) => wallet.id))
+      .toEqual(["demo-active", "demo-attention", "demo-deleted"]);
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
 

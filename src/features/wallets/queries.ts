@@ -35,7 +35,11 @@ const getWalletsCached = cache(async (
   includeDeleted: boolean,
   includeNeedsAttention: boolean,
 ): Promise<WalletContainer[]> => {
-  if (!supabaseConfigured()) return DEMO_WALLET_CONTAINERS;
+  if (!supabaseConfigured()) {
+    return DEMO_WALLET_CONTAINERS.filter((wallet) =>
+      (includeDeleted || !wallet.deleted)
+      && (includeNeedsAttention || !wallet.needsAttention));
+  }
 
   const supabase = await createClient();
   const [currencies, wallets, balances, totals] = await Promise.all([
