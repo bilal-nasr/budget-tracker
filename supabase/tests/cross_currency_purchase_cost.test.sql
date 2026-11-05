@@ -13,7 +13,8 @@ insert into public.wallets(id,name,kind,currency) values
 ('cc100000-0000-4000-8000-000000000001','Paying USD','cash','USD'),
 ('cc100000-0000-4000-8000-000000000002','Returned LBP','cash','LBP'),
 ('cc100000-0000-4000-8000-000000000003','Alternate SYP payer','cash','SYP'),
-('cc100000-0000-4000-8000-000000000004','Same USD change','cash','USD');
+('cc100000-0000-4000-8000-000000000004','Same USD change','cash','USD'),
+('cc100000-0000-4000-8000-000000000005','Alternate LBP payer','cash','LBP');
 
 create function pg_temp.expense_input(
   amount bigint default 340000,
@@ -80,6 +81,16 @@ select lives_ok($$select * from public.save_transaction(
   pg_temp.cashier())$$,'payer wallet currency can change while item cost currency stays LBP');
 select is((select currency::text from public.transactions where id='cc200000-0000-4000-8000-000000000006'),'SYP','payer currency follows changed wallet');
 select is((select cost_currency::text from public.transactions where id='cc200000-0000-4000-8000-000000000006'),'LBP','item cost currency remains locked to LBP');
+
+update item_revision set value=(select revision from public.transactions where id='cc200000-0000-4000-8000-000000000006');
+select lives_ok($$select * from public.save_transaction(
+  'cc200000-0000-4000-8000-000000000006',(select value from item_revision),
+  pg_temp.expense_input(340000,'cc100000-0000-4000-8000-000000000005','LBP','Payer now matches cost'),null,
+  '{"tenderMinor":450000,"changes":[{"walletId":"cc100000-0000-4000-8000-000000000002","amountMinor":110000}]}')$$,
+  'itemized payer can move into the cost currency without changing item denomination');
+select is((select currency::text from public.transactions where id='cc200000-0000-4000-8000-000000000006'),'LBP','payer currency moves to LBP');
+select is((select cost_currency from public.transactions where id='cc200000-0000-4000-8000-000000000006'),null::public.currency,
+  'matching payer and cost normalize the override to null');
 
 create temp table main_revision as select revision value from public.transactions where id='cc200000-0000-4000-8000-000000000001';
 grant all on main_revision to authenticated;

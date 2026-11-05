@@ -323,6 +323,25 @@ describe("cashier aggregate integration", () => {
       amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
     }), 17));
   });
+  it("clears a saved cross-currency override after aligning cost with the payer", async () => {
+    const crossSaved: Transaction = {
+      ...cashSaved,
+      amountMinor: 340000,
+      currency: "LBP",
+      items: [],
+      settlement: { tenderMinor: 500, tenderCurrency: "USD", changes: [
+        { walletId: wallets[2].id, amountMinor: 110000, currency: "LBP" },
+      ] },
+    };
+    mount({ mode: "edit", initial: crossSaved });
+    fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.purchaseCurrency }), { target: { value: "USD" } });
+    for (const digit of "34") fireEvent.click(screen.getByRole("button", { name: digit }));
+    fireEvent.click(screen.getByRole("checkbox", { name: en.Cashier.title }));
+    fireEvent.click(screen.getByRole("button", { name: en.Add.saveChanges }));
+    await waitFor(() => expect(mock.updateTransaction).toHaveBeenCalledWith(id, expect.objectContaining({
+      costCurrency: "USD", settlement: null,
+    }), 17));
+  });
   it("duplicates actual cash without rate confirmation and submits the fresh draft UUID", async () => {
     const fresh = "00000000-0000-4000-8000-000000000098";
     mount({ mode: "add", initial: cashSaved, draftId: fresh });

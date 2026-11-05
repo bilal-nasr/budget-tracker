@@ -273,7 +273,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
       occurredOn: date,
       walletId,
       amountMinor,
-      ...(mode === "expense" && cashDraft.enabled ? { costCurrency: purchaseCurrency } : {}),
+      ...(settlementEligible ? { costCurrency: cashDraft.enabled ? purchaseCurrency : currency } : {}),
       categoryId,
       note: note.trim() || undefined,
       items: mode === "expense" && itemResult.valid ? itemResult.items : [],
