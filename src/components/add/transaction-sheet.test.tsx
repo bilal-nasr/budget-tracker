@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import en from "@/messages/en.json";
 import ar from "@/messages/ar.json";
 import { AppDataProvider } from "@/components/providers/app-data";
+import type { Category } from "@/features/categories/schema";
 import { emptyTransactionMetadata, type Transaction } from "@/features/transactions/schema";
 import type { Wallet } from "@/features/wallets/schema";
 
@@ -26,6 +27,17 @@ const wallets = [
   wallet(6, "Syrian cash", "SYP", -7500),
   wallet(7, "Syrian bank", "SYP", 8000),
 ];
+const expenseCategory: Category = {
+  id: "00000000-0000-4000-8000-000000000101",
+  kind: "expense",
+  parentId: null,
+  archivedAt: null,
+  nameEn: "Other",
+  nameAr: "أخرى",
+  tile: 1,
+  color: "teal",
+  position: 1,
+};
 const editedTransaction: Transaction = {
   ...emptyTransactionMetadata(),
   id: "00000000-0000-4000-8000-000000000098",
@@ -51,7 +63,7 @@ function mount(
 ) {
   const messages = locale === "en" ? en : ar;
   render(<NextIntlClientProvider locale={locale} messages={messages}>
-    <AppDataProvider wallets={wallets} categories={[]} timezone="Asia/Beirut" salary={null} usdLbpRate={rate}>
+    <AppDataProvider wallets={wallets} categories={[expenseCategory]} timezone="Asia/Beirut" salary={null} usdLbpRate={rate}>
       <TransactionSheet state={state} onClose={vi.fn()} />
     </AppDataProvider>
   </NextIntlClientProvider>);
@@ -123,6 +135,33 @@ describe.each(["en", "ar"] as const)("%s selected wallet balances", (locale) => 
   it("does not show selected wallet balances while editing", () => {
     mount(locale, 89500, { mode: "edit", initial: editedTransaction });
     expect(screen.queryByText(balance)).toBeNull();
+  });
+});
+
+describe.each(["en", "ar"] as const)("%s expense balance warning", (locale) => {
+  const warning = locale === "en"
+    ? "This expense exceeds this wallet's balance."
+    : "هذا المصروف يتجاوز رصيد هذه المحفظة.";
+
+  it("warns above the selected wallet balance without blocking save", () => {
+    const t = mount(locale, 89500, {
+      mode: "add",
+      draftId: "00000000-0000-4000-8000-000000000092",
+      preset: { kind: "expense", categoryId: expenseCategory.id },
+    });
+    for (const key of ["1", "2", "3", "4", ".", "5", "6"]) {
+      fireEvent.click(screen.getByRole("button", { name: key }));
+    }
+    expect(screen.queryByText(warning)).toBeNull();
+    expect((screen.getByRole("button", { name: t.save }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: t.backspace }));
+    fireEvent.click(screen.getByRole("button", { name: "7" }));
+    expect(screen.getByRole("status").textContent).toBe(warning);
+    expect((screen.getByRole("button", { name: t.save }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("radio", { name: t.income }));
+    expect(screen.queryByText(warning)).toBeNull();
   });
 });
 

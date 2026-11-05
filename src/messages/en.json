@@ -265,6 +265,7 @@
     "amount": "Amount",
     "wallet": "Wallet",
     "balance": "Balance",
+    "balanceWarning": "This expense exceeds this wallet's balance.",
     "category": "Category",
     "more": "More",
     "name": "Name",

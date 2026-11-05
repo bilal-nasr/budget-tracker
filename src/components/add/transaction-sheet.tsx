@@ -113,6 +113,8 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
   const list = mode === "move" ? [] : categoryOptions(categories, mode, state.mode === "edit" ? initial?.categoryId ?? undefined : undefined);
   const categoryAvailable = list.some((c) => c.id === categoryId);
   const minor = parseTyped(typed, currency);
+  const balanceExceeded = state.mode === "add" && mode === "expense" && wallet !== undefined &&
+    minor !== null && minor > 0 && minor > wallet.balanceMinor;
   const itemResult = parseExpenseItemDrafts(currency, minor, itemDrafts);
   const cashEditContext = state.mode === "edit" ? { walletId, original: state.initial } : undefined;
   const cashResult = parseSettlementDraft(cashDraft, currency, minor, wallets, cashEditContext);
@@ -372,6 +374,12 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
           {state.mode === "add" && wallet ? <WalletBalance label={t("balance")} wallet={wallet} /> : null}
         </div> : null}
       </div>
+
+      {balanceExceeded ? (
+        <p role="status" className="mb-3 rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">
+          {t("balanceWarning")}
+        </p>
+      ) : null}
 
       {pickWallet && mode !== "move" ? (
         <div role="radiogroup" aria-label={t("wallet")} className="mb-3 flex flex-wrap gap-2">
