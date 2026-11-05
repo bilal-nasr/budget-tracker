@@ -4,6 +4,15 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path=public,extensions;
 select no_plan();
+-- Administrator-owned test helper simulates a faulty internal cleanup. The
+-- deferred invariant must reject retaining any balance behind a null default.
+create function pg_temp.break_tombstone_cleanup(p_id uuid) returns void
+language plpgsql security definer set search_path='' as $$begin
+ insert into ledger_private.currency_operations values(auth.uid(),txid_current());
+ update public.wallets set default_balance_id=null where id=p_id and user_id=auth.uid();
+ delete from ledger_private.currency_operations where user_id=auth.uid() and transaction_id=txid_current();
+ set constraints all immediate;
+end $$;
 insert into auth.users(id,instance_id,aud,role,email) values
  ('cf000000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','global-currencies@example.test'),
  ('cf000000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000000','authenticated','authenticated','global-currencies-other@example.test');
@@ -71,6 +80,7 @@ select public.delete_wallet((select id from global_ids where label='sole'));
 select lives_ok($$select public.create_currency('AFTER','A',0)$$,'new catalog entry does not populate sole-balance tombstone');
 select lives_ok($$select public.delete_currency('USD')$$,'unused sole tombstone default can be removed');
 select ok((select default_balance_id is null from public.wallets where id=(select id from global_ids where label='sole')),'empty tombstone has null default');
+select is((select count(*) from public.wallet_balances where wallet_id=(select id from global_ids where label='sole')),0::bigint,'authorized null-default tombstone has no remaining balances');
 insert into global_ids values('live',public.create_wallet('Live','cash','AFTER',0));
 create function pg_temp.break_live_default() returns void language plpgsql as $$begin
  update public.wallets set default_balance_id=null where id=(select id from global_ids where label='live');
@@ -82,6 +92,16 @@ create function pg_temp.break_coverage() returns void language plpgsql as $$begi
  set constraints public.global_wallet_coverage immediate;
 end $$;
 select throws_ok($$select pg_temp.break_coverage()$$,'P0001','currency.incompleteCoverage','direct incomplete wallet creation fails at commit boundary');
+-- A direct combined tombstone/default write must not bypass immutable defaults.
+insert into global_ids values('direct-tomb',public.create_wallet('Direct tombstone','cash','AFTER',0));
+select throws_ok($$update public.wallets set deleted_at=now(),default_balance_id=null where id=(select id from global_ids where label='direct-tomb')$$,'P0001','wallet.invalidDefault','authenticated DML cannot tombstone a nonempty wallet with a null default');
+select ok((select deleted_at is null and default_balance_id is not null from public.wallets where id=(select id from global_ids where label='direct-tomb')),'rejected tombstone write preserves active state and default');
+select throws_ok($$insert into public.wallets(name,kind,deleted_at,default_balance_id) values('Forged empty tombstone','cash',now(),null)$$,'P0001','wallet.invalidDefault','authenticated DML cannot insert a null-default tombstone');
+insert into global_ids values('existing-tomb',public.create_wallet('Existing tombstone','cash','AFTER',0));
+select public.delete_wallet((select id from global_ids where label='existing-tomb'));
+select throws_ok($$update public.wallets set default_balance_id=null where id=(select id from global_ids where label='existing-tomb')$$,'P0001','wallet.invalidDefault','authenticated DML cannot null an existing tombstone default');
+select throws_ok($$select pg_temp.break_tombstone_cleanup((select id from global_ids where label='existing-tomb'))$$,'P0001','wallet.invalidDefault','even internal cleanup cannot leave balances behind a null tombstone default');
+select ok((select default_balance_id is not null from public.wallets where id=(select id from global_ids where label='existing-tomb')),'rejected incomplete cleanup preserves the tombstone default');
 select set_config('request.jwt.claims','{"sub":"cf000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select lives_ok($$select public.create_currency('ROUND','R',2)$$,'round-trip history definition exists');
 insert into public.transactions(kind,occurred_on,balance_id,currency,amount_minor,category_id)

@@ -72,17 +72,33 @@ do $$ declare d text; begin
  execute d;
 end $$;
 
--- Retain immutable tombstone metadata. Internal unused-balance cleanup may
--- switch/null only its default pointer; all monetary/history fields survive.
-do $$ declare d text; begin
- d:=pg_get_functiondef('ledger_private.wallet_guard()'::regprocedure);
- d:=replace(d,'if old.deleted_at is not null and new is distinct from old then raise exception ''wallet.deleted''; end if;',
- 'if old.deleted_at is not null and new is distinct from old then
+-- A null tombstone default is created only while deleting its sole unused
+-- balance. Ordinary tombstoning preserves the default, even for zero totals.
+create or replace function ledger_private.wallet_guard() returns trigger language plpgsql set search_path='' as $$
+begin
+ if new.deleted_at is not null and new.default_balance_id is null
+ and (tg_op='INSERT' or old.default_balance_id is distinct from new.default_balance_id or old.deleted_at is distinct from new.deleted_at) then
+  if tg_op<>'UPDATE' or old.deleted_at is null or not ledger_private.currency_operation_allowed(new.user_id) then
+   raise exception 'wallet.invalidDefault';
+  end if;
+ end if;
+ if tg_op='INSERT' then
+  select coalesce(max(position),-1)+1 into new.position from public.wallets where user_id=new.user_id and deleted_at is null and not needs_attention;
+ elsif tg_op='UPDATE' then
+  if (new.id,new.user_id,new.created_at) is distinct from(old.id,old.user_id,old.created_at) then raise exception 'wallet.immutable'; end if;
+  if old.deleted_at is not null and new is distinct from old then
    if not ledger_private.currency_operation_allowed(new.user_id)
-    or (to_jsonb(new)-''default_balance_id'') is distinct from (to_jsonb(old)-''default_balance_id'')
-   then raise exception ''wallet.deleted''; end if;
-  end if;');
- execute d;
+    or (to_jsonb(new)-'default_balance_id') is distinct from (to_jsonb(old)-'default_balance_id')
+   then raise exception 'wallet.deleted'; end if;
+  end if;
+  if old.needs_attention and not new.needs_attention and new.deleted_at is null then raise exception 'wallet.needsAttention'; end if;
+  if old.deleted_at is null and new.deleted_at is not null then
+   if exists(select 1 from public.wallet_balance_totals where wallet_id=new.id and balance_minor<>0) then raise exception 'wallet.nonzero'; end if;
+   if exists(select 1 from public.wallet_balances where wallet_id=new.id and ledger_private.balance_has_dependency(id)) then raise exception 'wallet.inUse'; end if;
+   new.needs_attention:=false;
+  end if;
+ end if;
+ return new;
 end $$;
 
 create function ledger_private.lock_global_catalog() returns uuid language plpgsql set search_path='' as $$
@@ -127,6 +143,8 @@ revoke all on function ledger_private.switch_currency_defaults(uuid,text) from p
 
 create function ledger_private.global_coverage_guard() returns trigger language plpgsql set search_path='' as $$
 declare owner_id uuid:=coalesce(new.user_id,old.user_id); begin
+ if exists(select 1 from public.wallets w where w.user_id=owner_id and w.default_balance_id is null
+ and exists(select 1 from public.wallet_balances b where b.wallet_id=w.id and b.user_id=owner_id)) then raise exception 'wallet.invalidDefault'; end if;
  if exists(select 1 from public.wallets w cross join public.currencies c
  where w.user_id=owner_id and c.user_id=owner_id and w.deleted_at is null and c.disabled_at is null
  and not exists(select 1 from public.wallet_balances b where b.wallet_id=w.id and b.user_id=owner_id and b.currency=c.code and b.detached_at is null)) then raise exception 'currency.incompleteCoverage'; end if;
