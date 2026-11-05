@@ -9,17 +9,14 @@ import { useComposer } from "@/components/shell/composer";
 import { EmptyState } from "@/components/shell/empty-state";
 import { Button } from "@/components/ui/button";
 import type { WalletContainer } from "@/features/wallets/schema";
-import { Link } from "@/i18n/navigation";
 import { CurrencySelector } from "./currency-selector";
 import { WalletReorder } from "./wallet-reorder";
 
 const ICON = { cash: Banknote, bank: Landmark, card: CreditCard } as const;
 
 /** Display selection never changes wallet defaults or creates balance rows. */
-export function WalletsView() {
+export function WalletsView({ commitments }: { commitments?: React.ReactNode }) {
   const t = useTranslations("Wallets");
-  const loans = useTranslations("Loans");
-  const payments = useTranslations("PendingPayments");
   const { walletContainers: wallets, needsAttentionWallets, enabledCurrencies: catalog, defaultCurrency } = useAppData();
   // The default currency leads the dropdown and is shown first.
   const enabledCurrencies = [...catalog].sort((a, b) => Number(b.code === defaultCurrency) - Number(a.code === defaultCurrency));
@@ -37,7 +34,7 @@ export function WalletsView() {
       {showInfo ? <p className="text-sm text-muted-foreground">{t("currencyViewHelp")}</p> : null}
       {wallets.length === 0 ? <EmptyState title={t("emptyTitle")} body={t("emptyBody")}
         action={<Button onClick={() => openWallet(null)}>{t("addFirst")}</Button>} /> : <>
-        <WalletReorder>{(wallet) => <WalletRow wallet={wallet} currency={currency?.code} onOpen={() => openWallet(wallet)} />}</WalletReorder>
+        <WalletReorder showHelp={showInfo}>{(wallet) => <WalletRow wallet={wallet} currency={currency?.code} onOpen={() => openWallet(wallet)} />}</WalletReorder>
         <Button variant="outline" onClick={() => openWallet(null)} className="self-start"><Plus aria-hidden />{t("add")}</Button>
       </>}
       {needsAttentionWallets.length > 0 ? <section aria-labelledby="w-attention" className="flex min-w-0 flex-col gap-2">
@@ -47,10 +44,7 @@ export function WalletsView() {
           {needsAttentionWallets.map((wallet) => <li key={wallet.id} className="min-w-0 border-b border-border last:border-b-0"><WalletRow wallet={wallet} currency={currency?.code} onOpen={() => openWallet(wallet)} /></li>)}
         </ul>
       </section> : null}
-      <div className="flex flex-wrap gap-x-5">
-        <Link href="/pending-payments" className="inline-flex min-h-11 items-center text-primary underline underline-offset-4">{payments("title")}</Link>
-        <Link href="/loans" className="inline-flex min-h-11 items-center text-primary underline underline-offset-4">{loans("title")}</Link>
-      </div>
+      {commitments}
     </div>
   );
 }

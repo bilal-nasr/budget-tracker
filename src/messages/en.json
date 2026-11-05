@@ -445,6 +445,12 @@
     "historyConflict": "This entry changed. Close and reopen it before correcting the note."
   },
   "Wallets": {
+    "activeCount": "{count} active",
+    "noneActive": "None active",
+    "waitingCount": "{count} waiting",
+    "nothingPending": "Nothing pending",
+    "youOwe": "You owe",
+    "owedToYou": "Owed to you",
     "emptyTitle": "No wallets yet",
     "emptyBody": "Add a place you keep cash, a bank account, or a card. Every enabled currency will be available.",
     "addFirst": "Add your first wallet",
