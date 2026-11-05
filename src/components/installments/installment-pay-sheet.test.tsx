@@ -12,7 +12,7 @@ vi.mock("@/features/transactions/actions", () => ({ deleteTransaction: mocks.rem
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
 vi.mock("@/components/providers/display-prefs", () => ({ useDisplayPrefs: () => ({ digits: "latin" }) }));
-vi.mock("@/components/providers/app-data", () => ({ useAppData: () => mocks.appData() }));
+vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppData: () => mocks.appData() }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ open, title, children }: { open: boolean; title: string; children: ReactNode }) => open ? <div role="dialog" aria-label={title}>{children}</div> : null }));
 vi.mock("@/components/ui/confirm-sheet", () => ({ ConfirmSheet: ({ open, title, children, onConfirm, onOpenChange }: {
   open: boolean; title: string; children: ReactNode; onConfirm: () => void; onOpenChange: (open: boolean) => void;

@@ -180,3 +180,12 @@ it("keeps default-only compatibility explicitly behind the legacy wallet input",
   }));
   expect(JSON.parse(screen.getByRole("status").textContent ?? "{}").legacy).toBe("USD");
 });
+
+it("exposes enabled Needs-attention balances separately from ordinary and deleted wallets", () => {
+  function AttentionProbe() {
+    const data = useAppData();
+    return <output>{JSON.stringify({ ordinary: data.walletContainers.map((wallet) => wallet.id), attention: data.needsAttentionWallets.map((wallet) => ({ id: wallet.id, currencies: wallet.balances.map((balance) => balance.currency) })) })}</output>;
+  }
+  render(provider(<AttentionProbe />, { walletContainers: [{ ...wallets[0], needsAttention: true }] }));
+  expect(JSON.parse(screen.getByRole("status").textContent!)).toEqual({ ordinary: [], attention: [{ id: "wallet-pocket", currencies: ["EUR"] }] });
+});

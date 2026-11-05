@@ -13,7 +13,7 @@ import type { WalletSheetState } from "@/components/wallets/wallet-sheet";
 import type { FixedExpense } from "@/features/fixed/schema";
 import type { Installment } from "@/features/installments/schema";
 import type { Transaction } from "@/features/transactions/schema";
-import type { Wallet } from "@/features/wallets/schema";
+import type { WalletContainer } from "@/features/wallets/schema";
 
 const loadTransactionSheet = () => import("@/components/add/transaction-sheet");
 const TransactionSheet = dynamic(() => loadTransactionSheet().then((m) => m.TransactionSheet));
@@ -39,7 +39,7 @@ function useSheetState<T>(initial: T) {
 type Composer = {
   openAdd: (preset?: ComposerPreset) => void;
   openDetail: (transaction: Transaction) => void;
-  openWallet: (wallet: Wallet | null) => void;
+  openWallet: (wallet: WalletContainer | null) => void;
   openSalary: () => void;
   openFixed: (item: FixedExpense | null) => void;
   openInstallment: (item: Installment) => void;
@@ -79,7 +79,7 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
 
   const openAdd = useCallback((preset?: ComposerPreset) => setAdd({ mode: "add", draftId: crypto.randomUUID(), preset }), [setAdd]);
   const openDetail = useCallback((t: Transaction) => setDetail(t), [setDetail]);
-  const openWallet = useCallback((w: Wallet | null) => setWallet({ wallet: w }), [setWallet]);
+  const openWallet = useCallback((w: WalletContainer | null) => setWallet({ wallet: w }), [setWallet]);
 
   const openSalary = useCallback(() => setSalaryOpen(true), [setSalaryOpen]);
   const openFixed = useCallback((item: FixedExpense | null) => setFixed({ item }), [setFixed]);

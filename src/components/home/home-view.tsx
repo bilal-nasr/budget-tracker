@@ -19,10 +19,7 @@ import type { MonthBudgets } from "@/features/budgets/schema";
 import { isOver } from "@/features/budgets/rows";
 import type { SalaryStatus } from "@/features/salary/schema";
 import type { Transaction } from "@/features/transactions/schema";
-import { totalsByCurrency } from "@/features/wallets/totals";
 import { TriangleAlert } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { CURRENCIES, formatAmount } from "@/lib/money";
 
 export function HomeView({ recent, commitments, budgetSummary }: {
   recent: React.ReactNode;
@@ -30,12 +27,9 @@ export function HomeView({ recent, commitments, budgetSummary }: {
   budgetSummary: React.ReactNode;
 }) {
   const t = useTranslations("Home");
-  const { legacyWallets: wallets } = useAppData();
+  const { walletContainers: active, needsAttentionWallets, balanceById } = useAppData();
   const { openWallet } = useComposer();
-  const active = wallets.filter((w) => !w.archived);
-  const hasArchived = wallets.some((w) => w.archived);
-  const totals = totalsByCurrency(active);
-  const held = CURRENCIES.filter((currency) => active.some((wallet) => wallet.currency === currency));
+  const hasAttention = needsAttentionWallets.length > 0;
 
   return (
     <>
@@ -46,11 +40,13 @@ export function HomeView({ recent, commitments, budgetSummary }: {
         ) : (
           <>
             <h1 className="sr-only">{t("leadLabel")}</h1>
-            {held.map((currency, index) => (
-              <p key={currency} className={cn("font-bold tracking-tight", formatAmount(totals[currency], currency).length > 23 ? "mt-2 text-base leading-tight" : formatAmount(totals[currency], currency).length > 16 ? "mt-2 text-xl leading-tight" : index > 0 ? "mt-3 text-[28px] leading-tight" : "mt-1 text-[40px] leading-[1.1]")}>
-                <Amount minor={totals[currency]} currency={currency} />
-              </p>
-            ))}
+            {active.map((wallet) => {
+              const balance = wallet.defaultBalanceId ? balanceById(wallet.defaultBalanceId) : undefined;
+              return <div key={wallet.id} className="mt-3 min-w-0">
+                <p className="truncate text-sm text-shell-muted"><bdi>{wallet.name}</bdi></p>
+                {balance ? <Amount minor={balance.balanceMinor} currency={balance.currency} className="block max-w-full whitespace-normal! break-all text-2xl leading-tight font-bold" /> : null}
+              </div>;
+            })}
             {budgetSummary}
           </>
         )}
@@ -63,9 +59,9 @@ export function HomeView({ recent, commitments, budgetSummary }: {
             action={
               <div className="flex flex-col items-center gap-1">
                 <Button onClick={() => openWallet(null)}>{t("emptyAction")}</Button>
-                {hasArchived ? (
+                {hasAttention ? (
                   <Link href="/wallets" className="inline-flex min-h-11 items-center text-[14px] text-primary underline underline-offset-4">
-                    {t("restoreArchived")}
+                    {t("reviewWallets")}
                   </Link>
                 ) : null}
               </div>
@@ -84,8 +80,7 @@ export function HomeView({ recent, commitments, budgetSummary }: {
 
 function HomeWallets() {
   const t = useTranslations("Home");
-  const { legacyWallets: wallets } = useAppData();
-  const active = wallets.filter((w) => !w.archived);
+  const { walletContainers: active, balanceById } = useAppData();
 
   return (
     <section aria-labelledby="h-wallets" className="flex flex-col gap-2">
@@ -96,18 +91,20 @@ function HomeWallets() {
         </Link>
       </div>
       <div className="-mx-4 flex snap-x snap-mandatory scroll-ps-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-        {active.map((w) => (
+        {active.map((w) => {
+          const balance = w.defaultBalanceId ? balanceById(w.defaultBalanceId) : undefined;
+          return (
           <Link
             key={w.id}
             href={{ pathname: "/activity", query: { walletId: w.id } }}
             className="min-h-[72px] min-w-[140px] snap-start rounded-xl border border-border bg-card px-3.5 py-3"
           >
             <span className="block truncate text-[13px] text-muted-foreground">
-              <bdi>{w.name}</bdi> · {w.currency}
+              <bdi>{w.name}</bdi> · <bdi dir="ltr">{balance?.currency}</bdi>
             </span>
-            <Amount minor={w.balanceMinor} currency={w.currency} className="text-lg font-semibold" />
+            {balance ? <Amount minor={balance.balanceMinor} currency={balance.currency} className="max-w-full whitespace-normal! break-all text-lg font-semibold" /> : null}
           </Link>
-        ))}
+        ); })}
       </div>
     </section>
   );

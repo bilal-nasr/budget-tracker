@@ -1,0 +1,60 @@
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import en from "@/messages/en.json";
+import ar from "@/messages/ar.json";
+import { AppDataProvider } from "@/components/providers/app-data";
+import type { CurrencyDefinition } from "@/lib/currency";
+import type { WalletContainer } from "@/features/wallets/schema";
+import { WalletsView } from "./wallets-view";
+const openWallet = vi.fn();
+vi.mock("@/components/shell/composer", () => ({ useComposer: () => ({ openWallet }) }));
+vi.mock("@/i18n/navigation", () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
+const currencies: CurrencyDefinition[] = [
+  { code: "USD", symbol: "$", decimalPlaces: 2, disabled: false, firstUsed: true },
+  { code: "TOKEN", symbol: "◈", decimalPlaces: 8, disabled: false, firstUsed: false },
+  { code: "JPY", symbol: "¥", decimalPlaces: 0, disabled: true, firstUsed: true },
+];
+const wallets: WalletContainer[] = ["Pocket", "Bank", "Review", "Deleted"].map((name, index) => ({
+  id: name, name, kind: "cash", position: index, deleted: name === "Deleted", needsAttention: name === "Review",
+  defaultBalanceId: `${name}-${index === 1 ? "TOKEN" : "USD"}`,
+  balances: currencies.map((currency, position) => ({ id: `${name}-${currency.code}`, walletId: name, currency: currency.code, position, detached: false, openingBalanceMinor: 0, balanceMinor: currency.code === "TOKEN" ? 123456789 + index : 250 + index })),
+}));
+function view(locale = "en", catalog = currencies, containers = wallets) {
+  return <NextIntlClientProvider locale={locale} messages={locale === "ar" ? ar : en}><AppDataProvider walletContainers={containers} currencies={catalog} categories={[]} timezone="UTC" salary={null} usdLbpRate={null}><WalletsView /></AppDataProvider></NextIntlClientProvider>;
+}
+it.each(["en", "ar"])("%s: one global selector retains all ordinary wallets with exact selected balances and defaults", (locale) => {
+  render(view(locale));
+  const selector = screen.getByRole("combobox");
+  expect(screen.getAllByRole("combobox")).toHaveLength(1);
+  expect(within(selector).getAllByRole("option").map((node) => node.textContent)).toEqual(["USD", "TOKEN"]);
+  const ordinary = screen.getByRole("list", { name: locale === "en" ? "Wallets" : ar.Nav.wallets });
+  expect(within(ordinary).getAllByRole("listitem")).toHaveLength(2);
+  expect(ordinary.textContent).toContain("$2.50");
+  fireEvent.change(selector, { target: { value: "TOKEN" } });
+  expect(within(ordinary).getAllByRole("listitem")).toHaveLength(2);
+  expect(ordinary.textContent).toContain("◈1.23456789");
+  expect(ordinary.textContent).toContain("◈1.23456790");
+  expect(ordinary.textContent).not.toContain("$2.50");
+  expect(ordinary.textContent).toContain("USD");
+  expect(screen.queryByText(en.Wallets.total)).toBeNull();
+  expect(screen.queryByText("Deleted")).toBeNull();
+  fireEvent.click(within(ordinary).getAllByRole("button")[0]);
+  expect(openWallet).toHaveBeenCalledWith(expect.objectContaining({ id: "Pocket", defaultBalanceId: "Pocket-USD" }));
+  expect(ordinary.querySelector('.amount')?.getAttribute("dir")).toBe("ltr");
+});
+it("keeps Needs-attention wallets in a separate labeled section", () => {
+  render(view());
+  const attention = screen.getByRole("region", { name: "Needs attention" });
+  expect(attention.textContent).toContain("Review");
+  expect(screen.getByRole("list", { name: "Wallets" }).textContent).not.toContain("Review");
+});
+it("falls back to the first enabled catalog currency after a refreshed selection becomes disabled", () => {
+  const rendered = render(view());
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "TOKEN" } });
+  const catalog = currencies.map((currency) => currency.code === "TOKEN" ? { ...currency, disabled: true } : currency);
+  rendered.rerender(view("en", catalog, wallets.map((wallet) => ({ ...wallet, defaultBalanceId: `${wallet.id}-USD` }))));
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("USD");
+});

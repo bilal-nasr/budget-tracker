@@ -10,7 +10,7 @@ vi.mock("@/features/transactions/actions",()=>({deleteTransaction:mocks.remove})
 vi.mock("sonner",()=>({toast:mocks.toast}));
 vi.mock("@/i18n/navigation",()=>({useRouter:()=>({refresh:mocks.refresh,push:mocks.push})}));
 vi.mock("@/components/shell/composer",()=>({useComposer:()=>({openSalary:mocks.openSalary})}));
-vi.mock("@/components/providers/app-data",()=>({useAppData:()=>mocks.appData()}));
+vi.mock("@/components/providers/app-data",async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(), useAppData:()=>mocks.appData()}));
 vi.mock("@/components/ui/confirm-sheet",()=>({ConfirmSheet:({open,onConfirm,children}:{open:boolean;onConfirm:()=>void;children:ReactNode})=>open?<div>{children}<button type="button" onClick={onConfirm}>Confirm salary</button></div>:null}));
 import { SalaryCard } from "./salary-card";
 const id="a1000000-0000-4000-8000-000000000001";

@@ -11,6 +11,8 @@ type AppData = {
   legacyWallets: Wallet[];
   /** Ordinary active wallets with enabled balances in catalog order. */
   walletContainers: WalletContainer[];
+  /** Recovery-only wallets, excluded from ordinary actions. */
+  needsAttentionWallets: WalletContainer[];
   currencies: CurrencyDefinition[];
   enabledCurrencies: CurrencyDefinition[];
   /** Complete historical catalogue. Use categoryOptions/activeCategories for new entries. */
@@ -121,6 +123,11 @@ export function AppDataProvider({
     return {
       legacyWallets,
       walletContainers: walletContainers.filter((wallet) => !wallet.deleted && !wallet.needsAttention).map((wallet) => ({
+        ...wallet,
+        balances: wallet.balances.filter((balance) => !balance.detached && !currencyIndex.get(balance.currency)!.disabled)
+          .sort((left, right) => currencyOrder.get(left.currency)! - currencyOrder.get(right.currency)!),
+      })),
+      needsAttentionWallets: walletContainers.filter((wallet) => !wallet.deleted && wallet.needsAttention).map((wallet) => ({
         ...wallet,
         balances: wallet.balances.filter((balance) => !balance.detached && !currencyIndex.get(balance.currency)!.disabled)
           .sort((left, right) => currencyOrder.get(left.currency)! - currencyOrder.get(right.currency)!),

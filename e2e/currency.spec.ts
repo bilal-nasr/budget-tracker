@@ -7,15 +7,44 @@ for (const locale of ["en", "ar"] as const) {
   const messages = locale === "en" ? en : ar;
   test(`${locale}: SYP wallet creation uses whole-pound amounts`, async ({ page }) => {
     await page.goto(`/${locale}/wallets`);
-    await expect(page.getByRole("heading", { name: "SYP", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: messages.Wallets.displayCurrency, exact: true })).toBeVisible();
     await page.getByRole("button", { name: messages.Wallets.add, exact: true }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.locator("label").filter({ hasText: /^SYP$/ }).click();
+    await dialog.getByRole("combobox", { name: messages.Wallets.defaultCurrency, exact: true }).selectOption("SYP");
     const amount = dialog.getByLabel(messages.Wallets.amount, { exact: true });
     await expect(amount).toHaveAttribute("inputmode", "numeric");
     await amount.fill("١٢٥٠");
     await dialog.getByLabel(messages.Wallets.name, { exact: true }).fill("محفظة سورية Synthetic wallet");
     await expect(dialog.getByRole("button", { name: messages.Wallets.create, exact: true })).toBeEnabled();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test(`${locale}: global currency selection keeps every wallet and its default at 320px`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto(`/${locale}/wallets`);
+    const selector = page.getByRole("combobox", { name: messages.Wallets.displayCurrency, exact: true });
+    await expect(page.getByRole("combobox")).toHaveCount(1);
+    const wallets = page.getByRole("list", { name: messages.Nav.wallets, exact: true });
+    const names = await wallets.getByRole("button").allTextContents();
+    expect(names.length).toBeGreaterThan(0);
+    const defaults = await wallets.locator("button").evaluateAll((buttons) => buttons.map((button) => button.querySelector("span.min-w-0 > span:last-child")?.textContent));
+    for (const code of ["LBP", "SYP", "USD"]) {
+      await selector.selectOption(code);
+      await expect(wallets.getByRole("button")).toHaveCount(names.length);
+      await expect(wallets).not.toContainText(messages.Wallets.balanceUnavailable);
+      expect(await wallets.locator("button").evaluateAll((buttons) => buttons.map((button) => button.querySelector("span.min-w-0 > span:last-child")?.textContent))).toEqual(defaults);
+      await expect(wallets.locator(".amount").first()).toHaveAttribute("dir", "ltr");
+      await expectNoHorizontalOverflow(page);
+    }
+    // Stress the rendered amount's layout independently of the demo catalog.
+    // The formatter's custom precision is verified by component tests.
+    await wallets.locator(".amount").first().evaluate((node) => { node.textContent = "LONGSYMBOL12 90,071,992.54740991"; });
+    await expect.poll(() => wallets.locator(".amount").first().evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+    await expectNoHorizontalOverflow(page);
+    await wallets.getByRole("button").first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("combobox", { name: messages.Wallets.defaultCurrency, exact: true })).toBeVisible();
+    await expect(dialog.getByLabel(messages.Wallets.amount, { exact: true })).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
   });
 

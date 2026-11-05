@@ -148,7 +148,8 @@
     "logFirst": "Log your first expense",
     "wallets": "Wallets",
     "manage": "Manage",
-    "restoreArchived": "Restore an archived wallet"
+    "restoreArchived": "Restore an archived wallet",
+    "reviewWallets": "Review wallets that need attention"
   },
   "Soon": {
     "title": "Coming soon"
@@ -386,7 +387,7 @@
   },
   "Wallets": {
     "emptyTitle": "No wallets yet",
-    "emptyBody": "A wallet holds cash, a bank account or a card in USD, Lebanese pounds (LBP), or new Syrian pounds (SYP).",
+    "emptyBody": "Add a place you keep cash, a bank account, or a card. Every enabled currency will be available.",
     "addFirst": "Add your first wallet",
     "total": "Total",
     "add": "Add wallet",
@@ -428,7 +429,15 @@
     "takenFrom": "Amount taken from it ({currency})",
     "takenHelp": "Enter exactly what left that wallet. No exchange rate is assumed.",
     "takenSame": "The same amount is taken from that wallet.",
-    "newMoneyHelp": "The starting balance is new money. It is not taken from any wallet."
+    "newMoneyHelp": "The starting balance is new money. It is not taken from any wallet.",
+    "displayCurrency": "Display currency",
+    "currencyViewHelp": "See one currency across every wallet. Each wallet keeps its own default.",
+    "defaultCurrency": "Default currency",
+    "defaultHelp": "Preselected when you start an action from this wallet. Every enabled currency is available.",
+    "globalCreateHelp": "Every enabled currency is added automatically. The starting balance applies only to your chosen default.",
+    "needsAttention": "Needs attention",
+    "needsAttentionHelp": "These wallets need review and are unavailable for new money entries.",
+    "balanceUnavailable": "Balance unavailable"
   },
   "Activity": {
     "search": "Search notes",
