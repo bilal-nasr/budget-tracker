@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { actionClient, type ActionResult } from "@/lib/supabase/action";
 import { fetchTransactions } from "./queries";
+import { todayIn } from "./group";
 import {
   createTransactionCore, updateTransactionCore, deleteTransactionCore, restoreTransactionCore,
   transactionMutationError, type TransactionMutation,
@@ -35,6 +36,25 @@ export async function correctTransactionNote(id: string, expectedRevision: numbe
     if (data.id !== id || !Number.isInteger(data.revision) || data.revision <= expectedRevision) return { ok: false, error: "failed" };
     revalidatePath("/", "layout");
     return { ok: true, id: data.id, revision: data.revision };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+/** Date-only correction for any activity kind (loans and transfers included); amounts and wallets never change. */
+export async function correctTransactionDate(id: string, expectedRevision: number, date: string): Promise<ActionResult<TransactionMutation>> {
+  const parsedDate = z.iso.date().refine((value) => value >= "2000-01-01").safeParse(date);
+  if (!idSchema.safeParse(id).success || !z.number().int().min(1).max(2_147_483_647).safeParse(expectedRevision).success || !parsedDate.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const owner = await ctx.supabase.from("profiles").select("timezone").eq("user_id", ctx.userId).maybeSingle();
+    if (owner.error || !owner.data) return { ok: false, error: "failed" };
+    if (parsedDate.data > todayIn(owner.data.timezone)) return { ok: false, error: "invalid" };
+    const { data, error } = await ctx.supabase.rpc("set_transaction_date", { p_id: id, p_expected_revision: expectedRevision, p_date: parsedDate.data });
+    if (error) return { ok: false, error: transactionMutationError(error) };
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row || row.id !== id || !Number.isInteger(row.revision) || row.revision <= expectedRevision) return { ok: false, error: "failed" };
+    revalidatePath("/", "layout");
+    return { ok: true, id: row.id, revision: row.revision };
   } catch { return { ok: false, error: "failed" }; }
 }
 

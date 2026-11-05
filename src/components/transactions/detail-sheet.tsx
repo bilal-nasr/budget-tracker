@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, CalendarDays } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
@@ -10,8 +10,9 @@ import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { categoryName } from "@/features/categories/catalogue";
-import { correctTransactionNote, deleteTransaction, restoreTransaction } from "@/features/transactions/actions";
+import { correctTransactionDate, correctTransactionNote, deleteTransaction, restoreTransaction } from "@/features/transactions/actions";
 import { TextField } from "@/components/ui/text-field";
+import { todayIn } from "@/features/transactions/group";
 import { signedMinor } from "@/features/transactions/amounts";
 import { classifyBalanceTransfer, type Transaction } from "@/features/transactions/schema";
 import { ExpenseBreakdown } from "./expense-breakdown";
@@ -222,6 +223,7 @@ export function DetailSheet({
               {t("delete")}
             </Button>
           </div>}
+          {conflicted ? null : <DateCorrection key={`${transaction.id}:${transaction.revision}`} transaction={transaction} disabled={pending || reloading} onDone={onClose} />}
           {conflicted ? <div className="flex flex-col items-start gap-3">
             <p role="alert" className="text-sm">{tb("conflict")}</p>
             <Button type="button" variant="outline" disabled={reloading || pending} onClick={reloadLatest}>
@@ -232,6 +234,41 @@ export function DetailSheet({
       ) : null}
     </SheetShell>
   );
+}
+
+/** Explicit, date-only correction for any activity; nothing opens until the button is pressed. */
+function DateCorrection({ transaction, disabled, onDone }: { transaction: Transaction; disabled: boolean; onDone: () => void }) {
+  const t = useTranslations("Detail");
+  const { timezone } = useAppData();
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(transaction.occurredOn);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  if (!open) {
+    return <Button type="button" variant="ghost" className="self-start" disabled={disabled} onClick={() => { setDate(transaction.occurredOn); setError(null); setOpen(true); }}>
+      <CalendarDays aria-hidden />{t("changeDate")}
+    </Button>;
+  }
+  return <form className="flex min-w-0 flex-col gap-3" onSubmit={(event) => {
+    event.preventDefault();
+    if (pending || date === "" || date === transaction.occurredOn) return;
+    startTransition(async () => {
+      const result = await correctTransactionDate(transaction.id, transaction.revision, date);
+      if (result.ok) { onDone(); return; }
+      setError(t(result.error === "notConfigured" ? "errorPreview" : result.error === "conflict" ? "historyConflict" : result.error === "paymentOrder" ? "dateOrder" : result.error === "invalid" ? "dateInvalid" : "errorFailed"));
+    });
+  }}>
+    <label className="flex flex-col gap-1.5 text-sm font-medium">
+      {t("date")}
+      <input type="date" value={date} max={todayIn(timezone)} min="2000-01-01" disabled={pending} onChange={(e) => setDate(e.target.value)}
+        className="h-12 rounded-lg border border-input bg-card px-3.5 text-base font-normal" />
+    </label>
+    {error ? <p role="alert" className="text-sm text-over-foreground">{error}</p> : null}
+    <div className="grid grid-cols-2 gap-2">
+      <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>{t("cancelDate")}</Button>
+      <Button type="submit" disabled={pending || date === "" || date === transaction.occurredOn}>{t("saveDate")}</Button>
+    </div>
+  </form>;
 }
 
 function HistoricalNote({ transaction, onDone }: { transaction: Transaction; onDone: () => void }) {

@@ -1785,6 +1785,17 @@ export type Database = {
                     "starts_month": string;
                 }[];
             };
+            "set_transaction_date": {
+                Args: {
+                    "p_id": string;
+                    "p_expected_revision": number;
+                    "p_date": string;
+                };
+                Returns: {
+                    "id": string;
+                    "revision": number;
+                }[];
+            };
             "category_spend_between": {
                 Args: {
                     "p_from": string;

@@ -415,6 +415,11 @@
   },
   "Detail": {
     "title": "Details",
+    "changeDate": "Change date",
+    "saveDate": "Save date",
+    "cancelDate": "Cancel",
+    "dateOrder": "A payment cannot be dated before an earlier one or after a later one.",
+    "dateInvalid": "That date is not allowed for this activity.",
     "income": "Income",
     "expense": "Expense",
     "wallet": "Wallet",

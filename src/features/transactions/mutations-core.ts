@@ -46,6 +46,8 @@ const errorMessages = new Map<string, ActionError>([
   ["transaction request already used", "requestAlreadyUsed"],
   ["loan.managedTransaction", "managedTransaction"],
   ["loan.conflict", "conflict"],
+  ["loan.paymentOrder", "paymentOrder"],
+  ["loan.invalid", "invalid"],
   ["invalid transaction input", "invalid"],
   ["invalid expense item", "invalid"],
   ["invalid settlement", "invalid"],
