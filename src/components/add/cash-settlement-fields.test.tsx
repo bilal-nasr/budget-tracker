@@ -45,6 +45,7 @@ const editContext = {
 };
 const labels: CashSettlementLabels = {
   title: "Cash paid and change",
+  paidFrom: "Paid from wallet",
   tender: "Paid to cashier",
   change: "Change received",
   currency: "Change currency",

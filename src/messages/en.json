@@ -730,6 +730,7 @@
     "alignBeforeStandard": "Match the purchase currency to the paying wallet before switching to Standard.",
     "cost": "Purchase cost",
     "purchaseCurrency": "Purchase currency",
+    "paidFrom": "Paid from wallet",
     "tender": "Paid to cashier",
     "change": "Change received",
     "currency": "Change currency",

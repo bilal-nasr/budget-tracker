@@ -402,7 +402,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
           <bdi dir="ltr" className="text-[28px] font-semibold text-muted-foreground">{currencyPrefix(amountCurrency)}</bdi>
           <bdi dir="ltr">{typed === "" ? "0" : groupTyped(typed)}</bdi>
         </p>
-        {mode !== "move" ? <div className="flex shrink-0 flex-col items-end gap-1">
+        {mode !== "move" && !cashDraft.enabled ? <div className="flex shrink-0 flex-col items-end gap-1">
           <Button
             variant="outline"
             className="rounded-full max-md:pointer-events-auto"
@@ -425,7 +425,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
         </p>
       ) : null}
 
-      {pickWallet && mode !== "move" ? (
+      {pickWallet && mode !== "move" && !cashDraft.enabled ? (
         <div role="radiogroup" aria-label={t("wallet")} className="mb-3 flex flex-wrap gap-2">
           {usable.map((w) => (
             <button
@@ -541,6 +541,8 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
             items={itemDrafts} onChange={setItemDrafts} labels={breakdownLabels} disabled={pending || unresolved} /> : null}
           {settlementEligible && cashDraft.enabled ? <>
             <CashSettlementFields draft={cashDraft} payCurrency={currency} costCurrency={purchaseCurrency} costMinor={minor} wallets={wallets}
+              payerWalletId={walletId} payerWallets={usable} onPayerWalletChange={changeWallet}
+              payerBalance={state.mode === "add" && wallet ? <WalletBalance label={t("balance")} wallet={wallet} /> : null}
               editContext={cashEditContext}
               labels={settlementLabels} onChange={setCashDraft} onCreateWallet={() => onCreateWallet?.()} disabled={pending || unresolved} />
             {cashDraft.enabled && cashDraft.changes.some((change) => change.currency !== currency)

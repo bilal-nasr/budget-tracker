@@ -70,6 +70,7 @@ export function settlementDraftFromSnapshot(
 
 export type CashSettlementLabels = {
   title: string;
+  paidFrom: string;
   tender: string;
   change: string;
   currency: string;
@@ -129,8 +130,12 @@ export function CashSettlementFields({
   costCurrency,
   costMinor,
   wallets,
+  payerWalletId,
+  payerWallets,
+  payerBalance,
   labels,
   onChange,
+  onPayerWalletChange,
   disabled = false,
   editContext,
 }: {
@@ -139,8 +144,12 @@ export function CashSettlementFields({
   costCurrency: Currency;
   costMinor: number | null;
   wallets: readonly SettlementWallet[];
+  payerWalletId?: string;
+  payerWallets?: readonly SettlementWallet[];
+  payerBalance?: React.ReactNode;
   labels: CashSettlementLabels;
   onChange: (draft: CashSettlementDraft) => void;
+  onPayerWalletChange?: (walletId: string) => void;
   onCreateWallet?: () => void;
   disabled?: boolean;
   editContext?: SettlementEditContext;
@@ -158,6 +167,20 @@ export function CashSettlementFields({
     <fieldset disabled={disabled} className="min-w-0 border-t border-border py-3 disabled:opacity-60">
       <legend className="px-1 text-sm font-semibold">{labels.title}</legend>
       <div id={`${id}-fields`} className="flex min-w-0 flex-col gap-3 pt-2">
+          {payerWalletId !== undefined && payerWallets && onPayerWalletChange ? (
+            <div className="flex flex-col gap-1">
+              <label htmlFor={`${id}-payer-wallet`} className="flex flex-col gap-1.5 text-sm font-medium">
+                {labels.paidFrom}
+                <select id={`${id}-payer-wallet`} aria-label={labels.paidFrom} value={payerWalletId}
+                  onChange={(event) => onPayerWalletChange(event.target.value)} className={selectClass}>
+                  {payerWallets.map((wallet) => (
+                    <option key={wallet.id} value={wallet.id}>{wallet.name} · {wallet.currency}</option>
+                  ))}
+                </select>
+              </label>
+              {payerBalance}
+            </div>
+          ) : null}
           <div className="flex flex-col gap-1">
             <bdi dir="ltr" className="text-sm text-muted-foreground">{payCurrency}</bdi>
             <TextField type="text" label={labels.tender} value={draft.tenderText}

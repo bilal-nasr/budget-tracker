@@ -48,6 +48,7 @@ for (const locale of ["en", "ar"] as const) {
     await dialog.getByLabel(m.Cashier.purchaseCurrency).selectOption("LBP");
     for (const key of ["3", "4", "0", "000"]) await dialog.getByRole("button", { name: key, exact: true }).click();
     await expect(dialog.getByLabel(m.Add.amount, { exact: true })).toContainText("340,000");
+    await expect(dialog.getByLabel(m.Cashier.paidFrom)).toBeVisible();
     await dialog.getByRole("combobox", { name: m.Add.category }).click();
     await page.getByRole("option", { name: locale === "ar" ? "أخرى" : "Other", exact: true }).click();
     await dialog.getByLabel(m.Cashier.tender).fill("5");

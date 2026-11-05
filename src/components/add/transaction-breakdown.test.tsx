@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "@/messages/en.json";
 import ar from "@/messages/ar.json";
@@ -282,9 +282,9 @@ describe("cashier aggregate integration", () => {
     ] },
   };
   it.each([
-    ["en", "Payment style", "Standard", "Cash purchase"],
-    ["ar", "طريقة الدفع", "عادي", "شراء نقدي"],
-  ] as const)("%s exposes cashier as a secondary Expense mode", (locale, group, standard, cashPurchase) => {
+    ["en", "Payment style", "Standard", "Cash purchase", "Paid from wallet"],
+    ["ar", "طريقة الدفع", "عادي", "شراء نقدي", "محفظة الدفع"],
+  ] as const)("%s exposes cashier as a secondary Expense mode", (locale, group, standard, cashPurchase, paidFrom) => {
     const m = locale === "ar" ? ar : en;
     mount(undefined, locale);
     const mode = screen.getByRole("radiogroup", { name: group });
@@ -296,6 +296,8 @@ describe("cashier aggregate integration", () => {
     expect((screen.getByRole("radio", { name: cashPurchase }) as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole("combobox", { name: m.Cashier.purchaseCurrency })).toBeTruthy();
     expect(screen.getByLabelText(m.Cashier.tender)).toBeTruthy();
+    const cashier = screen.getByRole("group", { name: m.Cashier.title });
+    expect((within(cashier).getByRole("combobox", { name: paidFrom }) as HTMLSelectElement).value).toBe(walletId);
   });
   it("records exact LBP cost, USD tender, and LBP change without a rate", async () => {
     mount();

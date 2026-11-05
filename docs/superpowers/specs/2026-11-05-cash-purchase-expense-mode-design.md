@@ -32,6 +32,7 @@ Make cashier recording discoverable without presenting it as a separate transact
 - For a new expense, Standard is selected initially. For edit/duplicate, derive the mode from whether a settlement exists.
 - Changing Cash purchase to Standard uses the existing safe removal rules: a cross-currency purchase must first align its purchase currency with the payer currency, and saved settlement removal remains explicit.
 - Remove the redundant cashier enable checkbox. The expanded section keeps a descriptive heading and its existing tender/change fields.
+- In Cash purchase mode, place the paying-wallet selector inside the cash-paid section, immediately before the tender amount. The purchase-cost header shows only the cost, so the wallet cannot be mistaken for the purchase currency or cost account.
 - Use bilingual labels `Standard` / `Cash purchase` and clear Arabic equivalents. Keep 44px minimum targets, visible selected state, semantic radiogroup behavior, and RTL-safe layout.
 
 ## Verification
