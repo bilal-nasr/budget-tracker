@@ -12,19 +12,42 @@ async function startPurchase(page: Page, locale: "en" | "ar") {
   for (const key of ["1", "2", ".", "5"]) await dialog.getByRole("button", { name: key, exact: true }).click();
   await dialog.getByRole("combobox", { name: m.Add.category }).click();
   await page.getByRole("option", { name: locale === "ar" ? "أخرى" : "Other", exact: true }).click();
-  await dialog.getByRole("radio", { name: locale === "ar" ? "شراء نقدي" : "Cash purchase" }).click();
+  await dialog.getByRole("radiogroup", { name: m.Cashier.paymentStyle })
+    .getByText(m.Cashier.cashPurchase, { exact: true })
+    .click();
   return { dialog, m };
 }
 for (const locale of ["en", "ar"] as const) {
+  test(`${locale} keeps the amount visible while using the keypad on a short mobile screen`, async ({ page }) => {
+    test.skip(test.info().project.name !== "mobile-small");
+
+    const m = locale === "ar" ? ar : en;
+    await page.goto(`/${locale}`);
+    await page.getByRole("button", { name: m.Nav.add, exact: true }).filter({ visible: true }).click();
+    const dialog = page.getByRole("dialog");
+
+    const amount = dialog.getByLabel(m.Add.amount);
+    const firstKey = dialog.getByRole("button", { name: "1", exact: true });
+    await firstKey.scrollIntoViewIfNeeded();
+
+    await expect(amount).toBeInViewport({ ratio: 1 });
+    await firstKey.click();
+    await expect(amount).toContainText("1");
+    await expect(amount).toBeInViewport({ ratio: 1 });
+  });
+
   test(`${locale} records LBP cost with USD tender and LBP change through Cash purchase mode`, async ({ page }) => {
     const m = locale === "ar" ? ar : en;
     await page.goto(`/${locale}`);
     await page.getByRole("button", { name: m.Nav.add, exact: true }).filter({ visible: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("radio", { name: m.Cashier.standard })).toBeChecked();
-    await dialog.getByRole("radio", { name: m.Cashier.cashPurchase }).click();
+    await dialog.getByRole("radiogroup", { name: m.Cashier.paymentStyle })
+      .getByText(m.Cashier.cashPurchase, { exact: true })
+      .click();
     await dialog.getByLabel(m.Cashier.purchaseCurrency).selectOption("LBP");
-    for (const key of ["3", "4", "000", "000"]) await dialog.getByRole("button", { name: key, exact: true }).click();
+    for (const key of ["3", "4", "0", "000"]) await dialog.getByRole("button", { name: key, exact: true }).click();
+    await expect(dialog.getByLabel(m.Add.amount, { exact: true })).toContainText("340,000");
     await dialog.getByRole("combobox", { name: m.Add.category }).click();
     await page.getByRole("option", { name: locale === "ar" ? "أخرى" : "Other", exact: true }).click();
     await dialog.getByLabel(m.Cashier.tender).fill("5");

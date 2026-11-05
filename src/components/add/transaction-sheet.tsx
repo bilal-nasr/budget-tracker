@@ -390,7 +390,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
         </label>
         <p className="pt-3 text-sm text-muted-foreground">{ts("cost")}</p>
       </> : null}
-      <div className="flex flex-wrap items-center justify-between gap-3 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 py-3.5 max-md:pointer-events-none max-md:sticky max-md:top-0 max-md:z-10 max-md:-mx-4 max-md:border-b max-md:border-border max-md:bg-card max-md:px-4">
         <p
           className={cn(
             "amount flex min-w-0 items-baseline gap-1 leading-none font-bold tracking-tight",
@@ -405,7 +405,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
         {mode !== "move" ? <div className="flex shrink-0 flex-col items-end gap-1">
           <Button
             variant="outline"
-            className="rounded-full"
+            className="rounded-full max-md:pointer-events-auto"
             aria-expanded={pickWallet}
             onClick={() => setPickWallet((v) => !v)}
           >
