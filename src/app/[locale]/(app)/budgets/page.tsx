@@ -6,7 +6,7 @@ import { summarizeFixed } from "@/features/fixed/summary";
 import { getInstallments } from "@/features/installments/queries";
 import { getProfile } from "@/features/profile/queries";
 import { todayIn } from "@/features/transactions/group";
-import { getWallets } from "@/features/wallets/queries";
+import { getLegacyWallets } from "@/features/wallets/queries";
 import { CURRENCIES, isCurrency, type Currency } from "@/lib/money";
 import { availableBudgetCurrencies } from "@/features/budgets/rows";
 
@@ -17,7 +17,7 @@ export default async function BudgetsPage({ params, searchParams }: PageProps<"/
   setRequestLocale(locale);
   const query = await searchParams;
 
-  const [profile, wallets] = await Promise.all([getProfile(), getWallets()]);
+  const [profile, wallets] = await Promise.all([getProfile(), getLegacyWallets()]);
   const rawMonth = typeof query.month === "string" ? query.month : "";
   const month = MONTH.test(rawMonth) ? rawMonth : todayIn(profile.timezone).slice(0, 7);
 

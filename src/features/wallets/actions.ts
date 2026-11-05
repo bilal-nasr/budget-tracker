@@ -2,126 +2,139 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { actionClient, type ActionResult } from "@/lib/supabase/action";
-import { todayIn } from "@/features/transactions/group";
-import { getProfile } from "@/features/profile/queries";
-import { walletInputSchema, walletFundingSchema, type WalletFunding, type WalletInput } from "./schema";
+import { actionClient, databaseActionError, type ActionResult } from "@/lib/supabase/action";
+import {
+  walletBalanceInputSchema,
+  walletCreateInputSchema,
+  walletUpdateInputSchema,
+  type WalletBalanceInput,
+  type WalletCreateInput,
+  type WalletFunding,
+  type WalletUpdateInput,
+} from "./schema";
 
-/**
- * Creates a wallet. By default its starting balance is new money. With
- * `funding`, the starting balance is instead taken from another wallet: the
- * new wallet starts at 0 and a move records the transfer in.
- */
-export async function createWallet(
-  input: WalletInput,
-  funding?: WalletFunding,
-): Promise<ActionResult<{ id: string }>> {
-  const parsed = walletInputSchema.safeParse(input);
-  const fund = funding === undefined ? undefined : walletFundingSchema.safeParse(funding);
-  if (!parsed.success || (fund && !fund.success)) return { ok: false, error: "invalid" };
-  const ctx = await actionClient();
-  if (ctx.error) return { ok: false, error: ctx.error };
-  const moved = fund?.success ? fund.data : undefined;
-  const startMinor = parsed.data.openingBalanceMinor;
-  if (moved && startMinor <= 0) return { ok: false, error: "invalid" };
+const uuid = z.uuid();
 
-  const { data, error } = await ctx.supabase
-    .from("wallets")
-    .insert({
-      name: parsed.data.name,
-      kind: parsed.data.kind,
-      currency: parsed.data.currency,
-      opening_balance_minor: moved ? 0 : startMinor,
-      position: Math.floor(Date.now() / 1000),
-    })
-    .select("id")
-    .single();
-  if (error || !data) return { ok: false, error: "failed" };
-
-  if (moved) {
-    const profile = await getProfile();
-    const { error: moveError } = await ctx.supabase.from("transactions").insert({
-      kind: "transfer",
-      occurred_on: todayIn(profile.timezone),
-      wallet_id: moved.fromWalletId,
-      amount_minor: moved.takenMinor,
-      currency: "USD", // overwritten from the source wallet by the database trigger
-      to_wallet_id: data.id,
-      to_amount_minor: startMinor,
-      note: "Starting balance",
-    });
-    if (moveError) {
-      // Do not leave an empty wallet behind: archive, then delete (only archived wallets can be deleted).
-      await ctx.supabase.from("wallets").update({ archived_at: new Date().toISOString() }).eq("id", data.id);
-      await ctx.supabase.from("wallets").delete().eq("id", data.id);
-      return { ok: false, error: "failed" };
-    }
-  }
-  revalidatePath("/", "layout");
-  return { ok: true, id: data.id };
-}
-
-export async function updateWallet(id: string, input: WalletInput): Promise<ActionResult> {
-  const parsed = walletInputSchema.safeParse(input);
-  if (!parsed.success || !z.uuid().safeParse(id).success) return { ok: false, error: "invalid" };
-  const ctx = await actionClient();
-  if (ctx.error) return { ok: false, error: ctx.error };
-
-  const { error } = await ctx.supabase
-    .from("wallets")
-    .update({
-      name: parsed.data.name,
-      kind: parsed.data.kind,
-      currency: parsed.data.currency,
-      opening_balance_minor: parsed.data.openingBalanceMinor,
-    })
-    .eq("id", id);
-  // The database refuses a currency change once the wallet has transactions.
-  if (error) return { ok: false, error: "failed" };
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
-export async function archiveWallet(id: string): Promise<ActionResult> {
-  if (!z.uuid().safeParse(id).success) return { ok: false, error: "invalid" };
-  const ctx = await actionClient();
-  if (ctx.error) return { ok: false, error: ctx.error };
-  const { error } = await ctx.supabase
-    .from("wallets")
-    .update({ archived_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) return { ok: false, error: "failed" };
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
-export async function unarchiveWallet(id: string): Promise<ActionResult> {
-  if (!z.uuid().safeParse(id).success) return { ok: false, error: "invalid" };
-  const ctx = await actionClient();
-  if (ctx.error) return { ok: false, error: ctx.error };
-  const { error } = await ctx.supabase.from("wallets").update({ archived_at: null }).eq("id", id);
-  if (error) return { ok: false, error: "failed" };
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
-/**
- * Dependency checks, salary clearing and deletion share one database transaction.
- */
-export async function deleteWallet(id: string): Promise<ActionResult> {
-  if (!z.uuid().safeParse(id).success) return { ok: false, error: "invalid" };
+async function safeActionClient() {
   try {
-  const ctx = await actionClient();
-  if (ctx.error) return { ok: false, error: ctx.error };
-
-  const { error } = await ctx.supabase.rpc("delete_wallet", { p_id: id });
-  if (error) {
-    const known = { "wallet.invalid": "invalid", "wallet.hasTransactions": "hasTransactions", "wallet.inUse": "inUse" } as const;
-    return { ok: false, error: known[error.message as keyof typeof known] ?? "failed" };
+    return await actionClient();
+  } catch {
+    return { error: "failed" as const };
   }
-  revalidatePath("/", "layout");
-  return { ok: true };
+}
+
+async function rpcAction(
+  name: "set_wallet_default" | "detach_wallet_balance",
+  args: Record<string, string>,
+): Promise<ActionResult> {
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { error } = await ctx.supabase.rpc(name, args);
+    if (error) return { ok: false, error: databaseActionError(error) };
+    revalidatePath("/", "layout");
+    return { ok: true };
   } catch {
     return { ok: false, error: "failed" };
   }
+}
+
+export async function createWallet(
+  input: WalletCreateInput,
+  legacyFunding?: WalletFunding,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = walletCreateInputSchema.safeParse(input);
+  if (!parsed.success || legacyFunding !== undefined) return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { data, error } = await ctx.supabase.rpc("create_wallet", {
+      p_name: parsed.data.name,
+      p_kind: parsed.data.kind,
+      p_currency: parsed.data.currency,
+      p_opening_minor: parsed.data.openingBalanceMinor,
+    });
+    if (error || typeof data !== "string") return { ok: false, error: error ? databaseActionError(error) : "failed" };
+    revalidatePath("/", "layout");
+    return { ok: true, id: data };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+export async function updateWallet(id: string, input: WalletUpdateInput): Promise<ActionResult> {
+  const parsed = walletUpdateInputSchema.safeParse(input);
+  if (!uuid.safeParse(id).success || !parsed.success) return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { data, error } = await ctx.supabase.from("wallets")
+      .update({ name: parsed.data.name, kind: parsed.data.kind })
+      .eq("id", id)
+      .eq("user_id", ctx.userId)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) return { ok: false, error: error ? databaseActionError(error) : "walletUnavailable" };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+export async function addWalletBalance(walletId: string, input: WalletBalanceInput): Promise<ActionResult<{ id: string }>> {
+  const parsed = walletBalanceInputSchema.safeParse(input);
+  if (!uuid.safeParse(walletId).success || !parsed.success) return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { data, error } = await ctx.supabase.rpc("add_wallet_balance", {
+      p_wallet_id: walletId,
+      p_currency: parsed.data.currency,
+    });
+    if (error || typeof data !== "string") return { ok: false, error: error ? databaseActionError(error) : "failed" };
+    revalidatePath("/", "layout");
+    return { ok: true, id: data };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+export async function setDefaultWalletBalance(walletId: string, balanceId: string): Promise<ActionResult> {
+  if (!uuid.safeParse(walletId).success || !uuid.safeParse(balanceId).success) return { ok: false, error: "invalid" };
+  return rpcAction("set_wallet_default", { p_wallet_id: walletId, p_balance_id: balanceId });
+}
+
+export async function detachWalletBalance(balanceId: string): Promise<ActionResult> {
+  if (!uuid.safeParse(balanceId).success) return { ok: false, error: "invalid" };
+  return rpcAction("detach_wallet_balance", { p_balance_id: balanceId });
+}
+
+export async function deleteWallet(id: string): Promise<ActionResult> {
+  if (!uuid.safeParse(id).success) return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { error } = await ctx.supabase.rpc("delete_wallet", { p_id: id });
+    if (error) {
+      const legacy = { "wallet.invalid": "invalid", "wallet.hasTransactions": "hasTransactions" } as const;
+      return { ok: false, error: legacy[error.message as keyof typeof legacy] ?? databaseActionError(error) };
+    }
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** @deprecated Archive/restore no longer exists; wallet deletion is permanent. */
+export async function archiveWallet(_id: string): Promise<ActionResult> {
+  void _id;
+  return { ok: false, error: "invalid" };
+}
+
+/** @deprecated Archive/restore no longer exists; wallet deletion is permanent. */
+export async function unarchiveWallet(_id: string): Promise<ActionResult> {
+  void _id;
+  return { ok: false, error: "invalid" };
 }

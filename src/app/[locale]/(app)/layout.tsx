@@ -3,7 +3,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { ComposerProvider } from "@/components/shell/composer";
 import { AppDataProvider } from "@/components/providers/app-data";
 import { getCategories } from "@/features/categories/queries";
-import { getWallets } from "@/features/wallets/queries";
+import { getLegacyWallets } from "@/features/wallets/queries";
 import { DisplayPrefsProvider } from "@/components/providers/display-prefs";
 import { getProfile } from "@/features/profile/queries";
 import { setRequestLocale } from "next-intl/server";
@@ -14,7 +14,7 @@ export default async function AppLayout({ children, params }: LayoutProps<"/[loc
   setRequestLocale(locale);
   const [profile, wallets, categories] = await Promise.all([
     timed("layout.profile", getProfile),
-    timed("layout.wallets", getWallets),
+    timed("layout.wallets", getLegacyWallets),
     timed("layout.categories", getCategories),
   ]);
   if (!profile.onboarded) redirect({ href: "/onboarding", locale });

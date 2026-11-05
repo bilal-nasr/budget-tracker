@@ -42,12 +42,31 @@ export const walletContainerSchema = z.object({
     ids.add(balance.id);
   }
   const selected = wallet.balances.find((balance) => balance.id === wallet.defaultBalanceId);
-  if (!selected || selected.detached) {
+  if (!selected || (!wallet.deleted && selected.detached)) {
     context.addIssue({ code: "custom", path: ["defaultBalanceId"], message: "Default must be an attached balance owned by this wallet" });
   }
 });
 
 export type WalletContainer = z.infer<typeof walletContainerSchema>;
+
+export const walletCreateInputSchema = z.object({
+  name: z.string().trim().min(1).max(40),
+  kind: walletKindSchema,
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9]{0,11}$/),
+  openingBalanceMinor: minorSchema,
+}).strict();
+export type WalletCreateInput = z.infer<typeof walletCreateInputSchema>;
+
+export const walletUpdateInputSchema = z.object({
+  name: z.string().trim().min(1).max(40),
+  kind: walletKindSchema,
+}).strict();
+export type WalletUpdateInput = z.infer<typeof walletUpdateInputSchema>;
+
+export const walletBalanceInputSchema = z.object({
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9]{0,11}$/),
+}).strict();
+export type WalletBalanceInput = z.infer<typeof walletBalanceInputSchema>;
 
 export const walletInputSchema = z.object({
   name: z.string().trim().min(1).max(40),

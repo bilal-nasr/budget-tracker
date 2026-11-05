@@ -3,8 +3,9 @@ import type { Category } from "@/features/categories/schema";
 import type { FixedExpense } from "@/features/fixed/schema";
 import { withProgress, type Installment, type InstallmentPayment } from "@/features/installments/schema";
 import type { SalaryReceipt } from "@/features/installments/cycle";
+import { DEFAULT_CURRENCIES, type CurrencyDefinition } from "@/lib/currency";
 import type { Currency } from "@/lib/money";
-import type { Wallet } from "@/features/wallets/schema";
+import type { Wallet, WalletContainer } from "@/features/wallets/schema";
 import { addDays, todayIn } from "@/features/transactions/group";
 import type { Cursor, Filters, Page, Transaction } from "@/features/transactions/schema";
 import { emptyTransactionMetadata } from "@/features/transactions/schema";
@@ -44,6 +45,38 @@ export const DEMO_WALLETS: Wallet[] = [
   { id: id(6), name: "Syrian cash", kind: "cash", currency: "SYP", openingBalanceMinor: 60000, balanceMinor: 58750, position: 6, archived: false },
   { id: id(7), name: "Syrian bank", kind: "bank", currency: "SYP", openingBalanceMinor: 100000, balanceMinor: 100000, position: 7, archived: false },
   { id: id(8), name: "Loan demo USD", kind: "bank", currency: "USD", openingBalanceMinor: 1000000, balanceMinor: 966000, position: 8, archived: false },
+];
+
+export const DEMO_CURRENCIES: CurrencyDefinition[] = DEFAULT_CURRENCIES.map((currency) => ({ ...currency }));
+
+/** Canonical demo containers; legacy single-currency demo rows remain for not-yet-migrated screens. */
+export const DEMO_WALLET_CONTAINERS: WalletContainer[] = [
+  {
+    id: id(1), name: "Pocket", kind: "cash", position: 1, deleted: false, needsAttention: false,
+    defaultBalanceId: id(1),
+    balances: [
+      { id: id(1), walletId: id(1), currency: "USD", openingBalanceMinor: 30000, balanceMinor: 23000, position: 0, detached: false },
+      { id: id(3), walletId: id(1), currency: "LBP", openingBalanceMinor: 3000000, balanceMinor: 2450000, position: 1, detached: false },
+    ],
+  },
+  ...DEMO_WALLETS.filter((wallet) => wallet.id !== id(1) && wallet.id !== id(3)).map((wallet): WalletContainer => ({
+    id: wallet.id,
+    name: wallet.name,
+    kind: wallet.kind,
+    position: wallet.position,
+    deleted: wallet.archived,
+    needsAttention: false,
+    defaultBalanceId: wallet.id,
+    balances: [{
+      id: wallet.id,
+      walletId: wallet.id,
+      currency: wallet.currency,
+      openingBalanceMinor: wallet.openingBalanceMinor,
+      balanceMinor: wallet.balanceMinor,
+      position: 0,
+      detached: false,
+    }],
+  })),
 ];
 
 /** One shared, synthetic source for Loans history and corresponding Activity rows. */
