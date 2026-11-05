@@ -19,6 +19,7 @@ for (const locale of ["en", "ar"] as const) {
   test(`${locale} same-currency tender/change preserves partial items and preview draft`, async ({ page }) => {
     const { dialog, m } = await startPurchase(page, locale);
     await dialog.getByLabel(m.Cashier.tender, { exact: true }).fill("20");
+    await dialog.getByRole("button", { name: m.Cashier.addChange, exact: true }).click();
     await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("7.50");
     await dialog.getByRole("button", { name: m.Breakdown.title, exact: true }).click();
     await dialog.getByRole("button", { name: m.Breakdown.addItem }).click();
@@ -33,11 +34,14 @@ for (const locale of ["en", "ar"] as const) {
     await expect(dialog.getByLabel(m.Breakdown.amount, { exact: true })).toHaveValue("10");
     await expectNoHorizontalOverflow(page);
   });
-  test(`${locale} LBP then SYP change records actual cash without a rate`, async ({ page }) => {
+  test(`${locale} records USD plus LBP change without a rate and keeps rows independent`, async ({ page }) => {
     const { dialog, m } = await startPurchase(page, locale);
     await dialog.getByLabel(m.Cashier.tender).fill("20");
-    await dialog.getByLabel(m.Cashier.currency).selectOption("LBP");
-    await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("671250");
+    await dialog.getByRole("button", { name: m.Cashier.addChange, exact: true }).click();
+    await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("5");
+    await dialog.getByRole("button", { name: m.Cashier.addChange, exact: true }).click();
+    await dialog.getByLabel(m.Cashier.currency).nth(1).selectOption("LBP");
+    await dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1).fill("223750");
     // Cross-currency change takes the actual amounts; no quote is asked for.
     await expect(dialog.getByLabel(m.Cashier.rate, { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("checkbox", { name: m.Cashier.confirmRate })).toHaveCount(0);
@@ -53,11 +57,12 @@ for (const locale of ["en", "ar"] as const) {
     await expect(dialog.getByText(m.Cashier.mismatch)).toBeVisible();
     await dialog.getByLabel(m.Cashier.tender).fill("20");
     await expect(save).toBeEnabled();
-    await dialog.getByLabel(m.Cashier.currency).selectOption("SYP");
-    await expect(dialog.getByLabel(m.Cashier.change, { exact: true })).toHaveValue("");
-    await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("97500");
+    await dialog.getByLabel(m.Cashier.currency).nth(1).selectOption("SYP");
+    await expect(dialog.getByLabel(m.Cashier.change, { exact: true }).first()).toHaveValue("5");
+    await expect(dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1)).toHaveValue("");
+    await dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1).fill("32500");
     await expect(save).toBeEnabled();
-    await expect(dialog.getByLabel(m.Cashier.change, { exact: true })).toHaveAttribute("dir", "ltr");
+    await expect(dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1)).toHaveAttribute("dir", "ltr");
     await expectNoHorizontalOverflow(page);
   });
   test(`${locale} saved cashier detail and duplicate keep purchase cost separate`, async ({ page }) => {
@@ -66,13 +71,15 @@ for (const locale of ["en", "ar"] as const) {
     await page.locator("main section li button").filter({ hasText: "Coffee" }).first().click();
     let dialog = page.getByRole("dialog");
     const summary = dialog.getByRole("region", { name: m.Cashier.summary });
-    await expect(summary.getByText("$3.50", { exact: true })).toBeVisible();
-    await expect(summary.getByText("$10.00", { exact: true })).toBeVisible();
-    await expect(summary.getByText("LBP 581,750", { exact: true })).toBeVisible();
+    await expect(summary.getByText("$12.50", { exact: true })).toBeVisible();
+    await expect(summary.getByText("$20.00", { exact: true })).toBeVisible();
+    await expect(summary.getByText("$5.00", { exact: true })).toBeVisible();
+    await expect(summary.getByText("LBP 223,750", { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: m.Detail.duplicate }).click();
     dialog = page.getByRole("dialog");
-    await expect(dialog.getByLabel(m.Cashier.tender)).toHaveValue("10");
-    await expect(dialog.getByLabel(m.Cashier.change, { exact: true })).toHaveValue("581750");
+    await expect(dialog.getByLabel(m.Cashier.tender)).toHaveValue("20");
+    await expect(dialog.getByLabel(m.Cashier.change, { exact: true }).first()).toHaveValue("5");
+    await expect(dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1)).toHaveValue("223750");
     // A duplicate is new money: it records actual cash and drops the old quote.
     await expect(dialog.getByRole("checkbox", { name: m.Cashier.confirmRate })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: m.Add.save, exact: true })).toBeEnabled();

@@ -32,7 +32,8 @@ const paymentRow = z.object({
   // Cashier metadata is part of the canonical parent projection too. Linked
   // payments cannot be cash settlements, but do not strip these fields before
   // calling the shared mapper when its settlement DTO is extended.
-  tender_minor: z.null(), change_wallet_id: z.null(), change_minor: z.null(), change_currency: z.null(),
+  tender_minor: z.null(), cashier_changes: z.array(z.never()).max(0).default([]),
+  change_wallet_id: z.null(), change_minor: z.null(), change_currency: z.null(),
   change_rate_base: z.null(), change_rate_quote: z.null(), change_rate_numerator: z.null(), change_rate_denominator: z.null(),
   expense_items: z.object({ id: z.uuid(), description: z.string().min(1).max(140), amount_minor: positiveMinor,
     position: z.number().int().min(0).max(49) }).array().max(50),

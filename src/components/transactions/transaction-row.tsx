@@ -70,8 +70,10 @@ export function TransactionRow({
               </>
             )}
           </span>
-          {transaction.settlement?.change ? <span className="block truncate text-[13px] text-muted-foreground">
-            {ts("changeTo")} · <bdi>{walletById(transaction.settlement.change.walletId)?.name ?? transaction.settlement.change.currency}</bdi>
+          {transaction.settlement && transaction.settlement.changes.length > 0 ? <span className="block truncate text-[13px] text-muted-foreground">
+            {ts("changeTo")} · {transaction.settlement.changes.map((change, index) => <span key={`${change.walletId}-${index}`}>
+              {index > 0 ? " / " : null}<bdi>{walletById(change.walletId)?.name ?? change.currency}</bdi>
+            </span>)}
           </span> : null}
         </span>
         <span className="flex shrink-0 flex-col items-end">

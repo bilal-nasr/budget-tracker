@@ -185,7 +185,7 @@ export function DetailSheet({
           {transaction.kind === "expense" ? <ExpenseBreakdown items={transaction.items}
             parentMinor={transaction.amountMinor} currency={transaction.currency} labels={breakdownLabels} /> : null}
           {transaction.settlement ? <CashSettlementSummary settlement={transaction.settlement} costMinor={transaction.amountMinor}
-            currency={transaction.currency} changeWalletName={transaction.settlement.change ? walletById(transaction.settlement.change.walletId)?.name : undefined} /> : null}
+            currency={transaction.currency} changeWalletNames={transaction.settlement.changes.map((change) => walletById(change.walletId)?.name)} /> : null}
 
           {transaction.source === "salary" ? <p className="text-sm text-muted-foreground">{ti("salaryDeleteHelp")}</p> : null}
           {transaction.installmentId ? <div className="flex flex-col gap-1 text-sm text-muted-foreground">
