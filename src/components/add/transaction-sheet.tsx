@@ -11,6 +11,7 @@ import { CashSettlementFields, parseSettlementDraft, settlementDraftFromSnapshot
 import { useCashSettlementLabels } from "./cash-settlement-labels";
 import { useAppData } from "@/components/providers/app-data";
 import { CategorySelect } from "@/components/categories/category-select";
+import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { SheetShell } from "@/components/ui/sheet-shell";
@@ -355,18 +356,21 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
           <bdi dir="ltr" className="text-[28px] font-semibold text-muted-foreground">{currencyPrefix(currency)}</bdi>
           <bdi dir="ltr">{typed === "" ? "0" : groupTyped(typed)}</bdi>
         </p>
-        {mode !== "move" ? <Button
-          variant="outline"
-          className="shrink-0 rounded-full"
-          aria-expanded={pickWallet}
-          onClick={() => setPickWallet((v) => !v)}
-        >
-          <span className="max-w-[9ch] truncate">
-            <bdi>{wallet?.name}</bdi>
-          </span>{" "}
-          <span className="text-muted-foreground">{currency}</span>
-          <ChevronDown aria-hidden className={cn("transition-transform", pickWallet && "rotate-180")} />
-        </Button> : null}
+        {mode !== "move" ? <div className="flex shrink-0 flex-col items-end gap-1">
+          <Button
+            variant="outline"
+            className="rounded-full"
+            aria-expanded={pickWallet}
+            onClick={() => setPickWallet((v) => !v)}
+          >
+            <span className="max-w-[9ch] truncate">
+              <bdi>{wallet?.name}</bdi>
+            </span>{" "}
+            <span className="text-muted-foreground">{currency}</span>
+            <ChevronDown aria-hidden className={cn("transition-transform", pickWallet && "rotate-180")} />
+          </Button>
+          {state.mode === "add" && wallet ? <WalletBalance label={t("balance")} wallet={wallet} /> : null}
+        </div> : null}
       </div>
 
       {pickWallet && mode !== "move" ? (
@@ -394,8 +398,14 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
           ) : (
             <>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
-                <WalletSelect wallets={usable} value={walletId} onChange={changeWallet} label={t("from")} placeholder={t("chooseWallet")} />
-                <WalletSelect wallets={otherWallets} value={toWalletId} onChange={changeToWallet} label={t("to")} placeholder={t("chooseWallet")} />
+                <div className="flex min-w-0 flex-col gap-1">
+                  <WalletSelect wallets={usable} value={walletId} onChange={changeWallet} label={t("from")} placeholder={t("chooseWallet")} />
+                  {state.mode === "add" && wallet ? <WalletBalance label={t("balance")} wallet={wallet} /> : null}
+                </div>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <WalletSelect wallets={otherWallets} value={toWalletId} onChange={changeToWallet} label={t("to")} placeholder={t("chooseWallet")} />
+                  {state.mode === "add" && toWallet ? <WalletBalance label={t("balance")} wallet={toWallet} /> : null}
+                </div>
               </div>
               {exchange && toWallet ? (
                 <div className="flex flex-col gap-3">
@@ -569,6 +579,14 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
         onSave={save}
       />
     </div>
+  );
+}
+
+function WalletBalance({ label, wallet }: { label: string; wallet: { balanceMinor: number; currency: Currency } }) {
+  return (
+    <p className="text-[13px] text-muted-foreground">
+      <span>{label}</span> · <Amount minor={wallet.balanceMinor} currency={wallet.currency} />
+    </p>
   );
 }
 
