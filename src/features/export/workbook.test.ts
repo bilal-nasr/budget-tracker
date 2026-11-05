@@ -196,7 +196,7 @@ describe("accountant workbook controls", () => {
     expect(transactions.getTable("TransactionsTable").getColumn(0).filterButton).toBe(true);
     const reconciliation = workbook.getWorksheet("Reconciliation")!;
     expect((reconciliation as unknown as { conditionalFormattings: unknown[] }).conditionalFormattings).toHaveLength(1);
-    expect(reconciliation.getRow(4).getCell(1).fill).toMatchObject({ type: "pattern", fgColor: { argb: "FF1F4E78" } });
+    expect(reconciliation.getRow(4).getCell(1).fill).toMatchObject({ type: "pattern", fgColor: { argb: "FF28574F" } });
   });
 
   it("writes a readable xlsx buffer that ExcelJS can load again", async () => {

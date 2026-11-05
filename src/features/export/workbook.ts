@@ -7,6 +7,8 @@ import { buildExportSchedules, minorToMajor } from "./schedules";
 import { getExportLabels, SHEET_KEYS, type SheetKey } from "./labels";
 import type { ExportData } from "./model";
 
+import { applyExportWorkbookStyle } from "./workbook-style";
+
 type TableColumn = { key: string; label: string };
 
 function dateValue(value: string | null): Date | null {
@@ -49,7 +51,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
       ref: "A4",
       headerRow: true,
       totalsRow: false,
-      style: { theme: "TableStyleMedium2", showRowStripes: true, showFirstColumn: false, showLastColumn: false },
+      style: { theme: "TableStyleDark9", showRowStripes: true, showFirstColumn: false, showLastColumn: false },
       columns: columns.map((column): TableColumnProperties => ({ name: column.label, filterButton: true })),
       // Excel repairs header-only tables. Keep an empty data row without
       // inventing records or numeric amounts for an empty schedule.
@@ -458,44 +460,14 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   cover.getCell("B5").numFmt = "dd-mmm-yyyy hh:mm";
   cover.getCell("B6").numFmt = "dd-mmm-yyyy";
 
-  const dark = "FF1F4E78";
-  for (const [index, sheet] of workbook.worksheets.entries()) {
-    sheet.views = index >= 2
-      ? [{ state: "frozen", ySplit: 4, showGridLines: false, rightToLeft: data.locale === "ar" }]
-      : [{ showGridLines: false, rightToLeft: data.locale === "ar" }];
-    sheet.eachRow({ includeEmpty: false }, (row) => row.eachCell({ includeEmpty: false }, (cell) => {
-      cell.font = { name: "Aptos", size: 10, color: { argb: "FF1F2937" } };
-      cell.alignment = { vertical: "middle", horizontal: typeof cell.value === "number" ? "right" : "left" };
-    }));
-    sheet.getCell("A2").font = { name: "Aptos", size: 14, bold: true, color: { argb: dark } };
-    if (index >= 2) {
-      sheet.getRow(4).eachCell({ includeEmpty: false }, (cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: dark } };
-        cell.font = { name: "Aptos", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
-        cell.alignment = { horizontal: "center", vertical: "middle" };
-      });
-      sheet.getRow(4).height = 24;
-    }
-    for (let column = 1; column <= sheet.columnCount; column++) {
-      let width = 10;
-      sheet.getColumn(column).eachCell({ includeEmpty: false }, (cell) => {
-        width = Math.max(width, Math.min(32, cell.text.length + 2));
-      });
-      sheet.getColumn(column).width = width;
-    }
-  }
-  summary.getRow(4).eachCell({ includeEmpty: false }, (cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: dark } };
-    cell.font = { name: "Aptos", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
-    cell.alignment = { horizontal: "center", vertical: "middle" };
-  });
+  applyExportWorkbookStyle(workbook, data.locale);
   if (schedules.reconciliations.length > 0) {
     reconciliationSheet.addConditionalFormatting({
       ref: `J5:J${4 + schedules.reconciliations.length}`,
       rules: [{
         type: "expression", priority: 1, formulae: ["J5<>0"],
-        style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFDECEC" } },
-          font: { color: { argb: "FFB91C1C" }, bold: true } },
+        style: { fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B2633" }, bgColor: { argb: "FF4B2633" } },
+          font: { color: { argb: "FFFFB4B4" }, bold: true } },
       }],
     });
   }
