@@ -3,7 +3,7 @@ import { currencyIntent } from "@/lib/currency-intent";
 
 import { useOptimistic, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
-import { Check, Info } from "lucide-react";
+import { Check, Info, Pencil } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
@@ -12,7 +12,7 @@ import { formatAmount } from "@/lib/money";
 import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { useComposer } from "@/components/shell/composer";
 import { Button } from "@/components/ui/button";
-import { receiveSalary } from "@/features/salary/actions";
+import { correctSalaryDate, receiveSalary } from "@/features/salary/actions";
 import type { ReceiveSalaryInput } from "@/features/installments/cycle-input";
 import type { SalaryStatus } from "@/features/salary/schema";
 import { deleteTransaction } from "@/features/transactions/actions";
@@ -48,6 +48,10 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
   const [confirmMounted, setConfirmMounted] = useState(false);
   const [draft, setDraft] = useState<ReceiveSalaryInput | null>(null);
   const [uncertain, setUncertain] = useState(false);
+  const [receiveDate, setReceiveDate] = useState("");
+  const [editingDate, setEditingDate] = useState(false);
+  const [dateText, setDateText] = useState("");
+  const [dateError, setDateError] = useState(false);
   const inFlight = useRef(false);
   const [status, markReceived] = useOptimistic(serverStatus, (previous): SalaryStatus => ({
     ...previous,
@@ -77,6 +81,12 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
         }
         setUncertain(false);
         setDraft(null);
+        // The receipt is recorded as of today; move it to the chosen day when that differs.
+        if (receiveDate !== "" && receiveDate !== todayIn(timezone)) {
+          const moved = await correctSalaryDate(result.id, receiveDate);
+          if (!moved.ok) toast.error(t("errorDate"));
+          router.refresh();
+        }
         toast(t("added"), { action: { label: t("undo"), onClick: async () => {
           const undone = await deleteTransaction(result.id, result.revision);
           if (!undone.ok) toast.error(undone.error === "conflict" ? tb("conflict") : t("errorFailed"));
@@ -87,6 +97,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
   };
   const openReceive = () => {
     if (!uncertain || !draft) setDraft({ expectedUnits: currencyIntent(balance?.definition), requestId: crypto.randomUUID(), expectedCycleId: serverStatus.receiptId });
+    if (!uncertain || !draft) setReceiveDate(todayIn(timezone));
     setConfirmMounted(true);
     setConfirmOpen(true);
   };
@@ -143,6 +154,34 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
         )}
       </p>
 
+      {status.receiptId && status.lastReceivedOn ? (editingDate ? (
+        <div className="flex flex-col gap-2">
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("receivedDate")}
+            <input type="date" value={dateText} max={todayIn(timezone)} min="2000-01-01" onChange={(e) => setDateText(e.target.value)}
+              className="h-12 rounded-lg border border-input bg-card px-3.5 text-base font-normal" />
+          </label>
+          {dateError ? <p role="alert" className="text-sm text-over">{t("errorDate")}</p> : null}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" disabled={pending} onClick={() => setEditingDate(false)}>{t("cancel")}</Button>
+            <Button disabled={pending || dateText === "" || dateText === status.lastReceivedOn} onClick={() => {
+              const id = status.receiptId!;
+              setDateError(false);
+              startTransition(async () => {
+                const result = await correctSalaryDate(id, dateText);
+                if (!result.ok) { setDateError(true); return; }
+                setEditingDate(false);
+                router.refresh();
+              });
+            }}>{t("saveDate")}</Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="ghost" className="self-start" disabled={pending || uncertain} onClick={() => { setDateText(status.lastReceivedOn!); setDateError(false); setEditingDate(true); }}>
+          <Pencil aria-hidden />{t("changeDate")}
+        </Button>
+      )) : null}
+
       <p className="text-[13px] text-muted-foreground">{t(uncertain ? "errorUncertain" : "cycleHelp")}</p>
       <div className="flex items-center gap-2">
         <Button size="lg" className="flex-1" disabled={pending} onClick={openReceive}>
@@ -166,6 +205,11 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
             wallet: `⁨${balance.name}⁩`,
           })}
         </p>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {t("receivedDate")}
+          <input type="date" value={receiveDate} max={todayIn(timezone)} min="2000-01-01" onChange={(e) => setReceiveDate(e.target.value)}
+            className="h-12 rounded-lg border border-input bg-card px-3.5 text-base font-normal" />
+        </label>
         {status.lastReceivedOn ? (
           <p className="flex items-start gap-2 rounded-lg bg-accent px-3.5 py-2.5 text-[13px]">
             <Info aria-hidden className="mt-0.5 size-4 shrink-0" />

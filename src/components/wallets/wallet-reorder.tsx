@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Info } from "lucide-react";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -39,6 +39,7 @@ export function WalletReorder({ children }: { children: (wallet: WalletContainer
   const keyboardDragging = keyboardPickup?.source === walletOrderSource ? keyboardPickup?.id ?? null : null;
   const startOrder = useRef<{ ids: string[]; source: object | undefined } | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (keyboardPickup && keyboardPickup.source !== walletOrderSource) {
     setKeyboardPickup(null);
@@ -117,7 +118,11 @@ export function WalletReorder({ children }: { children: (wallet: WalletContainer
     save(arrayMove(ids, from, to), previous);
   };
   return <>
-    <p id={helpId} className="text-sm text-muted-foreground">{t("sortHelp")}</p>
+    <div className="flex items-start justify-end">
+      <button type="button" aria-label={t("moreInfo")} aria-expanded={showHelp} aria-controls={helpId} onClick={() => setShowHelp((v) => !v)}
+        className="grid size-11 place-items-center rounded-lg text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"><Info aria-hidden className="size-5" /></button>
+    </div>
+    <p id={helpId} className={showHelp ? "text-sm text-muted-foreground" : "sr-only"}>{t("sortHelp")}</p>
     <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
     <DndContext sensors={sensors} collisionDetection={closestCenter}
       accessibility={{ screenReaderInstructions: { draggable: t("sortHelp") }, announcements: { onDragStart: () => undefined, onDragOver: () => undefined, onDragEnd: () => undefined, onDragCancel: () => undefined } }}

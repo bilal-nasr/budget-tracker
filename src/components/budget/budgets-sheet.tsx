@@ -56,7 +56,8 @@ function Form({ state, onClose }: { state: BudgetsSheetState; onClose: () => voi
   const changed = list.filter((c) => (parse(texts[c.id] ?? "") ?? null) !== (initial.get(c.id) ?? null));
 
   const [y, m] = data.month.split("-").map(Number);
-  const monthLabel = new Intl.DateTimeFormat(locale === "ar" ? "ar-LB-u-nu-latn" : "en-US", {
+  const monthLabel = data.cycle ? new Intl.DateTimeFormat(locale === "ar" ? "ar-LB-u-nu-latn" : "en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${data.cycle.from}T00:00:00Z`)) : new Intl.DateTimeFormat(locale === "ar" ? "ar-LB-u-nu-latn" : "en-US", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",
@@ -90,7 +91,7 @@ function Form({ state, onClose }: { state: BudgetsSheetState; onClose: () => voi
         if (unit && !unit.disabled && !invalid && total !== null) save();
       }}
     >
-      <p className="pb-2 text-[14px] text-muted-foreground">{t("sheetCopy", { month: monthLabel })}</p>
+      <p className="pb-2 text-[14px] text-muted-foreground">{t(data.cycle ? "sheetCopyCycle" : "sheetCopy", { month: monthLabel })}</p>
       {!unit ? <p role="status">{tCurrency("draftUnavailable")}</p> : null}
       <ul>
         {list.map((c) => {

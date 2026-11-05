@@ -12,6 +12,7 @@ export function buildMonthBudgets(
   categories: readonly Category[],
   budgets: readonly BudgetLimit[],
   spend: readonly CategorySpend[],
+  cycle?: { from: string; to: string | null },
 ): MonthBudgets {
   const limits = new Map(budgets.filter((b) => b.currency === currency).map((b) => [b.categoryId, b.limitMinor]));
   const spent = new Map(spend.filter((s) => s.currency === currency).map((s) => [s.categoryId, s.spentMinor]));
@@ -36,6 +37,7 @@ export function buildMonthBudgets(
 
   return {
     month,
+    ...(cycle ? { cycle } : {}),
     currency,
     rows: [...budgeted, ...unbudgeted],
     totalLimitMinor: sumMinor(budgeted.map((row) => row.limitMinor ?? 0)),

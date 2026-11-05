@@ -3,6 +3,8 @@
 import { useState, useSyncExternalStore, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
+import { ChevronRight } from "lucide-react";
+import { useAppData } from "@/components/providers/app-data";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
@@ -16,8 +18,22 @@ type Theme = Profile["theme"];
 
 const subscribeNoop = () => () => {};
 
+function NavRow({ href, title, hint }: { href: "/settings/categories" | "/settings/currencies"; title: string; hint: React.ReactNode }) {
+  return (
+    <Link href={href} className="flex min-h-14 items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium">{title}</span>
+        <span className="block truncate text-[13px] text-muted-foreground">{hint}</span>
+      </span>
+      <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground rtl:-scale-x-100" />
+    </Link>
+  );
+}
+
 export function SettingsForm({ profile }: { profile: Profile }) {
   const t = useTranslations("Settings");
+  const { enabledCurrencies } = useAppData();
+  const defaultCurrency = profile.defaultCurrency ?? null;
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -37,63 +53,73 @@ export function SettingsForm({ profile }: { profile: Profile }) {
     });
   };
 
+  const codes = [...enabledCurrencies].sort((x, y) => Number(y.code === defaultCurrency) - Number(x.code === defaultCurrency)).map((c) => c.code);
+
   return (
     <div className="flex flex-col gap-6">
-      <section aria-labelledby="s-lang" className="flex flex-col gap-2">
-        <h2 id="s-lang" className="text-[17px] font-semibold">{t("language")}</h2>
-        <Segmented
-          label={t("language")}
-          value={locale as "en" | "ar"}
-          onChange={(next) => {
-            void saveLocale(next);
-            startTransition(() => {
-              router.replace({ pathname, query: Object.fromEntries(searchParams) }, { locale: next });
-            });
-          }}
-          options={[
-            { value: "en", label: "English" },
-            { value: "ar", label: "العربية" },
-          ]}
-        />
+      <section aria-labelledby="s-prefs" className="flex flex-col gap-2">
+        <h2 id="s-prefs" className="text-[17px] font-semibold">{t("preferences")}</h2>
+        <div className="divide-y divide-border rounded-xl border border-border bg-card">
+          <div className="flex flex-col gap-2 p-4">
+            <span id="s-lang" className="font-medium">{t("language")}</span>
+            <Segmented
+              label={t("language")}
+              value={locale as "en" | "ar"}
+              onChange={(next) => {
+                void saveLocale(next);
+                startTransition(() => {
+                  router.replace({ pathname, query: Object.fromEntries(searchParams) }, { locale: next });
+                });
+              }}
+              options={[
+                { value: "en", label: "English" },
+                { value: "ar", label: "العربية" },
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-2 p-4">
+            <span id="s-digits" className="font-medium">{t("digits")}</span>
+            <Segmented
+              label={t("digits")}
+              value={digits}
+              onChange={(next) => {
+                setDigits(next);
+                save({ digits: next });
+              }}
+              options={[
+                { value: "latin", label: <bdi dir="ltr">0 1 2 3</bdi> },
+                { value: "arabic", label: <bdi dir="ltr">٠ ١ ٢ ٣</bdi> },
+              ]}
+            />
+            <p className="text-[13px] text-muted-foreground">{t("digitsHelp")}</p>
+          </div>
+          <div className="flex flex-col gap-2 p-4">
+            <span id="s-theme" className="font-medium">{t("theme")}</span>
+            <Segmented
+              label={t("theme")}
+              value={theme}
+              onChange={(next) => {
+                setTheme(next);
+                applyTheme(next);
+                save({ theme: next });
+              }}
+              options={[
+                { value: "system", label: t("themeSystem") },
+                { value: "light", label: t("themeLight") },
+                { value: "dark", label: t("themeDark") },
+              ]}
+            />
+          </div>
+        </div>
       </section>
 
-      <section aria-labelledby="s-digits" className="flex flex-col gap-2">
-        <h2 id="s-digits" className="text-[17px] font-semibold">{t("digits")}</h2>
-        <Segmented
-          label={t("digits")}
-          value={digits}
-          onChange={(next) => {
-            setDigits(next);
-            save({ digits: next });
-          }}
-          options={[
-            { value: "latin", label: <bdi dir="ltr">0 1 2 3</bdi> },
-            { value: "arabic", label: <bdi dir="ltr">٠ ١ ٢ ٣</bdi> },
-          ]}
-        />
-        <p className="text-[13px] text-muted-foreground">{t("digitsHelp")}</p>
+      <section aria-labelledby="s-manage" className="flex flex-col gap-2">
+        <h2 id="s-manage" className="text-[17px] font-semibold">{t("manage")}</h2>
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          <li><NavRow href="/settings/categories" title={t("categories")} hint={t("categoriesHint")} /></li>
+          <li><NavRow href="/settings/currencies" title={t("currencies")} hint={<bdi dir="ltr">{codes.join(" · ")}</bdi>} /></li>
+        </ul>
       </section>
-
-      <section aria-labelledby="s-theme" className="flex flex-col gap-2">
-        <h2 id="s-theme" className="text-[17px] font-semibold">{t("theme")}</h2>
-        <Segmented
-          label={t("theme")}
-          value={theme}
-          onChange={(next) => {
-            setTheme(next);
-            applyTheme(next);
-            save({ theme: next });
-          }}
-          options={[
-            { value: "system", label: t("themeSystem") },
-            { value: "light", label: t("themeLight") },
-            { value: "dark", label: t("themeDark") },
-          ]}
-        />
-      </section>
-
-      <Link href="/settings/categories" className="inline-flex min-h-12 items-center justify-between rounded-xl border border-border bg-card px-4 py-3 font-medium focus-visible:outline-2 focus-visible:outline-ring">{t("categories")}</Link>
-      <Link href="/settings/currencies" className="inline-flex min-h-12 items-center justify-between rounded-xl border border-border bg-card px-4 py-3 font-medium focus-visible:outline-2 focus-visible:outline-ring">{t("currencies")}</Link>
 
       <ExportButton />
 

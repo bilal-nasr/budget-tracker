@@ -1785,6 +1785,17 @@ export type Database = {
                     "starts_month": string;
                 }[];
             };
+            "category_spend_between": {
+                Args: {
+                    "p_from": string;
+                    "p_to": string | null;
+                };
+                Returns: {
+                    "category_id": string;
+                    "currency": string;
+                    "spent_minor": number;
+                }[];
+            };
             "month_category_spend": {
                 Args: {
                     "p_month": string;

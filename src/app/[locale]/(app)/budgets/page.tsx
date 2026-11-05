@@ -1,6 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
 import { BudgetsView } from "@/components/budget/budgets-view";
-import { getMonthBudgets } from "@/features/budgets/queries";
+import { getMonthBudgets, getSalaryReceiptDates } from "@/features/budgets/queries";
 import { getFixedExpenses } from "@/features/fixed/queries";
 import { summarizeFixed } from "@/features/fixed/summary";
 import { getInstallments } from "@/features/installments/queries";
@@ -8,6 +8,7 @@ import { getProfile } from "@/features/profile/queries";
 import { todayIn } from "@/features/transactions/group";
 import { getWallets } from "@/features/wallets/queries";
 import { getCurrencies } from "@/features/currencies/queries";
+import { buildCycles, neighbours, pickCycle } from "@/features/budgets/cycles";
 import { availableBudgetCurrencies } from "@/features/budgets/rows";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -19,10 +20,13 @@ export default async function BudgetsPage({ params, searchParams }: PageProps<"/
 
   const [profile, wallets, catalog] = await Promise.all([getProfile(), getWallets({ includeDeleted: true, includeNeedsAttention: true, includeDisabledBalances: true }), getCurrencies()]);
   const rawMonth = typeof query.month === "string" ? query.month : "";
-  const month = MONTH.test(rawMonth) ? rawMonth : todayIn(profile.timezone).slice(0, 7);
+  // With salary receipts, spending is counted salary to salary; without any it stays calendar months.
+  const cycles = buildCycles(await getSalaryReceiptDates());
+  const cycle = pickCycle(cycles, typeof query.cycle === "string" ? query.cycle : null);
+  const month = cycle ? cycle.from.slice(0, 7) : MONTH.test(rawMonth) ? rawMonth : todayIn(profile.timezone).slice(0, 7);
 
   const [months, fixed, installments] = await Promise.all([
-    Promise.all(catalog.map((currency) => getMonthBudgets(month, currency.code))),
+    Promise.all(catalog.map((currency) => getMonthBudgets(month, currency.code, cycle ?? undefined))),
     getFixedExpenses(profile.timezone),
     getInstallments(profile.timezone),
   ]);
@@ -38,6 +42,7 @@ export default async function BudgetsPage({ params, searchParams }: PageProps<"/
       data={data}
       currencies={held.length > 0 ? held : [currency]}
       salaryAfterMinor={salaryAfter?.currency === currency ? salaryAfter.minor : null}
+      cycleNav={cycle ? neighbours(cycles, cycle) : undefined}
     />
   );
 }

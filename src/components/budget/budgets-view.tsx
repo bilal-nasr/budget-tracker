@@ -14,11 +14,18 @@ import { ScreenHeader } from "@/components/shell/screen-header";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
+import { cycleDays } from "@/features/budgets/cycles";
 import { isOver } from "@/features/budgets/rows";
+import { todayIn } from "@/features/transactions/group";
 import type { BudgetRow, MonthBudgets } from "@/features/budgets/schema";
 import { categoryName } from "@/features/categories/catalogue";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { formatAmount } from "@/lib/money";
+
+function dataRange(data: MonthBudgets, today: string): { from: string; to: string } {
+  if (data.cycle) return cycleDays(data.cycle, today);
+  return monthRange(data.month);
+}
 
 function monthRange(month: string): { from: string; to: string } {
   const [y, m] = month.split("-").map(Number);
@@ -29,7 +36,7 @@ function monthRange(month: string): { from: string; to: string } {
 function Row({ row, data }: { row: BudgetRow; data: MonthBudgets }) {
   const t = useTranslations("Budgets");
   const locale = useLocale();
-  const { categoryById, definition } = useRuntimeBalances();
+  const { categoryById, definition, timezone } = useRuntimeBalances();
   const { openAdd } = useComposer();
   const { digits } = useDisplayPrefs();
   const category = categoryById(row.categoryId);
@@ -37,7 +44,7 @@ function Row({ row, data }: { row: BudgetRow; data: MonthBudgets }) {
   const name = categoryName(category, locale);
   const money = (v: number) => `⁦${formatAmount(v, definition(data.currency), { digits })}⁩`;
   const over = isOver(row);
-  const range = monthRange(data.month);
+  const range = dataRange(data, todayIn(timezone));
 
   return (
     <li className="flex flex-col gap-2 border-t border-border px-3.5 py-3 first:border-t-0">
@@ -92,10 +99,12 @@ export function BudgetsView({
   data,
   currencies,
   salaryAfterMinor,
+  cycleNav,
 }: {
   data: MonthBudgets;
   currencies: string[];
   salaryAfterMinor: number | null;
+  cycleNav?: { older: string | null; newer: string | null };
 }) {
   const t = useTranslations("Budgets");
   const nav = useTranslations("Nav");
@@ -114,7 +123,7 @@ export function BudgetsView({
 
   return (
     <>
-      <ScreenHeader title={nav("budgets")} month>
+      <ScreenHeader title={nav("budgets")} month={!data.cycle} cycle={data.cycle && cycleNav ? { ...data.cycle, ...cycleNav } : undefined}>
         <p className="text-[15px] text-shell-muted">{t("spent")}</p>
         <p className={`mt-0.5 leading-tight font-bold tracking-tight ${formatAmount(data.totalSpentMinor, definition(data.currency)).length > 16 ? "text-xl" : "text-[34px]"}`}>
           <Amount minor={data.totalSpentMinor} currency={data.currency} />

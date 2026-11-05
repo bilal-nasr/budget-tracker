@@ -126,7 +126,7 @@ function HomeWallets() {
 
 const HomeCurrencyContext = createContext<string | null>(null);
 
-export function HomeBudgetSummary({ budgets }: { budgets: MonthBudgets[] }) {
+export function HomeBudgetSummary({ budgets, cycle = false }: { budgets: MonthBudgets[]; cycle?: boolean }) {
   const t = useTranslations("Home");
   const tb = useTranslations("Budgets");
   const overCount = budgets.reduce((n, b) => n + b.rows.filter(isOver).length, 0);
@@ -137,7 +137,7 @@ export function HomeBudgetSummary({ budgets }: { budgets: MonthBudgets[] }) {
           const left = b.totalLimitMinor - b.totalSpentMinor;
           return (
             <p key={b.currency} className="text-shell-muted">
-              {left >= 0 ? t("leftToSpend") : t("overBudget")}{" "}
+              {left >= 0 ? t(cycle ? "leftToSpendCycle" : "leftToSpend") : t(cycle ? "overBudgetCycle" : "overBudget")}{" "}
               <Amount minor={Math.abs(left)} currency={b.currency} className="font-semibold text-shell-foreground" />
             </p>
           );

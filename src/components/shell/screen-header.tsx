@@ -3,6 +3,7 @@ import { Settings } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { TileBand } from "@/components/tiles/tile-band";
+import { CycleSwitcher } from "./cycle-switcher";
 import { MonthSwitcher } from "./month-switcher";
 
 /**
@@ -12,10 +13,13 @@ import { MonthSwitcher } from "./month-switcher";
 export function ScreenHeader({
   title,
   month = false,
+  cycle,
   children,
 }: {
   title?: string;
   month?: boolean;
+  /** When set, replaces the month switcher with a salary-to-salary cycle switcher. */
+  cycle?: { from: string; to: string | null; older: string | null; newer: string | null };
   children?: React.ReactNode;
 }) {
   const t = useTranslations("Nav");
@@ -23,12 +27,12 @@ export function ScreenHeader({
     <header className="bg-shell text-shell-foreground">
       <div className="mx-auto w-full max-w-[640px] px-4 pt-[calc(0.5rem+var(--safe-top))] lg:max-w-[800px]">
         <div className="flex min-h-[52px] items-center justify-between">
-          {month ? (
+          {cycle ? <CycleSwitcher className="-ms-2" {...cycle} /> : month ? (
             <Suspense fallback={<div className="h-11 w-52" />}>
               <MonthSwitcher className="-ms-2" />
             </Suspense>
           ) : null}
-          {title ? <h1 className={month ? "sr-only" : "text-lg font-semibold"}>{title}</h1> : month ? <span /> : null}
+          {title ? <h1 className={month || cycle ? "sr-only" : "text-lg font-semibold"}>{title}</h1> : month || cycle ? <span /> : null}
           <Link
             href="/settings"
             aria-label={t("settings")}

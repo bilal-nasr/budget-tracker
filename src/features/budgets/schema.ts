@@ -15,8 +15,10 @@ export type BudgetRow = {
 };
 
 export type MonthBudgets = {
-  /** YYYY-MM */
+  /** YYYY-MM. With a cycle, the month its limits are read from (the cycle start). */
   month: string;
+  /** Set when spending is counted per pay cycle instead of the calendar month. */
+  cycle?: { from: string; to: string | null };
   currency: string;
   /** Budgeted categories first (in category order), then unbudgeted ones that have spending. */
   rows: BudgetRow[];

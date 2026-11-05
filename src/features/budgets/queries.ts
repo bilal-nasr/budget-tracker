@@ -6,27 +6,39 @@ import { readMinor } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { buildMonthBudgets } from "./rows";
+import type { SpendCycle } from "./cycles";
 import type { BudgetLimit, CategorySpend, MonthBudgets } from "./schema";
 
 /** One month's budgets and spending for one currency. `month` is YYYY-MM. */
-export async function getMonthBudgets(month: string, currency: string): Promise<MonthBudgets> {
+export async function getMonthBudgets(month: string, currency: string, cycle?: SpendCycle): Promise<MonthBudgets> {
   const categories = await getCategories();
   if (!supabaseConfigured()) {
     const demo = demoBudgetData(month);
-    return buildMonthBudgets(month, currency, categories, demo.budgets, demo.spend);
+    return buildMonthBudgets(month, currency, categories, demo.budgets, demo.spend, cycle);
   }
 
-  const { limits, spent } = await getMonthRows(month);
-  return buildMonthBudgets(month, currency, categories, limits, spent);
+  const { limits, spent } = await getMonthRows(month, cycle?.from ?? null, cycle?.to ?? null);
+  return buildMonthBudgets(month, currency, categories, limits, spent, cycle);
 }
 
+/** Dates (YYYY-MM-DD) of recorded salary receipts, newest first. Empty means: count by calendar month. */
+export const getSalaryReceiptDates = cache(async (): Promise<string[]> => {
+  if (!supabaseConfigured()) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("transactions").select("occurred_on")
+    .eq("source", "salary").eq("kind", "income").is("deleted_at", null)
+    .order("occurred_on", { ascending: false }).limit(240);
+  if (error) { console.error("[getSalaryReceiptDates]", error.message); return []; }
+  return (data ?? []).map((row) => row.occurred_on);
+});
+
 // React cache coalesces the all-currency RPC reads within one server request.
-const getMonthRows = cache(async (month: string) => {
+const getMonthRows = cache(async (month: string, cycleFrom: string | null, cycleTo: string | null) => {
   const supabase = await createClient();
   const first = `${month}-01`;
   const [budgets, spend] = await Promise.all([
     supabase.rpc("month_budgets", { p_month: first }),
-    supabase.rpc("month_category_spend", { p_month: first }),
+    cycleFrom ? supabase.rpc("category_spend_between", { p_from: cycleFrom, p_to: cycleTo }) : supabase.rpc("month_category_spend", { p_month: first }),
   ]);
   // Before the budgets migration is applied the functions do not exist.
   if (budgets.error) console.error("[getMonthBudgets budgets]", budgets.error.message);

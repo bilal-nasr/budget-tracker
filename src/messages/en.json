@@ -132,10 +132,15 @@
     "add": "Add",
     "close": "Close",
     "previousMonth": "Previous month",
+    "previousCycle": "Previous pay cycle",
+    "nextCycle": "Next pay cycle",
+    "cycleNow": "now",
     "nextMonth": "Next month"
   },
   "Home": {
     "leftToSpend": "Left to spend this month",
+    "leftToSpendCycle": "Left to spend this cycle",
+    "overBudgetCycle": "Over budget this cycle",
     "overBudget": "Over budget this month",
     "leadLabel": "Money in your wallets",
     "currency": "Currency",
@@ -157,6 +162,9 @@
   },
   "Settings": {
     "language": "Language",
+    "preferences": "Preferences",
+    "manage": "Manage",
+    "categoriesHint": "Names, icons and order",
     "digits": "Digits in Arabic",
     "digitsHelp": "Applies to amounts when the app is in Arabic.",
     "theme": "Theme",
@@ -168,7 +176,7 @@
     "categories": "Categories",
     "currencies": "Currencies",
     "exportTitle": "Export to Excel",
-    "exportDescription": "Download an accountant-ready workbook with reconciled wallet balances, financial summaries and complete supporting schedules.",
+    "exportDescription": "A workbook of your wallets, balances and activity.",
     "exportButton": "Download Excel workbook",
     "exportPreparing": "Preparing Excel workbook…",
     "exportFailed": "Could not create the workbook. Try again."
@@ -498,6 +506,10 @@
   },
   "Salary": {
     "title": "Monthly salary",
+    "changeDate": "Change date",
+    "saveDate": "Save date",
+    "errorDate": "Could not change the date. Try again.",
+    "receivedDate": "Date received",
     "setBody": "Set your salary once. Record it whenever it arrives.",
     "set": "Set salary",
     "walletGone": "The wallet for your salary is no longer available. Pick another one.",
@@ -553,6 +565,7 @@
     "meterLabel": "{name}: {spent} of {limit}",
     "sheetTitle": "Edit budgets",
     "sheetCopy": "Applies to {month} and the months after. Leave empty for no budget.",
+    "sheetCopyCycle": "Applies to every pay cycle starting from {month}. Leave empty for no budget.",
     "amountFor": "Monthly limit for {name}",
     "none": "No budget",
     "totalBudgets": "Total budgets",
