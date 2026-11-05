@@ -30,13 +30,15 @@ export const settlementRateSchema = z.object({
   }
 });
 export type SettlementRate = z.infer<typeof settlementRateSchema>;
+export const cashChangeInputSchema = z.object({
+  walletId: z.uuid(),
+  amountMinor: minorSchema,
+  rate: settlementRateSchema.optional(),
+}).strict();
+export type CashChangeInput = z.infer<typeof cashChangeInputSchema>;
 export const cashSettlementInputSchema = z.object({
   tenderMinor: minorSchema,
-  change: z.object({
-    walletId: z.uuid(),
-    amountMinor: minorSchema,
-    rate: settlementRateSchema.optional(),
-  }).strict().nullable(),
+  changes: z.array(cashChangeInputSchema),
 }).strict();
 export type CashSettlementInput = z.infer<typeof cashSettlementInputSchema>;
 
@@ -84,26 +86,35 @@ export function convertSettlementMinor(minor: number, from: Currency, to: Curren
 
 export type SettlementError = "amount" | "rate" | "unsupportedPair" | "mismatch";
 export function validateSettlement(input: {
-  costMinor: number; payCurrency: Currency; changeCurrency?: Currency; settlement: CashSettlementInput;
+  costMinor: number; payCurrency: Currency; changeCurrencies: Currency[]; settlement: CashSettlementInput;
 }): { ok: true } | { ok: false; reason: SettlementError } {
-  const { costMinor, payCurrency, changeCurrency } = input;
+  const { costMinor, payCurrency, changeCurrencies } = input;
   const parsed = cashSettlementInputSchema.safeParse(input.settlement);
-  if (!parsed.success || !Number.isSafeInteger(costMinor) || costMinor < 1 || costMinor > MAX_MINOR || !isCurrency(payCurrency)) return { ok: false, reason: "amount" };
-  const { tenderMinor, change } = parsed.data;
-  if (tenderMinor < costMinor) return { ok: false, reason: "mismatch" };
-  if (!change) return tenderMinor === costMinor ? { ok: true } : { ok: false, reason: "mismatch" };
-  let value = change.amountMinor;
-  if (!changeCurrency || !isCurrency(changeCurrency)) return { ok: false, reason: "unsupportedPair" };
-  if (payCurrency === changeCurrency) {
-    if (change.rate) return { ok: false, reason: "rate" };
-  } else {
-    if (!settlementRatePair(payCurrency, changeCurrency)) return { ok: false, reason: "unsupportedPair" };
-    // Actual cross-currency cash movements need no manually supplied quote.
-    // Older snapshots with a quote still retain their reconciliation checks.
-    if (!change.rate) return tenderMinor > costMinor ? { ok: true } : { ok: false, reason: "mismatch" };
-    const converted = convertSettlementMinor(value, changeCurrency, payCurrency, change.rate);
-    if (converted === null) return { ok: false, reason: "rate" };
-    value = converted;
+  if (!parsed.success || !Number.isSafeInteger(costMinor) || costMinor < 1 || costMinor > MAX_MINOR || !isCurrency(payCurrency) ||
+      changeCurrencies.length !== (parsed.success ? parsed.data.changes.length : 0) || changeCurrencies.some((currency) => !isCurrency(currency))) {
+    return { ok: false, reason: "amount" };
   }
-  return value > 0 && tenderMinor - value === costMinor ? { ok: true } : { ok: false, reason: "mismatch" };
+  const { tenderMinor, changes } = parsed.data;
+  if (tenderMinor < costMinor) return { ok: false, reason: "mismatch" };
+  let sameCurrencyReturned = 0n;
+  let hasCrossCurrency = false;
+  for (let index = 0; index < changes.length; index++) {
+    const change = changes[index];
+    const changeCurrency = changeCurrencies[index];
+    if (changeCurrency === payCurrency) {
+      if (change.rate) return { ok: false, reason: "rate" };
+      sameCurrencyReturned += BigInt(change.amountMinor);
+      continue;
+    }
+    hasCrossCurrency = true;
+    const pair = settlementRatePair(payCurrency, changeCurrency);
+    if (!pair) return { ok: false, reason: "unsupportedPair" };
+    if (change.rate && (change.rate.base !== pair.base || change.rate.quote !== pair.quote)) {
+      return { ok: false, reason: "rate" };
+    }
+  }
+  const netSameCurrency = BigInt(tenderMinor) - sameCurrencyReturned;
+  return (hasCrossCurrency ? netSameCurrency > BigInt(costMinor) : netSameCurrency === BigInt(costMinor))
+    ? { ok: true }
+    : { ok: false, reason: "mismatch" };
 }

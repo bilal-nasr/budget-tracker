@@ -4,24 +4,29 @@ import {
   type CashSettlementInput, type SettlementRate,
 } from "./settlement";
 
-export const SETTLEMENT_COLUMN_NAMES = [
-  "tender_minor", "change_wallet_id", "change_minor", "change_currency",
-  "change_rate_base", "change_rate_quote", "change_rate_numerator", "change_rate_denominator",
+export const CASHIER_CHANGE_COLUMN_NAMES = [
+  "wallet_id", "amount_minor", "currency", "position",
+  "rate_base", "rate_quote", "rate_numerator", "rate_denominator",
 ] as const;
-export const SETTLEMENT_COLUMNS = SETTLEMENT_COLUMN_NAMES.join(", ");
-/** Unknown values deliberately remain unknown until checked at the read boundary. */
-export type SettlementRow = Record<(typeof SETTLEMENT_COLUMN_NAMES)[number], unknown>;
+export const SETTLEMENT_COLUMNS =
+  `tender_minor, cashier_changes!cashier_changes_transaction_owner_fkey(${CASHIER_CHANGE_COLUMN_NAMES.join(", ")})`;
+
+export type CashierChangeRow = Record<(typeof CASHIER_CHANGE_COLUMN_NAMES)[number], unknown>;
+export type SettlementRow = { tender_minor: unknown; cashier_changes: unknown };
+
 /** Synthetic/test fixtures only; a real missing projection must still fail. */
 export function emptySettlementRow(): SettlementRow {
-  return {
-    tender_minor: null, change_wallet_id: null, change_minor: null, change_currency: null,
-    change_rate_base: null, change_rate_quote: null, change_rate_numerator: null, change_rate_denominator: null,
-  };
+  return { tender_minor: null, cashier_changes: [] };
 }
-export type SettlementSnapshot = {
-  tenderMinor: number;
-  change: null | { walletId: string; amountMinor: number; currency: Currency; rate?: SettlementRate };
+
+export type SettlementChangeSnapshot = {
+  walletId: string;
+  amountMinor: number;
+  currency: Currency;
+  rate?: SettlementRate;
 };
+export type SettlementSnapshot = { tenderMinor: number; changes: SettlementChangeSnapshot[] };
+
 export class SettlementSnapshotError extends Error {
   constructor() {
     super("Invalid settlement snapshot");
@@ -38,56 +43,69 @@ function integer(value: unknown): number {
   }
 }
 
-/**
- * Reject a missing projection, partial shape, invalid integer or inconsistent
- * equation instead of displaying a corrupt settlement as an ordinary expense.
- * The caller has already decoded the parent cost with readMinor.
- */
+function readChange(value: unknown): { position: number; change: SettlementChangeSnapshot } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SettlementSnapshotError();
+  const row = value as Partial<CashierChangeRow>;
+  if (CASHIER_CHANGE_COLUMN_NAMES.some((column) => !Object.hasOwn(row, column) || row[column] === undefined) ||
+      typeof row.wallet_id !== "string" || !isCurrency(row.currency)) {
+    throw new SettlementSnapshotError();
+  }
+  const position = integer(row.position);
+  const amountMinor = integer(row.amount_minor);
+  const rateColumns = [row.rate_base, row.rate_quote, row.rate_numerator, row.rate_denominator];
+  let rate: SettlementRate | undefined;
+  if (!rateColumns.every((part) => part === null)) {
+    if (rateColumns.some((part) => part === null) || !isCurrency(row.rate_base) || !isCurrency(row.rate_quote)) {
+      throw new SettlementSnapshotError();
+    }
+    rate = {
+      base: row.rate_base,
+      quote: row.rate_quote,
+      quoteMajorNumerator: integer(row.rate_numerator),
+      quoteMajorDenominator: integer(row.rate_denominator),
+    };
+  }
+  return { position, change: { walletId: row.wallet_id, amountMinor, currency: row.currency, ...(rate ? { rate } : {}) } };
+}
+
+/** Reject missing/partial projections instead of hiding corrupt settlement data. */
 export function readSettlementSnapshot(
   row: Partial<SettlementRow>,
   parent: { kind: string; currency: Currency; amountMinor: number },
 ): SettlementSnapshot | null {
-  if (SETTLEMENT_COLUMN_NAMES.some((column) => !Object.hasOwn(row, column) || row[column] === undefined)) {
+  if (!Object.hasOwn(row, "tender_minor") || row.tender_minor === undefined ||
+      !Object.hasOwn(row, "cashier_changes") || !Array.isArray(row.cashier_changes)) {
     throw new SettlementSnapshotError();
   }
-  if (SETTLEMENT_COLUMN_NAMES.every((column) => row[column] === null)) return null;
-  if (parent.kind !== "expense" || row.tender_minor === null) throw new SettlementSnapshotError();
+  if (row.tender_minor === null) {
+    if (row.cashier_changes.length > 0) throw new SettlementSnapshotError();
+    return null;
+  }
+  if (parent.kind !== "expense") throw new SettlementSnapshotError();
   const tenderMinor = integer(row.tender_minor);
-  let change: SettlementSnapshot["change"] = null;
-  if (row.change_wallet_id === null) {
-    if (SETTLEMENT_COLUMN_NAMES.slice(2).some((column) => row[column] !== null)) throw new SettlementSnapshotError();
-  } else {
-    if (typeof row.change_wallet_id !== "string" || !isCurrency(row.change_currency)) throw new SettlementSnapshotError();
-    const amountMinor = integer(row.change_minor);
-    const rateColumns = [row.change_rate_base, row.change_rate_quote, row.change_rate_numerator, row.change_rate_denominator];
-    let rate: SettlementRate | undefined;
-    if (!rateColumns.every((value) => value === null)) {
-      if (rateColumns.some((value) => value === null) || !isCurrency(row.change_rate_base) || !isCurrency(row.change_rate_quote)) throw new SettlementSnapshotError();
-      rate = {
-        base: row.change_rate_base, quote: row.change_rate_quote,
-        quoteMajorNumerator: integer(row.change_rate_numerator),
-        quoteMajorDenominator: integer(row.change_rate_denominator),
-      };
-    }
-    change = { walletId: row.change_wallet_id, amountMinor, currency: row.change_currency, ...(rate ? { rate } : {}) };
-  }
-  const snapshot = { tenderMinor, change };
-  const input = settlementInputFromSnapshot(snapshot);
-  if (!validateSettlement({ costMinor: parent.amountMinor, payCurrency: parent.currency, changeCurrency: change?.currency, settlement: input }).ok) {
-    throw new SettlementSnapshotError();
-  }
+  const positioned = row.cashier_changes.map(readChange).sort((a, b) => a.position - b.position);
+  if (new Set(positioned.map(({ position }) => position)).size !== positioned.length) throw new SettlementSnapshotError();
+  const changes = positioned.map(({ change }) => change);
+  const snapshot = { tenderMinor, changes };
+  const settlement = settlementInputFromSnapshot(snapshot);
+  if (!validateSettlement({
+    costMinor: parent.amountMinor,
+    payCurrency: parent.currency,
+    changeCurrencies: changes.map(({ currency }) => currency),
+    settlement,
+  }).ok) throw new SettlementSnapshotError();
   return snapshot;
 }
 
-/** Drop only read-only currency metadata; preserve actual minor amounts/rate. */
+/** Drop read-only currency metadata; preserve actual minor amounts and legacy rates. */
 export function settlementInputFromSnapshot(snapshot: SettlementSnapshot): CashSettlementInput {
-  const { tenderMinor, change } = snapshot;
   const parsed = cashSettlementInputSchema.safeParse({
-    tenderMinor,
-    change: change === null ? null : {
-      walletId: change.walletId, amountMinor: change.amountMinor,
-      ...(change.rate ? { rate: change.rate } : {}),
-    },
+    tenderMinor: snapshot.tenderMinor,
+    changes: snapshot.changes.map(({ walletId, amountMinor, rate }) => ({
+      walletId,
+      amountMinor,
+      ...(rate ? { rate } : {}),
+    })),
   });
   if (!parsed.success) throw new SettlementSnapshotError();
   return parsed.data;
