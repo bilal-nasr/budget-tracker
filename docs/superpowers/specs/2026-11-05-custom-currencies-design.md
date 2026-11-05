@@ -38,6 +38,7 @@ Let each signed-in user add and manage the currencies they actually use instead 
 - Currency definitions are owned by one `user_id`; codes are unique per user.
 - Codes are trimmed, uppercased by the UI, and accepted only when they match `^[A-Z][A-Z0-9]{0,11}$` (1-12 ASCII characters). The server and database repeat this validation.
 - Symbols are trimmed, non-empty Unicode text with a database `char_length` limit of 12. Symbols are display text only and never participate in identity or arithmetic.
+- Formatting places no separator after a symbol made only of punctuation/symbol characters (for example `$1.00` or `₿0.01000000`) and one space after a symbol containing a Unicode letter or number (for example `LBP 1,000`). This preserves the existing USD/LBP/SYP presentation without adding another setting.
 - Decimal places are integers from 0 through 8.
 - New definitions start enabled.
 - At least one currency must remain enabled for each user.
