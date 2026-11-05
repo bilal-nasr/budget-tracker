@@ -93,6 +93,10 @@ select is((select count(*) from public.transactions where loan_id=(select id fro
 select throws_ok($$update public.categories set archived_at=now() where id=(select fee_category_id from public.loans where name='Synthetic loan 2')$$,null,'category_in_use','active-loan category cannot be archived');
 select throws_ok($$select public.remove_category((select fee_category_id from public.loans where name='Synthetic loan 2'))$$,null,'category_in_use','active-loan category removal explains in-use');
 select throws_ok($$delete from public.categories where id=(select fee_category_id from public.loans where name='Synthetic loan 2')$$,null,'category_in_use','direct delete of loan category rejected');
+insert into public.categories(id,kind,name_en,tile,color) values('ca500000-0000-4000-8000-000000000007','expense','Cancelled loan history',1,'teal');
+select lives_ok($$select public.create_loan(pg_temp.loan_args(7,'borrowed','existing',100,0)||'{"feeCategoryId":"ca500000-0000-4000-8000-000000000007"}'::jsonb)$$,'record-only loan can use a dedicated category');
+select lives_ok($$select public.cancel_loan((select id from public.loans where name='Synthetic loan 7'))$$,'record-only loan can be cancelled without cash history');
+select is(public.remove_category('ca500000-0000-4000-8000-000000000007'),'archived','cancelled-loan-only category archives instead of becoming permanently in-use');
 create temp table historical_category as select fee_category_id as id from public.loans where name='Synthetic loan 2';
 select lives_ok($$select public.update_loan((select id from public.loans where name='Synthetic loan 2'),jsonb_build_object('name','Synthetic loan 2','walletId','ca100000-0000-4000-8000-000000000001','feeCategoryId',(select id from public.categories where kind='income' and archived_at is null and id<>(select id from historical_category) order by position limit 1)))$$,'fee category can explicitly reassign without changing historical payments');
 update public.categories set archived_at=now() where id=(select id from historical_category);

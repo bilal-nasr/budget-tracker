@@ -17,6 +17,10 @@ const editableFields = {
 const hasName = (input: { nameEn: string | null; nameAr: string | null }) => input.nameEn !== null || input.nameAr !== null;
 export const categoryCreateSchema = z.strictObject({ kind: z.enum(["expense", "income"]), ...editableFields }).refine(hasName, { message: "nameRequired", path: ["nameEn"] });
 export const categoryEditSchema = z.strictObject(editableFields).refine(hasName, { message: "nameRequired", path: ["nameEn"] });
+export const categoryOrderSchema = z.strictObject({
+  kind: z.enum(["expense", "income"]),
+  ids: z.array(z.uuid()).min(1).max(500),
+}).refine(({ ids }) => new Set(ids).size === ids.length, { message: "duplicateId", path: ["ids"] });
 export type CategoryCreateInput = z.input<typeof categoryCreateSchema>;
 export type CategoryEditInput = z.input<typeof categoryEditSchema>;
 

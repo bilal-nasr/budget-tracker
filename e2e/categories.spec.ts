@@ -38,6 +38,24 @@ for (const locale of ["en", "ar"] as const) {
     await expect(page.getByRole("button", { name: c.restoreNamed.replace("{name}", locale === "en" ? "Old gifts" : "هدايا قديمة") })).toBeVisible();
   });
 
+  test(`${locale}: dragging a category handle attempts to save the new order`, async ({ page }) => {
+    await page.goto(`/${locale}/settings/categories`);
+    const firstName = locale === "en" ? "Groceries" : "بقالة";
+    const secondName = locale === "en" ? "Transport" : "مواصلات";
+    const source = page.getByRole("button", { name: c.reorderNamed.replace("{name}", firstName), exact: true });
+    const target = page.getByRole("button", { name: c.reorderNamed.replace("{name}", secondName), exact: true });
+    const sourceBox = await source.boundingBox();
+    const targetBox = await target.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(targetBox).not.toBeNull();
+    if (!sourceBox || !targetBox) return;
+    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.getByRole("main").getByRole("alert")).toHaveText(c.errorPreview);
+  });
+
   test(`${locale}: archived budgets retain history and offer clearing instead of Add`, async ({ page }) => {
     const b = messages[locale].Budgets;
     const name = locale === "en" ? "Old gifts" : "هدايا قديمة";

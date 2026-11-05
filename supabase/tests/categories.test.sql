@@ -9,6 +9,23 @@ insert into auth.users (id, instance_id, aud, role, email) values
 select set_config('request.jwt.claims','{"sub":"ca000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 set local role authenticated;
 select is((select count(*) from public.categories),12::bigint,'each account receives its own 12 editable defaults');
+select lives_ok($test$
+  select public.reorder_categories(
+    'expense',
+    (select array_agg(id order by position desc) from public.categories
+     where kind='expense' and parent_id is null and archived_at is null)
+  )
+$test$,'an authenticated owner can atomically reverse a complete category order');
+select is((select name_en from public.categories where kind='expense' and position=1),'Other','reordering renumbers categories from one in the requested order');
+select throws_ok($test$
+  select public.reorder_categories(
+    'expense',
+    array[(select id from public.categories where kind='expense' and archived_at is null limit 1)]
+  )
+$test$,'P0001','category_order_invalid','an incomplete order cannot overwrite the catalogue');
+update public.categories set archived_at=now() where kind='expense' and name_en='Other';
+update public.categories set archived_at=null where kind='expense' and name_en='Other';
+select is((select position from public.categories where kind='expense' and name_en='Other'),10,'restoring an archived root appends it after the active order');
 
 insert into public.categories (id,kind,name_en,tile,color) values
  ('ca100000-0000-4000-8000-000000000001','expense',E'  Phone\t credits  ',1,'teal'),
