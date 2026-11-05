@@ -1,5 +1,7 @@
 # Custom Currencies and Multi-Currency Wallets Implementation Plan
 
+> **Superseded after Task 4 began:** The user replaced per-wallet currency opt-in with global currencies automatically applied to every wallet. Continue with `docs/superpowers/plans/2026-11-05-global-currencies-all-wallets.md`; do not execute the remaining tasks in this file.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add user-defined currencies and convert wallets into ordered containers with independent currency balances, safe Move/Exchange flows, guided deletion, and preserved financial history.
