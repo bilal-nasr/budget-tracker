@@ -1,5 +1,7 @@
 # Custom Currencies Implementation Plan
 
+> **Superseded:** Do not execute this plan. The approved scope was expanded to multi-currency wallet containers; a replacement plan will follow approval of `docs/superpowers/specs/2026-11-05-custom-currencies-multi-wallets-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let each user create, configure, disable, re-enable, and safely use currencies with custom codes, symbols, and 0-8 decimal places throughout the budget tracker.
