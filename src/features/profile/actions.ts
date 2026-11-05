@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getUserId } from "@/lib/supabase/user";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
+import { currencyCodeSchema } from "@/features/currencies/schema";
 import { routing } from "@/i18n/routing";
 import { profilePatchSchema, type ProfilePatch } from "./schema";
 
@@ -25,6 +26,19 @@ export async function updateProfile(patch: ProfilePatch): Promise<ActionResult> 
     .eq("user_id", userId);
   if (error) return { ok: false, error: "failed" };
 
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Chooses the currency the home screen opens on. RLS + the composite FK restrict it to the owner's catalog. */
+export async function setDefaultCurrency(code: string): Promise<ActionResult> {
+  if (!currencyCodeSchema.safeParse(code).success) return { ok: false, error: "invalid" };
+  if (!supabaseConfigured()) return { ok: false, error: "notConfigured" };
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "failed" };
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ default_currency: code }).eq("user_id", userId);
+  if (error) return { ok: false, error: "failed" };
   revalidatePath("/", "layout");
   return { ok: true };
 }

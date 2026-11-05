@@ -2,13 +2,14 @@
 
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useTransition } from "react";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Plus, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { Link } from "@/i18n/navigation";
 import { inspectCurrencyDisable, setCurrencyEnabled, type CurrencyDisableBlocker } from "@/features/currencies/actions";
 import type { CurrencyDefinition } from "@/lib/currency";
+import { setDefaultCurrency } from "@/features/profile/actions";
 import { formatAmount } from "@/lib/money";
 import { CurrencySheet } from "./currency-sheet";
 
@@ -32,7 +33,7 @@ function Blocker({ blocker }: { blocker: CurrencyDisableBlocker }) {
   return <Link href="/budgets" className="text-primary underline underline-offset-4">{t("blockerBudget", { month: blocker.startsMonth.slice(0, 7) })}</Link>;
 }
 
-export function CurrenciesManager({ currencies }: { currencies: CurrencyDefinition[] }) {
+export function CurrenciesManager({ currencies, defaultCurrency = null }: { currencies: CurrencyDefinition[]; defaultCurrency?: string | null }) {
   const t = useTranslations("CurrencySettings");
   const [editor, setEditor] = useState<CurrencyDefinition | "new" | null>(null);
   const [disable, setDisable] = useState<DisableState | null>(null);
@@ -58,6 +59,14 @@ export function CurrenciesManager({ currencies }: { currencies: CurrencyDefiniti
     });
   };
 
+  const defaultCode = (currencies.find((c) => c.code === defaultCurrency && !c.disabled) ?? currencies.find((c) => !c.disabled))?.code;
+  const makeDefault = (code: string) => {
+    if (pending) return;
+    setError(null);
+    startTransition(async () => {
+      try { const result = await setDefaultCurrency(code); if (!result.ok) setError(t("errorFailed")); } catch { setError(t("errorFailed")); }
+    });
+  };
   const changeEnabled = (currency: CurrencyDefinition, enabled: boolean) => {
     if (pending) return;
     setError(null);
@@ -92,6 +101,10 @@ export function CurrenciesManager({ currencies }: { currencies: CurrencyDefiniti
           </span>
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground rtl:-scale-x-100" />
         </button>
+        {!currency.disabled ? <button type="button" aria-pressed={currency.code === defaultCode} aria-label={t("makeDefaultNamed", { code: currency.code })} disabled={pending || currency.code === defaultCode}
+          onClick={() => makeDefault(currency.code)} className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+          <Star aria-hidden className={cn("size-5", currency.code === defaultCode && "fill-current text-primary")} />
+        </button> : null}
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span data-testid={`currency-status-${currency.code}`} className="text-xs text-muted-foreground">{t(currency.disabled ? "disabled" : "enabled")}</span>
           <Button

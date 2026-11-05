@@ -190,6 +190,7 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "enableNamed": "Enable {code}",
+    "makeDefaultNamed": "Make {code} the default currency",
     "disableNamed": "Disable {code}",
     "save": "Save",
     "saving": "Saving…",

@@ -190,6 +190,7 @@
     "enabled": "مفعّلة",
     "disabled": "معطّلة",
     "enableNamed": "تفعيل {code}",
+    "makeDefaultNamed": "جعل {code} العملة الافتراضية",
     "disableNamed": "تعطيل {code}",
     "save": "حفظ",
     "saving": "جارٍ الحفظ…",

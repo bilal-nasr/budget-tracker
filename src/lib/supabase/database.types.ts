@@ -729,6 +729,7 @@ export type Database = {
                     "theme": string;
                     "timezone": string;
                     "usd_lbp_rate": number | null;
+                    "default_currency": string | null;
                     "user_id": string;
                 };
                 ComputedFields: never;
@@ -742,6 +743,7 @@ export type Database = {
                     "theme"?: string;
                     "timezone"?: string;
                     "usd_lbp_rate"?: number | null;
+                    "default_currency"?: string | null;
                     "user_id": string;
                 };
                 Update: {
@@ -754,6 +756,7 @@ export type Database = {
                     "theme"?: string;
                     "timezone"?: string;
                     "usd_lbp_rate"?: number | null;
+                    "default_currency"?: string | null;
                     "user_id"?: string;
                 };
                 Relationships: [

@@ -22,6 +22,8 @@ type AppData = {
   timezone: string;
   salary: { amountMinor: number; balanceId: string } | null;
   usdLbpRate: number | null;
+  /** Saved default currency (may be disabled/unknown); null when never chosen. */
+  defaultCurrency: string | null;
   /** Complete canonical history, including disabled balances and tombstones. */
   walletById: (id: string) => WalletContainer | undefined;
   balanceById: (id: string) => WalletBalance | undefined;
@@ -39,6 +41,7 @@ export function AppDataProvider({
   timezone,
   salary,
   usdLbpRate,
+  defaultCurrency = null,
   children,
 }: {
   walletContainers: WalletContainer[];
@@ -47,6 +50,7 @@ export function AppDataProvider({
   timezone: string;
   salary: { amountMinor: number; balanceId: string } | null;
   usdLbpRate: number | null;
+  defaultCurrency?: string | null;
   children: React.ReactNode;
 }) {
   const source = containerInput;
@@ -107,12 +111,13 @@ export function AppDataProvider({
       timezone,
       salary,
       usdLbpRate,
+      defaultCurrency,
       walletById: (id) => walletIndex.get(id),
       balanceById: (id) => balanceIndex.get(id),
       currencyByCode: (code) => currencyIndex.get(code),
       categoryById: (id) => c.get(id),
     };
-  }, [containerInput, currencyInput, categories, timezone, salary, usdLbpRate, source, orderIds]);
+  }, [containerInput, currencyInput, categories, timezone, salary, usdLbpRate, defaultCurrency, source, orderIds]);
   return <Context value={value}>{children}</Context>;
 }
 

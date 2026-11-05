@@ -9,6 +9,7 @@ import type { WalletContainer } from "@/features/wallets/schema";
 import { AppDataProvider, useAppData } from "@/components/providers/app-data";
 
 const actions = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), remove: vi.fn(), inspect: vi.fn(), enabled: vi.fn() }));
+vi.mock("@/features/profile/actions", () => ({ setDefaultCurrency: vi.fn(async () => ({ ok: true })) }));
 vi.mock("@/features/currencies/actions", () => ({
   createCurrency: actions.create,
   updateCurrency: actions.update,

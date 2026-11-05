@@ -23,7 +23,7 @@ export default async function AppLayout({ children, params }: LayoutProps<"/[loc
 
   return (
     <DisplayPrefsProvider digits={profile.digits}>
-      <AppDataProvider walletContainers={walletContainers} currencies={currencies} categories={categories} timezone={profile.timezone} salary={profile.salary} usdLbpRate={profile.usdLbpRate}>
+      <AppDataProvider walletContainers={walletContainers} currencies={currencies} categories={categories} timezone={profile.timezone} salary={profile.salary} usdLbpRate={profile.usdLbpRate} defaultCurrency={profile.defaultCurrency}>
         <ComposerProvider>
           <AppShell>{children}</AppShell>
         </ComposerProvider>

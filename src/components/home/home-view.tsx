@@ -29,9 +29,11 @@ export function HomeView({ recent, commitments, budgetSummary }: {
   budgetSummary: React.ReactNode;
 }) {
   const t = useTranslations("Home");
-  const { walletContainers: active, needsAttentionWallets, enabledCurrencies } = useAppData();
+  const { walletContainers: active, needsAttentionWallets, enabledCurrencies: catalog, defaultCurrency } = useAppData();
   const { openWallet } = useComposer();
   const hasAttention = needsAttentionWallets.length > 0;
+  // The default currency leads the tabs and is selected first.
+  const enabledCurrencies = [...catalog].sort((a, b) => Number(b.code === defaultCurrency) - Number(a.code === defaultCurrency));
   const [picked, setPicked] = useState<string | null>(null);
   const code = enabledCurrencies.find((c) => c.code === picked)?.code ?? enabledCurrencies[0]?.code ?? null;
   const total = code ? active.reduce((sum, w) => sum + (w.balances.find((b) => b.currency === code)?.balanceMinor ?? 0), 0) : 0;

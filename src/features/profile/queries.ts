@@ -16,6 +16,7 @@ type ProfileRow = {
   /** Exact durable balance selected for the saved salary configuration. */
   salary_balance_id?: string | null;
   usd_lbp_rate?: number | null;
+  default_currency?: string | null;
 };
 
 /** The signed-in owner's profile. Falls back to defaults when Supabase is not configured. */
@@ -28,6 +29,7 @@ export const getProfile = cache(async (): Promise<Profile> => {
 
   // Newer columns come from later migrations; fall back to older column sets if one is not applied yet.
   const columnSets = [
+    "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_balance_id, usd_lbp_rate, default_currency",
     "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_balance_id, usd_lbp_rate",
     "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_balance_id",
     "locale, digits, theme, timezone, onboarded_at",
@@ -49,6 +51,7 @@ export const getProfile = cache(async (): Promise<Profile> => {
     timezone: data.timezone,
     onboarded: data.onboarded_at !== null,
     usdLbpRate: data.usd_lbp_rate ?? null,
+    defaultCurrency: data.default_currency ?? null,
     salary:
       data.salary_amount_minor != null && data.salary_balance_id != null
         ? { amountMinor: Number(data.salary_amount_minor), balanceId: data.salary_balance_id }

@@ -16,3 +16,15 @@ it("shows a custom-default wallet's exact balance without a legacy fallback or c
  expect(screen.getByRole("link", { name: /Custom/ }).getAttribute("href")).toBe("/activity?balanceId=balance");
  expect(screen.queryByText(en.Home.leadEmpty)).toBeNull();
 });
+
+it("opens on the default currency and lists its tab first", () => {
+  const defs = [{ code: "USD", symbol: "$", decimalPlaces: 2, disabled: false, firstUsed: true }, { code: "LBP", symbol: "LBP", decimalPlaces: 0, disabled: false, firstUsed: true }];
+  const balances = [
+    { id: "b1", walletId: "wallet", currency: "USD", openingBalanceMinor: 0, balanceMinor: 100, position: 0, detached: false },
+    { id: "b2", walletId: "wallet", currency: "LBP", openingBalanceMinor: 0, balanceMinor: 5000, position: 1, detached: false },
+  ];
+  render(<NextIntlClientProvider locale="en" messages={en}><AppDataProvider currencies={defs} defaultCurrency="LBP" walletContainers={[{ id: "wallet", name: "Main", kind: "cash", position: 0, deleted: false, needsAttention: false, defaultBalanceId: "b1", balances }]} categories={[]} timezone="UTC" salary={null} usdLbpRate={null}><HomeView recent={null} commitments={<HomeCommitments salaryStatus={{ receiptId: null, lastReceivedOn: null, receivedThisMonth: false }} fixed={[]} installments={[]} cycleUnavailable={true} />} budgetSummary={null} /></AppDataProvider></NextIntlClientProvider>);
+  const tabs = screen.getAllByRole("tab");
+  expect(tabs.map((tab) => tab.textContent)).toEqual(["LBP", "USD"]);
+  expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+});

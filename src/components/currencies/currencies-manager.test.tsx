@@ -7,6 +7,7 @@ import ar from "@/messages/ar.json";
 import type { CurrencyDefinition } from "@/lib/currency";
 
 const actions = vi.hoisted(() => ({ inspect: vi.fn(), enabled: vi.fn() }));
+vi.mock("@/features/profile/actions", () => ({ setDefaultCurrency: vi.fn(async () => ({ ok: true })) }));
 vi.mock("@/features/currencies/actions", () => ({
   inspectCurrencyDisable: actions.inspect,
   setCurrencyEnabled: actions.enabled,
