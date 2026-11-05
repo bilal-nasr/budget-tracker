@@ -10,7 +10,7 @@ let query: Record<string, ReturnType<typeof vi.fn>>;
 const row = (n: number) => ({
   ...emptySettlementRow(),
   id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`, kind: "expense", occurred_on: "2026-11-04",
-  amount_minor: "5000", currency: "USD", wallet_id: "wallet", category_id: "category", to_wallet_id: null,
+  amount_minor: "5000", currency: "USD", cost_currency: null, wallet_id: "wallet", category_id: "category", to_wallet_id: null,
   to_amount_minor: null, note: "Sister", created_at: `2026-11-04T12:00:0${n}Z`, revision: 7,
   source: null, fixed_expense_id: null, installment_id: null, loan_id: null, loan_flow: null,
   expense_items: [
@@ -48,17 +48,15 @@ describe("complete transaction reads", () => {
     expect(page.rows[0].installmentId).toBe("plan");
   });
   it("reads settlement cost and exact change without multiplying its parent", async () => {
-    query.then.mockImplementation((resolve) => Promise.resolve({ data: [{ ...row(1), amount_minor: "1250",
-      tender_minor: "2000", cashier_changes: [
-        { wallet_id: "aaaaaaaa-0000-4000-8000-000000000001", amount_minor: "500", currency: "USD", position: 0,
-          rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null },
-        { wallet_id: "aaaaaaaa-0000-4000-8000-000000000002", amount_minor: "223750", currency: "LBP", position: 1,
+    query.then.mockImplementation((resolve) => Promise.resolve({ data: [{ ...row(1), amount_minor: "340000", cost_currency: "LBP",
+      tender_minor: "500", cashier_changes: [
+        { wallet_id: "aaaaaaaa-0000-4000-8000-000000000002", amount_minor: "110000", currency: "LBP", position: 0,
           rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null },
       ],
     }], error: null }).then(resolve));
     const result = await fetchTransactions({}, null);
-    expect(result.rows[0]).toMatchObject({ amountMinor: 1250, settlement: { tenderMinor: 2000, changes: [
-      { amountMinor: 500, currency: "USD" }, { amountMinor: 223750, currency: "LBP" },
+    expect(result.rows[0]).toMatchObject({ amountMinor: 340000, currency: "LBP", settlement: { tenderMinor: 500, tenderCurrency: "USD", changes: [
+      { amountMinor: 110000, currency: "LBP" },
     ] } });
     expect(result.rows).toHaveLength(1);
   });

@@ -24,7 +24,7 @@ const paymentRow = z.object({
   id: z.uuid(), installment_id: z.uuid(), wallet_id: z.uuid(), amount_minor: positiveMinor,
   occurred_on: z.iso.date(), created_at: recordedTime, salary_cycle_id: z.uuid().nullable(),
   revision: z.number().int().min(1).max(2_147_483_647),
-  kind: z.literal("expense"), currency: z.enum(CURRENCIES), category_id: z.uuid(), note: z.string().max(140).nullable(),
+  kind: z.literal("expense"), currency: z.enum(CURRENCIES), cost_currency: z.null().default(null), category_id: z.uuid(), note: z.string().max(140).nullable(),
   to_wallet_id: z.null(), to_amount_minor: z.null(), source: z.literal("installment"), fixed_expense_id: z.uuid().nullable(),
   loan_id: z.null(), loan_flow: z.null(), deleted_at: z.null(),
   loan_event: z.null().default(null), loan_principal_minor: z.null().default(null),

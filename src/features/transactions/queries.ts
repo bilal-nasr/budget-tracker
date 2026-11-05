@@ -10,7 +10,7 @@ import { activityOrClause } from "./activity-filter";
 export const PAGE_SIZE = 30;
 
 export const TRANSACTION_COLUMNS =
-  `id, kind, occurred_on, amount_minor, currency, wallet_id, category_id, to_wallet_id, to_amount_minor, note, created_at, revision, source, fixed_expense_id, installment_id, loan_id, loan_flow, loan_event, loan_principal_minor, loan_fee_minor, loan_event_seq, ${SETTLEMENT_COLUMNS}, expense_items!expense_items_transaction_owner_fkey(id,description,amount_minor,position)`;
+  `id, kind, occurred_on, amount_minor, currency, cost_currency, wallet_id, category_id, to_wallet_id, to_amount_minor, note, created_at, revision, source, fixed_expense_id, installment_id, loan_id, loan_flow, loan_event, loan_principal_minor, loan_fee_minor, loan_event_seq, ${SETTLEMENT_COLUMNS}, expense_items!expense_items_transaction_owner_fkey(id,description,amount_minor,position)`;
 
 export type TransactionRow = SettlementRow & {
   id: string;
@@ -18,6 +18,7 @@ export type TransactionRow = SettlementRow & {
   occurred_on: string;
   amount_minor: number | string;
   currency: Currency;
+  cost_currency: Currency | null;
   wallet_id: string;
   category_id: string | null;
   to_wallet_id: string | null;
@@ -37,38 +38,41 @@ export type TransactionRow = SettlementRow & {
   expense_items: { id: string; description: string; amount_minor: number | string; position: number }[] | null;
 };
 
-export const toTransaction = (r: TransactionRow): Transaction => ({
-  id: r.id,
-  kind: r.kind,
-  occurredOn: r.occurred_on,
-  amountMinor: readMinor(r.amount_minor),
-  currency: r.currency,
-  walletId: r.wallet_id,
-  categoryId: r.category_id,
-  toWalletId: r.to_wallet_id,
-  toAmountMinor: r.to_amount_minor === null ? null : readMinor(r.to_amount_minor),
-  note: r.note,
-  createdAt: r.created_at,
-  revision: r.revision,
-  settlement: readSettlementSnapshot(r, {
+export const toTransaction = (r: TransactionRow): Transaction => {
+  const costCurrency = r.cost_currency ?? r.currency;
+  return {
+    id: r.id,
     kind: r.kind,
-    costCurrency: r.currency,
-    payCurrency: r.currency,
+    occurredOn: r.occurred_on,
     amountMinor: readMinor(r.amount_minor),
-  }),
-  source: r.source ?? null,
-  fixedExpenseId: r.fixed_expense_id ?? null,
-  installmentId: r.installment_id ?? null,
-  loanId: r.loan_id ?? null,
-  loanFlow: r.loan_flow ?? null,
-  loanEvent: r.loan_event ?? null,
-  loanPrincipalMinor: r.loan_principal_minor == null ? null : readMinor(r.loan_principal_minor),
-  loanFeeMinor: r.loan_fee_minor == null ? null : readMinor(r.loan_fee_minor),
-  loanEventSeq: r.loan_event_seq ?? null,
-  items: (r.expense_items ?? []).map((item) => ({
-    id: item.id, description: item.description, amountMinor: readMinor(item.amount_minor), position: item.position,
-  })).sort((a, b) => a.position - b.position),
-});
+    currency: costCurrency,
+    walletId: r.wallet_id,
+    categoryId: r.category_id,
+    toWalletId: r.to_wallet_id,
+    toAmountMinor: r.to_amount_minor === null ? null : readMinor(r.to_amount_minor),
+    note: r.note,
+    createdAt: r.created_at,
+    revision: r.revision,
+    settlement: readSettlementSnapshot(r, {
+      kind: r.kind,
+      costCurrency,
+      payCurrency: r.currency,
+      amountMinor: readMinor(r.amount_minor),
+    }),
+    source: r.source ?? null,
+    fixedExpenseId: r.fixed_expense_id ?? null,
+    installmentId: r.installment_id ?? null,
+    loanId: r.loan_id ?? null,
+    loanFlow: r.loan_flow ?? null,
+    loanEvent: r.loan_event ?? null,
+    loanPrincipalMinor: r.loan_principal_minor == null ? null : readMinor(r.loan_principal_minor),
+    loanFeeMinor: r.loan_fee_minor == null ? null : readMinor(r.loan_fee_minor),
+    loanEventSeq: r.loan_event_seq ?? null,
+    items: (r.expense_items ?? []).map((item) => ({
+      id: item.id, description: item.description, amountMinor: readMinor(item.amount_minor), position: item.position,
+    })).sort((a, b) => a.position - b.position),
+  };
+};
 
 /** One page of the activity feed, newest first, with a keyset cursor. */
 export async function fetchTransactions(

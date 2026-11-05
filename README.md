@@ -13,7 +13,7 @@ Built with Next.js (App Router) and Supabase. Open sign-up with email verificati
 - Manage expense/income categories in Settings. Used categories are archived with history retained; unused categories can be deleted. Templates need reassignment before their category is removed.
 - Optional expense breakdowns describe one payment without adding extra wallet debits. Partial lists show the unitemized remainder.
 - Move between wallets using compact FROM/TO dropdowns. Calculated received amounts are locked until the edit button enables manual entry; SYP exchanges use explicit actual amounts.
-- Optional cashier tender/change keeps purchase cost separate from the cash handed over. Add any number of actual returned amounts—for example, `$20 paid`, `$5 returned`, plus an LBP remainder—and choose a receiving wallet for each one. The app records those amounts exactly and does not calculate an exchange rate.
+- Optional cashier tender/change keeps purchase cost separate from the cash handed over. The purchase may use a different currency from the paying wallet—for example, `LBP 340,000` cost, `$5` paid, and `LBP 110,000` returned. Add any number of actual returned amounts and choose a receiving wallet for each one. The app records those facts exactly and does not calculate an exchange rate.
 - Activity with day groups, search, filters and paging.
 - Monthly salary: set the amount and wallet once, then press **Got salary**.
 - Pending freelance payments from **Wallets → Pending payments**: track client/project totals and due dates, record partial receipts, and see the remaining amount by currency. Only received money enters wallets and income; receipt edits/deletion in Activity update the amount still owed.

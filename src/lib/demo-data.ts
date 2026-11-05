@@ -188,6 +188,7 @@ export function demoBudgetData(month: string): {
 type Seed = [daysAgo: number, wallet: number, category: number, amount: number, note: string | null, kind?: "income"];
 const SEEDS: Seed[] = [
   [3, 6, 101, 1250, "Synthetic SYP groceries"], [4, 7, 202, 5000, "Synthetic SYP income", "income"],
+  [0, 1, 101, 340000, "Cross-currency groceries"],
   [0, 1, 101, 5420, "Supermarket"], [0, 1, 103, 1250, "Coffee"], [0, 3, 102, 400000, "Taxi"],
   [1, 2, 201, 180000, "Salary", "income"], [1, 2, 104, 4500, "Generator bill"],
   [2, 3, 105, 1200000, "Pharmacy"], [2, 1, 103, 1800, "Lunch"], [3, 1, 101, 3210, null],
@@ -232,11 +233,15 @@ function build(): Transaction[] {
       kind: kind ?? "expense",
       occurredOn: addDays(today, -ago),
       amountMinor: amount,
-      currency: wallets.get(walletId)!.currency,
+      currency: note === "Cross-currency groceries" ? "LBP" : wallets.get(walletId)!.currency,
       walletId,
       categoryId: id(cat),
       note,
-      settlement: note === "Coffee" && ago === 0 ? {
+      settlement: note === "Cross-currency groceries" ? {
+        tenderMinor: 500,
+        tenderCurrency: "USD",
+        changes: [{ walletId: id(3), amountMinor: 110000, currency: "LBP" as const }],
+      } : note === "Coffee" && ago === 0 ? {
         tenderMinor: 2000,
         tenderCurrency: wallets.get(walletId)!.currency,
         changes: [

@@ -22,9 +22,9 @@ import { DetailSheet } from "@/components/transactions/detail-sheet";
 const id = "00000000-0000-4000-8000-000000000099";
 const walletId = "00000000-0000-4000-8000-000000000001";
 const categoryId = "00000000-0000-4000-8000-000000000101";
-const wallets: Wallet[] = ["USD", "SYP"].map((currency, n) => ({
-  id: n ? "00000000-0000-4000-8000-000000000002" : walletId,
-  name: n ? "Syrian cash" : "Cash", currency: currency as Wallet["currency"],
+const wallets: Wallet[] = ["USD", "SYP", "LBP"].map((currency, n) => ({
+  id: n === 0 ? walletId : `00000000-0000-4000-8000-${String(n + 1).padStart(12, "0")}`,
+  name: n === 0 ? "Cash" : n === 1 ? "Syrian cash" : "Lebanese cash", currency: currency as Wallet["currency"],
   kind: "cash", position: n, archived: false, openingBalanceMinor: 0, balanceMinor: 10000,
 }));
 const categories: Category[] = [{ id: categoryId, kind: "expense", parentId: null, archivedAt: null,
@@ -281,6 +281,23 @@ describe("cashier aggregate integration", () => {
         rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } },
     ] },
   };
+  it("records exact LBP cost, USD tender, and LBP change without a rate", async () => {
+    mount();
+    fireEvent.click(screen.getByRole("checkbox", { name: en.Cashier.title }));
+    fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.purchaseCurrency }), { target: { value: "LBP" } });
+    for (const digit of "340000") fireEvent.click(screen.getByRole("button", { name: digit }));
+    fireEvent.change(screen.getByLabelText(en.Cashier.tender), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: en.Cashier.addChange }));
+    fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.currency }), { target: { value: "LBP" } });
+    fireEvent.change(screen.getByLabelText(en.Cashier.change), { target: { value: "110000" } });
+    fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.wallet }), { target: { value: wallets[2].id } });
+    fireEvent.click(screen.getByRole("button", { name: en.Add.save }));
+    await waitFor(() => expect(mock.createTransaction).toHaveBeenCalledWith(expect.objectContaining({
+      amountMinor: 340000, costCurrency: "LBP",
+      settlement: { tenderMinor: 500, changes: [{ walletId: wallets[2].id, amountMinor: 110000 }] },
+    }), id));
+    expect(screen.queryByLabelText(en.Cashier.rate)).toBeNull();
+  });
   it.each(["en", "ar"] as const)("%s hydrates every return, keeps cost/items separate and saves one captured revision", async (locale) => {
     const m = locale === "ar" ? ar : en;
     mount({ mode: "edit", initial: cashSaved }, locale);

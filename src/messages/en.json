@@ -725,6 +725,7 @@
   "Cashier": {
     "title": "Cash paid and change",
     "cost": "Purchase cost",
+    "purchaseCurrency": "Purchase currency",
     "tender": "Paid to cashier",
     "change": "Change received",
     "currency": "Change currency",

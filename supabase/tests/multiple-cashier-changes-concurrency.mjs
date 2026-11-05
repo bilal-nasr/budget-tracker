@@ -84,8 +84,8 @@ try {
       ('${usdChange}','Concurrency USD change','cash','USD'),
       ('${lbpChange}','Concurrency LBP change','cash','LBP');
     select * from public.save_transaction('${transaction}',null,
-      '{"kind":"expense","occurredOn":"2026-11-05","walletId":"${payer}","amountMinor":1250,"categoryId":"${category}"}',null,
-      '{"tenderMinor":2000,"changes":[{"walletId":"${usdChange}","amountMinor":500},{"walletId":"${lbpChange}","amountMinor":223750}]}');
+      '{"kind":"expense","occurredOn":"2026-11-05","walletId":"${payer}","amountMinor":340000,"costCurrency":"LBP","categoryId":"${category}"}',null,
+      '{"tenderMinor":500,"changes":[{"walletId":"${lbpChange}","amountMinor":110000}]}');
     commit;`);
   const revision = Number((await sql(`begin; ${claims} select revision from public.transactions where id='${transaction}'; commit;`))
     .split(/\r?\n/).find((line) => /^\d+$/.test(line)));
@@ -94,8 +94,8 @@ try {
   const editor = session();
   editor.send(`begin; ${claims}
     select * from public.save_transaction('${transaction}',${revision},
-      '{"kind":"expense","occurredOn":"2026-11-05","walletId":"${payer}","amountMinor":1300,"categoryId":"${category}"}',null,
-      '{"tenderMinor":2000,"changes":[{"walletId":"${usdChange}","amountMinor":400},{"walletId":"${lbpChange}","amountMinor":223750}]}');
+      '{"kind":"expense","occurredOn":"2026-11-05","walletId":"${payer}","amountMinor":340000,"costCurrency":"SYP","categoryId":"${category}"}',null,
+      '{"tenderMinor":500,"changes":[{"walletId":"${lbpChange}","amountMinor":110000}]}');
     select 'EDIT_READY';`);
   await editor.wait("EDIT_READY");
 
@@ -117,15 +117,15 @@ try {
   assert.match(currencyResult.errors, /wallet currency cannot change/);
 
   const result = await sql(`begin; ${claims}
-    select amount_minor||'|'||tender_minor||'|'||change_wallet_ids::text from public.transactions where id='${transaction}';
+    select amount_minor||'|'||cost_currency::text||'|'||tender_minor||'|'||change_wallet_ids::text from public.transactions where id='${transaction}';
     select string_agg(position||':'||currency::text||':'||amount_minor,',' order by position)
       from public.cashier_changes where transaction_id='${transaction}';
     select currency::text from public.wallets where id='${lbpChange}'; commit;`);
   const lines = result.split(/\r?\n/);
-  assert.ok(lines.some((line) => line.startsWith(`1300|2000|{${usdChange},${lbpChange}}`)), "one winning parent snapshot remains");
-  assert.ok(lines.includes("0:USD:400,1:LBP:223750"), "both winning child legs remain once and ordered");
+  assert.ok(lines.some((line) => line.startsWith(`340000|SYP|500|{${lbpChange}}`)), "one winning cross-cost parent snapshot remains");
+  assert.ok(lines.includes("0:LBP:110000"), "the winning returned-cash leg remains once");
   assert.equal(lines.at(-1), "LBP", "receiver currency remains locked to the saved leg");
-  console.log("PASS: multi-leg replacement locks every receiver; concurrent currency edit fails without stale or duplicate legs.");
+  console.log("PASS: cost-currency edit locks every receiver; concurrent wallet currency edit fails without a mismatched snapshot.");
 } finally {
   await Promise.all([...active].map((child) => new Promise((resolve) => { child.once("close", resolve); child.kill(); })));
   if (created) {

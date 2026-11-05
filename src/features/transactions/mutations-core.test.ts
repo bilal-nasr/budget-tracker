@@ -90,6 +90,16 @@ describe("create/update transaction core", () => {
     expect(mock.rpc).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards an explicit purchase currency without deriving a rate or amount", async () => {
+    const settlement = { tenderMinor: 500, changes: [{ walletId, amountMinor: 110000 }] };
+    await createTransactionCore({ ...input, amountMinor: 340000, costCurrency: "LBP", settlement }, id);
+    expect(mock.rpc.mock.calls[0][1]).toMatchObject({
+      p_input: { amountMinor: 340000, costCurrency: "LBP" },
+      p_settlement: settlement,
+    });
+    expect(mock.rpc.mock.calls[0][1].p_input).not.toHaveProperty("rate");
+  });
+
   it("rejects invalid input/IDs/revisions before auth or database access", async () => {
     expect(await createTransactionCore(input, "bad-id")).toEqual({ ok: false, error: "invalid" });
     expect(await createTransactionCore({ ...input, amountMinor: 0 }, id)).toEqual({ ok: false, error: "invalid" });

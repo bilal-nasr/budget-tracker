@@ -63,7 +63,7 @@ const labels: CashSettlementLabels = {
 
 describe("cash settlement fields", () => {
   it("parses $20 paid with $5 and LBP returned as two exact change legs without a rate", () => {
-    expect(parseSettlementDraft(draft, "USD", 1250, [usd, lbp])).toEqual({
+    expect(parseSettlementDraft(draft, "USD", "USD", 1250, [usd, lbp])).toEqual({
       ok: true,
       settlement: {
         tenderMinor: 2000,
@@ -73,7 +73,7 @@ describe("cash settlement fields", () => {
         ],
       },
     });
-    expect(parseSettlementDraft({ ...draft, enabled: false }, "USD", 1250, [])).toEqual({ ok: true, settlement: null });
+    expect(parseSettlementDraft({ ...draft, enabled: false }, "USD", "USD", 1250, [])).toEqual({ ok: true, settlement: null });
   });
 
   it("hydrates every saved change and drops historical rates only when duplicating", () => {
@@ -87,17 +87,17 @@ describe("cash settlement fields", () => {
   it("retains archived original receivers only for an exact financial edit", () => {
     const archivedWallets = [{ ...usd, archived: true }, { ...lbp, archived: true }];
     const historicalDraft = settlementDraftFromSnapshot(editContext.original.settlement, "USD", usd.id);
-    expect(parseSettlementDraft(historicalDraft, "USD", 1250, archivedWallets, editContext).ok).toBe(true);
-    expect(parseSettlementDraft(historicalDraft, "USD", 1250, archivedWallets)).toEqual({ ok: false, error: "walletUnavailable" });
-    expect(parseSettlementDraft({ ...historicalDraft, tenderText: "21" }, "USD", 1250, archivedWallets, editContext))
+    expect(parseSettlementDraft(historicalDraft, "USD", "USD", 1250, archivedWallets, editContext).ok).toBe(true);
+    expect(parseSettlementDraft(historicalDraft, "USD", "USD", 1250, archivedWallets)).toEqual({ ok: false, error: "walletUnavailable" });
+    expect(parseSettlementDraft({ ...historicalDraft, tenderText: "21" }, "USD", "USD", 1250, archivedWallets, editContext))
       .toEqual({ ok: false, error: "walletUnavailable" });
-    expect(parseSettlementDraft(historicalDraft, "USD", 1250, archivedWallets, { ...editContext, walletId: "another-paying-wallet" }))
+    expect(parseSettlementDraft(historicalDraft, "USD", "USD", 1250, archivedWallets, { ...editContext, walletId: "another-paying-wallet" }))
       .toEqual({ ok: false, error: "walletUnavailable" });
   });
 
   it("renders both saved returns and keeps archived original receivers visible", () => {
     const historicalDraft = settlementDraftFromSnapshot(editContext.original.settlement, "USD", usd.id);
-    render(<CashSettlementFields draft={historicalDraft} payCurrency="USD" costMinor={1250}
+    render(<CashSettlementFields draft={historicalDraft} payCurrency="USD" costCurrency="USD" costMinor={1250}
       wallets={[{ ...usd, archived: true }, { ...lbp, archived: true }]} editContext={editContext}
       labels={labels} onChange={vi.fn()} />);
     expect(screen.getAllByLabelText(labels.change).map((input) => (input as HTMLInputElement).value)).toEqual(["5", "223750"]);
@@ -107,7 +107,7 @@ describe("cash settlement fields", () => {
 
   it("adds and removes independent change rows", () => {
     const onChange = vi.fn();
-    render(<CashSettlementFields draft={draft} payCurrency="USD" costMinor={1250} wallets={[usd, lbp]}
+    render(<CashSettlementFields draft={draft} payCurrency="USD" costCurrency="USD" costMinor={1250} wallets={[usd, lbp]}
       labels={labels} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: labels.addChange }));
     expect(onChange.mock.calls[0][0].changes).toHaveLength(3);
@@ -117,7 +117,7 @@ describe("cash settlement fields", () => {
 
   it("resets only the changed row when its currency changes", () => {
     const onChange = vi.fn();
-    render(<CashSettlementFields draft={draft} payCurrency="USD" costMinor={1250} wallets={[usd, lbp]}
+    render(<CashSettlementFields draft={draft} payCurrency="USD" costCurrency="USD" costMinor={1250} wallets={[usd, lbp]}
       labels={labels} onChange={onChange} />);
     fireEvent.change(screen.getAllByLabelText(labels.currency)[0], { target: { value: "LBP" } });
     expect(onChange.mock.calls[0][0].changes).toEqual([
@@ -127,7 +127,7 @@ describe("cash settlement fields", () => {
   });
 
   it("keeps money fields LTR in Arabic and reports mismatched cash", () => {
-    render(<div dir="rtl"><CashSettlementFields draft={{ ...draft, tenderText: "12" }} payCurrency="USD" costMinor={1250}
+    render(<div dir="rtl"><CashSettlementFields draft={{ ...draft, tenderText: "12" }} payCurrency="USD" costCurrency="USD" costMinor={1250}
       wallets={[usd, lbp]} labels={{ ...labels, tender: "المبلغ المدفوع" }} onChange={vi.fn()} /></div>);
     expect(screen.getByLabelText("المبلغ المدفوع").getAttribute("dir")).toBe("ltr");
     for (const input of screen.getAllByLabelText(labels.change)) expect(input.getAttribute("dir")).toBe("ltr");

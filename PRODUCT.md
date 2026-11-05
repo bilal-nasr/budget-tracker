@@ -48,7 +48,7 @@ v1 scope:
 - Transactions: expense, income and transfers with actual sent/received amounts. Automatic Move calculations are restricted to USD/LBP; SYP exchanges use explicit actual amounts.
 - Categories (income/expense), seeded with editable bilingual defaults. Archive used categories to retain history, delete unused ones, and reassign live templates before removal. Existing category hierarchy is protected; hierarchy editing/reordering remains future scope.
 - Optional one-level expense items describe a parent payment without another debit or category allocation. An unitemized remainder is allowed.
-- Optional cashier payment/change uses purchase cost for spending, debits the tender once, and credits every actual returned amount to its selected wallet. One purchase may return multiple currencies (for example USD plus LBP); new entries record the amounts exactly without calculating or requesting an exchange rate.
+- Optional cashier payment/change may denominate the purchase cost independently from the paying wallet. Spending uses the stated cost currency, while wallet balances debit the exact tender once and credit every actual returned amount to its selected wallet. One purchase may return multiple currencies; new entries record the amounts exactly without calculating or requesting an exchange rate.
 - Installment paid status follows actual salary receipt cycles, with an explicit repeat-payment action. Principal progress remains lifetime progress.
 - Borrowed and lent loans with one additive, one-time percentage fee, principal-first repayments, fee-only income/spending and an explicit existing-loan entry that does not move cash.
 - Monthly budgets: a limit per expense category per currency; carry forward to the next month by default.

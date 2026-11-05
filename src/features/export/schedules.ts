@@ -62,7 +62,7 @@ export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
     if (transaction.kind === "income") {
       addLeg(transaction.walletId, transaction.currency, "income", transaction.amountMinor, 0, 0);
     } else if (transaction.kind === "expense") {
-      addLeg(transaction.walletId, transaction.currency, "expense", 0, transaction.settlement?.tenderMinor ?? transaction.amountMinor, 0);
+      addLeg(transaction.walletId, transaction.settlement?.tenderCurrency ?? transaction.currency, "expense", 0, transaction.settlement?.tenderMinor ?? transaction.amountMinor, 0);
       transaction.settlement?.changes.forEach((change, index) => {
         addLeg(change.walletId, change.currency, "cash-change", change.amountMinor, 0, index + 1);
       });

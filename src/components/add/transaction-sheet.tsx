@@ -82,6 +82,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
   const wallet = walletById(walletId);
   const toWallet = walletById(toWalletId);
   const currency: Currency = wallet?.currency ?? "USD";
+  const [purchaseCurrency, setPurchaseCurrency] = useState<Currency>(initial?.currency ?? currency);
   const [cashDraft, setCashDraft] = useState(() => settlementDraftFromSnapshot(initial?.settlement ?? null, currency, walletId, state.mode === "add"));
   const settlementEligible = mode === "expense" && (state.mode === "add" || (!initial?.source && !initial?.installmentId));
   const exchange = mode === "move" && toWallet !== undefined && wallet !== undefined && toWallet.currency !== wallet.currency;
@@ -112,12 +113,14 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
   const today = todayIn(timezone);
   const list = mode === "move" ? [] : categoryOptions(categories, mode, state.mode === "edit" ? initial?.categoryId ?? undefined : undefined);
   const categoryAvailable = list.some((c) => c.id === categoryId);
-  const minor = parseTyped(typed, currency);
+  const amountCurrency = mode === "expense" && cashDraft.enabled ? purchaseCurrency : currency;
+  const minor = parseTyped(typed, amountCurrency);
+  const cashTender = cashDraft.enabled ? parseTyped(cashDraft.tenderText, currency) : minor;
   const balanceExceeded = state.mode === "add" && mode === "expense" && wallet !== undefined &&
-    minor !== null && minor > 0 && minor > wallet.balanceMinor;
-  const itemResult = parseExpenseItemDrafts(currency, minor, itemDrafts);
+    cashTender !== null && cashTender > 0 && cashTender > wallet.balanceMinor;
+  const itemResult = parseExpenseItemDrafts(amountCurrency, minor, itemDrafts);
   const cashEditContext = state.mode === "edit" ? { walletId, original: state.initial } : undefined;
-  const cashResult = parseSettlementDraft(cashDraft, currency, minor, wallets, cashEditContext);
+  const cashResult = parseSettlementDraft(cashDraft, currency, purchaseCurrency, minor, wallets, cashEditContext);
   const currencyLocked = itemDrafts.length > 0 || (state.mode === "edit" && state.initial.items.length > 0);
   const rate = parseRate(rateText);
   const rateError = rateSupported && !receivedEdited && rateText.trim() !== "" && rate === null ? t("errorRate") : null;
@@ -187,7 +190,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
   };
 
   const changeWallet = (id: string) => {
-    if (currencyLocked && walletById(id)?.currency !== currency) { setError(tb("removeBeforeCurrencyChange")); return; }
+    if (currencyLocked && !cashDraft.enabled && walletById(id)?.currency !== currency) { setError(tb("removeBeforeCurrencyChange")); return; }
     setWalletId(id);
     setPickWallet(false);
     if (toWalletId === id) {
@@ -195,8 +198,8 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
       resetReceived();
     }
     if (walletById(id)?.currency !== currency) {
-      setTyped("");
-      setCashDraft((previous) => ({ ...settlementDraftFromSnapshot(null, walletById(id)!.currency, id), enabled: previous.enabled }));
+      if (!cashDraft.enabled) { setTyped(""); setPurchaseCurrency(walletById(id)!.currency); }
+      setCashDraft((previous) => ({ ...previous, tenderText: "" }));
       resetReceived();
     }
   };
@@ -270,6 +273,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
       occurredOn: date,
       walletId,
       amountMinor,
+      ...(mode === "expense" && cashDraft.enabled ? { costCurrency: purchaseCurrency } : {}),
       categoryId,
       note: note.trim() || undefined,
       items: mode === "expense" && itemResult.valid ? itemResult.items : [],
@@ -355,7 +359,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
           )}
           aria-label={t("amount")}
         >
-          <bdi dir="ltr" className="text-[28px] font-semibold text-muted-foreground">{currencyPrefix(currency)}</bdi>
+          <bdi dir="ltr" className="text-[28px] font-semibold text-muted-foreground">{currencyPrefix(amountCurrency)}</bdi>
           <bdi dir="ltr">{typed === "" ? "0" : groupTyped(typed)}</bdi>
         </p>
         {mode !== "move" ? <div className="flex shrink-0 flex-col items-end gap-1">
@@ -389,7 +393,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
               type="button"
               role="radio"
               aria-checked={w.id === walletId}
-              disabled={currencyLocked && w.currency !== currency}
+              disabled={currencyLocked && !cashDraft.enabled && w.currency !== currency}
               onClick={() => changeWallet(w.id)}
               className={chipClass}
             >
@@ -493,10 +497,22 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
             invalid={categoryId !== "" && !categoryAvailable}
           />
           {categoryId !== "" && !categoryAvailable ? <p role="alert" className="text-sm">{tc("errorUnavailable")}</p> : null}
-          {mode === "expense" ? <ExpenseBreakdownFields currency={currency} parentMinor={minor}
+          {mode === "expense" && cashDraft.enabled ? <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {ts("purchaseCurrency")}
+            <select aria-label={ts("purchaseCurrency")} value={purchaseCurrency}
+              onChange={(event) => {
+                const next = event.target.value as Currency;
+                if (next !== purchaseCurrency) { setPurchaseCurrency(next); setTyped(""); }
+              }}
+              disabled={currencyLocked}
+              className="h-12 rounded-lg border border-input bg-card px-3 text-base">
+              {(Object.keys(CURRENCY_DECIMALS) as Currency[]).map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label> : null}
+          {mode === "expense" ? <ExpenseBreakdownFields currency={amountCurrency} parentMinor={minor}
             items={itemDrafts} onChange={setItemDrafts} labels={breakdownLabels} disabled={pending || unresolved} /> : null}
           {settlementEligible ? <>
-            <CashSettlementFields draft={cashDraft} payCurrency={currency} costMinor={minor} wallets={wallets}
+            <CashSettlementFields draft={cashDraft} payCurrency={currency} costCurrency={purchaseCurrency} costMinor={minor} wallets={wallets}
               editContext={cashEditContext}
               labels={settlementLabels} onChange={setCashDraft} onCreateWallet={() => onCreateWallet?.()} disabled={pending || unresolved} />
             {cashDraft.enabled && cashDraft.changes.some((change) => change.currency !== currency)
@@ -553,7 +569,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
       <AmountKeypad
         className="mt-1"
         value={typed}
-        currency={currency}
+        currency={amountCurrency}
         onChange={setTyped}
         backspaceLabel={t("backspace")}
         textLabel={t("text")}

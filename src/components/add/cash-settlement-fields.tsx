@@ -32,10 +32,12 @@ function newChangeKey(): string {
 function unchangedFinancials(
   context: SettlementEditContext | undefined,
   payCurrency: Currency,
+  costCurrency: Currency,
   costMinor: number,
   settlement: CashSettlementInput,
 ): boolean {
-  if (!context || context.walletId !== context.original.walletId || payCurrency !== context.original.currency ||
+  if (!context || context.walletId !== context.original.walletId || payCurrency !== context.original.settlement?.tenderCurrency ||
+      costCurrency !== context.original.currency ||
       costMinor !== context.original.amountMinor) return false;
   const original = context.original.settlement;
   if (!original || original.tenderMinor !== settlement.tenderMinor || original.changes.length !== settlement.changes.length) return false;
@@ -55,7 +57,7 @@ export function settlementDraftFromSnapshot(
 ): CashSettlementDraft {
   return {
     enabled: snapshot !== null,
-    tenderText: snapshot ? toInputText(snapshot.tenderMinor, currency) : "",
+    tenderText: snapshot ? toInputText(snapshot.tenderMinor, snapshot.tenderCurrency) : "",
     changes: snapshot?.changes.map((change) => ({
       key: newChangeKey(),
       amountText: toInputText(change.amountMinor, change.currency),
@@ -82,6 +84,7 @@ export type CashSettlementLabels = {
 export function parseSettlementDraft(
   draft: CashSettlementDraft,
   payCurrency: Currency,
+  costCurrency: Currency,
   costMinor: number | null,
   wallets: readonly SettlementWallet[],
   editContext?: SettlementEditContext,
@@ -104,14 +107,14 @@ export function parseSettlementDraft(
   }
 
   const candidate = { tenderMinor, changes };
-  const unchanged = unchangedFinancials(editContext, payCurrency, costMinor, candidate);
+  const unchanged = unchangedFinancials(editContext, payCurrency, costCurrency, costMinor, candidate);
   if (!unchanged && receivers.some((receiver) => receiver.archived)) return { ok: false, error: "walletUnavailable" };
   const settlement: CashSettlementInput = unchanged
     ? candidate
     : { tenderMinor, changes: changes.map(({ walletId, amountMinor }) => ({ walletId, amountMinor })) };
   const validation = validateSettlement({
     costMinor,
-    costCurrency: payCurrency,
+    costCurrency,
     payCurrency,
     changeCurrencies: currencies,
     settlement,
@@ -123,6 +126,7 @@ export function parseSettlementDraft(
 export function CashSettlementFields({
   draft,
   payCurrency,
+  costCurrency,
   costMinor,
   wallets,
   labels,
@@ -132,6 +136,7 @@ export function CashSettlementFields({
 }: {
   draft: CashSettlementDraft;
   payCurrency: Currency;
+  costCurrency: Currency;
   costMinor: number | null;
   wallets: readonly SettlementWallet[];
   labels: CashSettlementLabels;
@@ -143,7 +148,7 @@ export function CashSettlementFields({
   const id = useId();
   const currencies = Object.keys(CURRENCY_DECIMALS) as Currency[];
   const originalChanges = editContext?.original.settlement?.changes ?? [];
-  const parsed = parseSettlementDraft(draft, payCurrency, costMinor, wallets, editContext);
+  const parsed = parseSettlementDraft(draft, payCurrency, costCurrency, costMinor, wallets, editContext);
   const selectClass = "h-12 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-base text-foreground focus-visible:outline-2 focus-visible:outline-ring";
   const change = (patch: Partial<CashSettlementDraft>) => onChange({ ...draft, ...patch });
   const updateRow = (key: string, patch: Partial<CashChangeDraft>) =>
@@ -152,7 +157,8 @@ export function CashSettlementFields({
   return (
     <fieldset disabled={disabled} className="min-w-0 border-t border-border py-2 disabled:opacity-60">
       <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium">
-        <input type="checkbox" checked={draft.enabled} onChange={(event) => change({ enabled: event.target.checked })}
+        <input type="checkbox" checked={draft.enabled} disabled={disabled || (draft.enabled && payCurrency !== costCurrency)}
+          onChange={(event) => change({ enabled: event.target.checked })}
           className="size-5 accent-primary" aria-controls={`${id}-fields`} />
         {labels.title}
       </label>

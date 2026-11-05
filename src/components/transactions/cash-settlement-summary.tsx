@@ -16,7 +16,7 @@ export function CashSettlementSummary({ settlement, costMinor, currency, changeW
     <h3 className="text-[17px] font-semibold">{t("summary")}</h3>
     <dl className="flex min-w-0 flex-col gap-2.5 text-[15px]">
       <div className={row}><dt className="text-muted-foreground">{t("cost")}</dt><dd><Amount minor={costMinor} currency={currency} /></dd></div>
-      <div className={row}><dt className="text-muted-foreground">{t("tender")}</dt><dd><Amount minor={settlement.tenderMinor} currency={currency} /></dd></div>
+      <div className={row}><dt className="text-muted-foreground">{t("tender")}</dt><dd><Amount minor={settlement.tenderMinor} currency={settlement.tenderCurrency} /></dd></div>
       {settlement.changes.length === 0
         ? <div className={row}><dt className="text-muted-foreground">{t("change")}</dt><dd>{t("noChange")}</dd></div>
         : settlement.changes.map((change, index) => <Fragment key={`${change.walletId}-${index}`}>

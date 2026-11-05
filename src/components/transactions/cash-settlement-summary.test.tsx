@@ -34,4 +34,15 @@ describe("cash settlement summary", () => {
     renderSummary([]);
     expect(screen.getByText(en.Cashier.noChange, { exact: true })).toBeTruthy();
   });
+
+  it("keeps LBP cost, USD tender, and LBP returned cash independent", () => {
+    render(<NextIntlClientProvider locale="en" messages={en}>
+      <CashSettlementSummary settlement={{ tenderMinor: 500, tenderCurrency: "USD", changes: [
+        { walletId: lbpWallet, amountMinor: 110000, currency: "LBP" },
+      ] }} costMinor={340000} currency="LBP" changeWalletNames={["Lebanese cash"]} />
+    </NextIntlClientProvider>);
+    expect(screen.getByText("LBP 340,000", { exact: true })).toBeTruthy();
+    expect(screen.getByText("$5.00", { exact: true })).toBeTruthy();
+    expect(screen.getByText("LBP 110,000", { exact: true })).toBeTruthy();
+  });
 });
