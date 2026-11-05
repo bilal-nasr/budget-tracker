@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Category } from "@/features/categories/schema";
+import { categoryEditSchema, type Category } from "@/features/categories/schema";
 import type { FixedExpense } from "@/features/fixed/schema";
 import { getCycleSnapshot } from "@/features/installments/cycle-queries";
 import type { Installment } from "@/features/installments/schema";
@@ -155,7 +155,7 @@ async function getCategoriesForExport(): Promise<Category[]> {
   });
   return rows.map((row) => {
     if (!(["expense", "income"] as unknown[]).includes(row.kind) || !["teal", "oxblood", "ochre"].includes(String(row.color)) ||
-        !Number.isSafeInteger(row.tile) || row.tile < 1 || row.tile > 8 || !Number.isSafeInteger(row.position)) throw unavailable();
+        !categoryEditSchema.shape.tile.safeParse(row.tile).success || !Number.isSafeInteger(row.position)) throw unavailable();
     return {
       id: row.id, kind: row.kind as Category["kind"], nameEn: row.name_en, nameAr: row.name_ar,
       tile: row.tile as Category["tile"], color: row.color as Category["color"], position: row.position,
