@@ -327,7 +327,12 @@ begin
  if tg_op='DELETE' and pg_trigger_depth()>1 then return old; end if;
  if tg_op='DELETE' then new_data:=to_jsonb(old); else new_data:=to_jsonb(new); end if;
  if tg_op='UPDATE' then old_data:=to_jsonb(old); end if;
- changed:=tg_op<>'UPDATE' or (select jsonb_object_agg(key,value) from jsonb_each(new_data) where key=any(array['user_id','balance_id','to_balance_id','change_balance_ids','salary_balance_id','salary_amount_minor','amount_minor','to_amount_minor','tender_minor','kind','loan_flow','currency','cost_currency','rate_base','rate_quote','rate_numerator','rate_denominator','deleted_at','total_minor','monthly_minor','principal_minor','fee_minor','limit_minor'])) is distinct from (select jsonb_object_agg(key,value) from jsonb_each(old_data) where key=any(array['user_id','balance_id','to_balance_id','change_balance_ids','salary_balance_id','salary_amount_minor','amount_minor','to_amount_minor','tender_minor','kind','loan_flow','currency','cost_currency','rate_base','rate_quote','rate_numerator','rate_denominator','deleted_at','total_minor','monthly_minor','principal_minor','fee_minor','limit_minor']));
+ changed:=tg_op<>'UPDATE' or (select jsonb_object_agg(key,value) from jsonb_each(new_data) where key=any(array['user_id','balance_id','to_balance_id','change_balance_ids','salary_balance_id','salary_amount_minor','amount_minor','to_amount_minor','tender_minor','kind','loan_flow','currency','cost_currency','rate_base','rate_quote','rate_numerator','rate_denominator','deleted_at','total_minor','paid_before_minor','starts_month','monthly_minor','principal_minor','fee_minor','limit_minor'])) is distinct from (select jsonb_object_agg(key,value) from jsonb_each(old_data) where key=any(array['user_id','balance_id','to_balance_id','change_balance_ids','salary_balance_id','salary_amount_minor','amount_minor','to_amount_minor','tender_minor','kind','loan_flow','currency','cost_currency','rate_base','rate_quote','rate_numerator','rate_denominator','deleted_at','total_minor','paid_before_minor','starts_month','monthly_minor','principal_minor','fee_minor','limit_minor']));
+ -- A budget category determines which later versions supersede its limit;
+ -- transaction category corrections remain metadata-only ledger changes.
+ if tg_table_name='budgets' then
+  changed:=changed or (new_data->'category_id') is distinct from (old_data->'category_id');
+ end if;
  if not changed then return new; end if;
  for k in select jsonb_object_keys(new_data) loop
   if k in('balance_id','to_balance_id','change_balance_id','salary_balance_id') then
@@ -528,5 +533,33 @@ end $$;
 revoke all on function ledger_private.wallet_order_guard() from public,anon;
 grant execute on function ledger_private.wallet_order_guard() to authenticated;
 create constraint trigger wallet_order_guard after insert or update on public.wallets deferrable initially deferred for each row execute function ledger_private.wallet_order_guard();
+
+-- Deletion can reveal an older budget even though it removes a row. Check
+-- the resulting statement state, allowing deletion of harmless superseded
+-- history (and complete cleanup) while rejecting reactivated dependencies.
+create function ledger_private.budget_disabled_dependency_guard() returns trigger
+language plpgsql set search_path='' as $$
+begin
+ if not exists(select 1 from public.currencies c
+   where c.user_id=old.user_id and c.code=old.currency and c.disabled_at is not null) then
+  return null;
+ end if;
+ if exists(
+   select 1 from (
+    select distinct on(b.category_id) b.limit_minor from public.budgets b
+    where b.user_id=old.user_id and b.currency=old.currency
+      and b.starts_month<=date_trunc('month',current_date)::date
+    order by b.category_id,b.starts_month desc
+   ) latest where latest.limit_minor is not null
+  ) or exists(select 1 from public.budgets b
+    where b.user_id=old.user_id and b.currency=old.currency and b.limit_minor is not null
+      and b.starts_month>date_trunc('month',current_date)::date) then
+  raise exception 'currency.disabled';
+ end if;
+ return null;
+end $$;
+revoke all on function ledger_private.budget_disabled_dependency_guard() from public,anon,authenticated;
+create trigger zz_budget_disabled_dependency after delete on public.budgets
+ for each row execute function ledger_private.budget_disabled_dependency_guard();
 
 commit;
