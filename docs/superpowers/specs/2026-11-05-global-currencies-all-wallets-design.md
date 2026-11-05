@@ -55,6 +55,8 @@ For every wallet whose `deleted_at` is null, including a Needs-attention wallet:
 
 Deleted wallet tombstones retain their existing balances and snapshots but do not receive newly added currencies.
 
+Catalog addition order is authoritative for global currency display and deterministic default switching: `currencies.created_at`, then `code`. Per-wallet balance positions are normalized to that order during migration and may not define a conflicting currency order.
+
 The global currency catalog remains owner-scoped. Code validation, symbol validation, and decimal precision remain unchanged: code is normalized uppercase, symbol is 1–12 Unicode code points, and precision is 0–8.
 
 ## Currency lifecycle
@@ -74,7 +76,7 @@ The currency settings screen reflects the new currency immediately. Partial inse
 
 Auto-created zero balances do not by themselves make a definition “used.” Code and precision remain editable until the currency has actual monetary or configuration use. Symbol remains editable afterward.
 
-Changing an unused code updates its automatically created zero balances atomically. A definition becomes used when it receives a non-zero opening/current amount, appears in monetary history, or is referenced by a configuration that can write future money.
+Changing an unused code updates its automatically created zero balances atomically. `first_used_at` becomes durable on the first non-zero opening amount, monetary/history reference, or future-writing configuration reference. Returning every balance to zero or removing a configuration never makes the definition unused again.
 
 ### Disable
 
@@ -95,7 +97,9 @@ Re-enabling reveals the same preserved balance rows in every non-deleted wallet.
 
 ### Delete
 
-Only a never-used currency may be deleted. Deletion removes its automatically created zero balance rows from non-deleted wallets and the catalog definition in one transaction. A used currency is preserved and may only be disabled.
+Only a never-used currency may be deleted. It cannot be the last enabled currency. Deletion switches affected non-deleted wallet defaults to the next enabled catalog currency, then removes every zero, no-history auto-created balance for the code and the catalog definition in one transaction.
+
+This cleanup also removes structurally empty auto-created rows from deleted tombstones if they were created before deletion. That is the sole exception to the rule against retroactive tombstone mutation: no balance with money, ledger history, configuration use, or snapshot relevance is removed. A used currency is preserved and may only be disabled.
 
 ## Wallet lifecycle
 
@@ -141,6 +145,11 @@ The already committed per-wallet migration remains immutable. A new forward migr
 - add owner-serialized RPCs for currency create/update/delete/enable/disable and wallet creation;
 - make global currency and wallet creation enforce full coverage before commit;
 - stop auto-created zero balances from marking a currency used;
+- clear legacy `detached_at` on every enabled-currency balance while preserving its UUID, prohibit future per-wallet detachment, and make ordinary visibility depend on global currency enablement;
+- let re-enable clear exceptional legacy detach state and fill missing rows without changing defaults;
+- normalize balance positions to authoritative catalog order;
+- use a transaction-scoped internal capability to populate Needs-attention wallets without exposing ordinary per-wallet balance creation;
+- revoke or guard direct catalog insertion/deletion and direct wallet creation so RLS DML cannot bypass coverage; metadata-only updates may remain direct only when they preserve all invariants;
 - retain deterministic owner/catalog/wallet/balance lock ordering;
 - reject direct DML that would leave incomplete enabled-currency coverage.
 
@@ -166,9 +175,10 @@ Settings and wallet sheets remain open on failure. They refresh from server stat
 Before feature work resumes:
 
 1. add a database-revision task that establishes global coverage and replaces per-wallet lifecycle RPCs;
-2. revise data-access and currency-settings tasks to use global currency RPCs and immediate refreshed state;
+2. revise data-access and currency-settings tasks to use global currency RPCs and immediate refreshed state, absorbing the open manager-state and RTL-title review fixes;
 3. replace the wallet UX task with Currency-view behavior and default-only wallet settings;
 4. update Move/Exchange and wallet-deletion tasks to resolve universally present enabled balances;
-5. retain later feature, export, compatibility-removal, and full-verification tasks with exact balance IDs.
+5. remove `addWalletBalance` and `detachWalletBalance` from application contracts;
+6. retain later feature, export, compatibility-removal, and full-verification tasks with exact balance IDs.
 
 No cloud migration is applied until the revised local migration chain, concurrency suites, application tests, and end-to-end verification pass.
