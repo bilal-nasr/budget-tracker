@@ -20,7 +20,7 @@ export function WalletsView() {
   const t = useTranslations("Wallets");
   const loans = useTranslations("Loans");
   const payments = useTranslations("PendingPayments");
-  const { wallets } = useAppData();
+  const { legacyWallets: wallets } = useAppData();
   const { openWallet } = useComposer();
   const active = wallets.filter((w) => !w.archived);
   const archived = wallets.filter((w) => w.archived);

@@ -49,7 +49,7 @@ export function DetailSheet({
   const tl = useTranslations("Loans");
   const breakdownLabels = useExpenseBreakdownLabels();
   const locale = useLocale();
-  const { categoryById, walletById } = useAppData();
+  const { categoryById, legacyWalletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const [conflictSnapshot, setConflictSnapshot] = useState<{ id: string; revision: number } | null>(null);
   const conflicted = Boolean(transaction && conflictSnapshot
@@ -62,8 +62,8 @@ export function DetailSheet({
   const transfer = transaction?.kind === "transfer";
   const loan = transaction?.kind === "loan";
   const category = transaction?.categoryId ? categoryById(transaction.categoryId) : undefined;
-  const wallet = transaction ? walletById(transaction.walletId) : undefined;
-  const toWallet = transaction?.toWalletId ? walletById(transaction.toWalletId) : undefined;
+  const wallet = transaction ? legacyWalletById(transaction.walletId) : undefined;
+  const toWallet = transaction?.toWalletId ? legacyWalletById(transaction.toWalletId) : undefined;
 
   const remove = () => {
     if (!transaction || conflicted || reloading || pending) return;
@@ -185,7 +185,7 @@ export function DetailSheet({
           {transaction.kind === "expense" ? <ExpenseBreakdown items={transaction.items}
             parentMinor={transaction.amountMinor} currency={transaction.currency} labels={breakdownLabels} /> : null}
           {transaction.settlement ? <CashSettlementSummary settlement={transaction.settlement} costMinor={transaction.amountMinor}
-            currency={transaction.currency} changeWalletNames={transaction.settlement.changes.map((change) => walletById(change.walletId)?.name)} /> : null}
+            currency={transaction.currency} changeWalletNames={transaction.settlement.changes.map((change) => legacyWalletById(change.walletId)?.name)} /> : null}
 
           {transaction.source === "salary" ? <p className="text-sm text-muted-foreground">{ti("salaryDeleteHelp")}</p> : null}
           {transaction.installmentId ? <div className="flex flex-col gap-1 text-sm text-muted-foreground">

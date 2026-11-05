@@ -26,9 +26,9 @@ export function TransactionRow({
   const ts = useTranslations("Cashier");
   const tl = useTranslations("Loans");
   const locale = useLocale();
-  const { categoryById, walletById } = useAppData();
-  const wallet = walletById(transaction.walletId);
-  const toWallet = transaction.toWalletId ? walletById(transaction.toWalletId) : undefined;
+  const { categoryById, legacyWalletById } = useAppData();
+  const wallet = legacyWalletById(transaction.walletId);
+  const toWallet = transaction.toWalletId ? legacyWalletById(transaction.toWalletId) : undefined;
   const category = transaction.categoryId ? categoryById(transaction.categoryId) : undefined;
   const transfer = transaction.kind === "transfer";
   const exchange = transfer && toWallet !== undefined && wallet !== undefined && toWallet.currency !== wallet.currency;
@@ -72,7 +72,7 @@ export function TransactionRow({
           </span>
           {transaction.settlement && transaction.settlement.changes.length > 0 ? <span className="block truncate text-[13px] text-muted-foreground">
             {ts("changeTo")} · {transaction.settlement.changes.map((change, index) => <span key={`${change.walletId}-${index}`}>
-              {index > 0 ? " / " : null}<bdi>{walletById(change.walletId)?.name ?? change.currency}</bdi>
+              {index > 0 ? " / " : null}<bdi>{legacyWalletById(change.walletId)?.name ?? change.currency}</bdi>
             </span>)}
           </span> : null}
         </span>

@@ -26,14 +26,14 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
   const tAdd = useTranslations("Add");
   const tb = useTranslations("Breakdown");
   const breakdownLabels = useExpenseBreakdownLabels();
-  const { wallets, categories, walletById } = useAppData();
+  const { legacyWallets: wallets, categories, legacyWalletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const usable = wallets.filter((w) => !w.archived || w.id === item?.walletId);
   const expenseCategories = categoryOptions(categories, "expense", item?.categoryId);
 
   const [name, setName] = useState(item?.name ?? "");
   const [walletId, setWalletId] = useState(item?.walletId ?? usable[0]?.id ?? "");
-  const wallet = walletById(walletId);
+  const wallet = legacyWalletById(walletId);
   const currency = wallet?.currency ?? "USD";
   const [amount, setAmount] = useState(item && wallet ? toInputText(item.amountMinor, wallet.currency) : "");
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? "");

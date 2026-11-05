@@ -28,7 +28,7 @@ export function WalletForm({
   const t = useTranslations("Wallets");
   const tCurrencies = useTranslations("Currencies");
   const app = useAppDataOptional();
-  const sources = (app?.wallets ?? []).filter((w) => !w.archived);
+  const sources = (app?.legacyWallets ?? []).filter((w) => !w.archived);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(wallet?.name ?? "");
   const [kind, setKind] = useState<WalletKind>(wallet?.kind ?? "cash");

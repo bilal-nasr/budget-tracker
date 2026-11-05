@@ -18,7 +18,7 @@ const status={receiptId:id,lastReceivedOn:"2026-11-01",receivedThisMonth:true};
 const view=(receiptId=id)=><NextIntlClientProvider locale="en" messages={messages}><SalaryCard status={{...status,receiptId}}/></NextIntlClientProvider>;
 const bank = {id:"bank",name:"Bank",currency:"USD",archived:false};
 beforeEach(()=>{vi.clearAllMocks();mocks.receive.mockResolvedValue({ok:false,error:"notConfigured"});
-  mocks.appData.mockReturnValue({salary:{amountMinor:180000,walletId:"bank"},timezone:"Asia/Beirut",walletById:()=>bank});
+  mocks.appData.mockReturnValue({salary:{amountMinor:180000,walletId:"bank"},timezone:"Asia/Beirut",legacyWalletById:()=>bank});
 });
 afterEach(cleanup);
 it("retains the original receipt request after an unknown result even when new server props arrive",async()=>{
@@ -52,7 +52,7 @@ it.each(["salary cleared","wallet archived","wallet removed"])("keeps the uncert
   await waitFor(()=>expect(screen.getByRole("button",{name:"Retry same salary"}).matches(":disabled")).toBe(false));
   const first=mocks.receive.mock.calls[0][0];
   mocks.appData.mockReturnValue({salary:change==="salary cleared"?null:{amountMinor:180000,walletId:"bank"},
-    timezone:"Asia/Beirut",walletById:()=>change==="wallet removed"?undefined:{...bank,archived:change==="wallet archived"}});
+    timezone:"Asia/Beirut",legacyWalletById:()=>change==="wallet removed"?undefined:{...bank,archived:change==="wallet archived"}});
   rendered.rerender(view("a2000000-0000-4000-8000-000000000001"));
   expect(screen.queryByRole("button",{name:"Set salary"})).toBeNull();
   expect(screen.queryByRole("button",{name:/^Edit$/})).toBeNull();
@@ -72,7 +72,7 @@ it("keeps salary setup locked when provider configuration disappears during a pe
   fireEvent.click(await screen.findByRole("button",{name:"Confirm salary"}));
   await waitFor(()=>expect(mocks.receive).toHaveBeenCalledOnce());
   const original=mocks.receive.mock.calls[0][0];
-  mocks.appData.mockReturnValue({salary:null,timezone:"Asia/Beirut",walletById:()=>undefined});
+  mocks.appData.mockReturnValue({salary:null,timezone:"Asia/Beirut",legacyWalletById:()=>undefined});
   rendered.rerender(view());
   expect(screen.queryByRole("button",{name:"Set salary"})).toBeNull();
   expect(screen.getByRole("button",{name:"Retry same salary"}).matches(":disabled")).toBe(true);

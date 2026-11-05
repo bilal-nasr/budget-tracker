@@ -24,7 +24,7 @@ type Attempt = { kind: "create"; input: LoanCreateInput } | { kind: "edit"; id: 
 export function LoanSheet({ item, onClose }: { item: Loan | null; onClose: () => void }) {
   const t = useTranslations("Loans");
   const router = useRouter();
-  const { wallets, categories, timezone } = useAppData();
+  const { legacyWallets: wallets, categories, timezone } = useAppData();
   const usable = wallets.filter((w) => !w.archived && (!item || w.currency === item.currency));
   const formId = useId();
   const [requestId] = useState(() => crypto.randomUUID());

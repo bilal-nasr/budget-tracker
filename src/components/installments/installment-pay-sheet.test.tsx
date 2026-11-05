@@ -30,7 +30,7 @@ const partial = withProgress(base, [{ transactionId: previousId, walletId, amoun
   createdAt: "2026-11-04T12:00:00Z", salaryCycleId: cycleId, revision: 1 }], cycleId);
 const bank = { id: walletId, name: "Bank", currency: "USD", archived: false };
 beforeEach(() => { vi.clearAllMocks(); mocks.pay.mockResolvedValue({ ok: false, error: "notConfigured" }); mocks.remove.mockResolvedValue({ ok: true, id: requestId, revision: 4 });
-  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",wallets:[bank]});
+  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",legacyWallets:[bank]});
 });
 afterEach(cleanup);
 const view = (intent: "normal" | "again" = "again") => <NextIntlClientProvider locale="en" messages={messages}>
@@ -79,7 +79,7 @@ it.each(["archived","removed","other currency"])("keeps the frozen payment retry
   fireEvent.click(screen.getByRole("button",{name:"Record payment"}));
   await waitFor(()=>expect(screen.getByRole("button",{name:"Retry same payment"})).toBeTruthy());
   const first=mocks.pay.mock.calls[0][0];
-  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",wallets:change==="removed"?[]:
+  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",legacyWallets:change==="removed"?[]:
     [{...bank,archived:change==="archived",currency:change==="other currency"?"LBP":"USD"}]});
   rendered.rerender(view("normal"));
   expect(screen.queryByText(messages.Installments.noWalletForCurrency)).toBeNull();

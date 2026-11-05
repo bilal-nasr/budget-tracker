@@ -8,7 +8,7 @@ import { demoLoans } from "@/lib/demo-data";
 vi.mock("server-only", () => ({}));
 const state = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), wallets: [] as { id: string; name: string; currency: string; archived: boolean }[], categories: [] as { id: string; kind: string; parentId: null; archivedAt: null; nameEn: string }[] }));
 vi.mock("@/features/loans/actions", () => ({ createLoan: state.create, updateLoan: state.update }));
-vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ wallets: state.wallets, categories: state.categories, timezone: "Asia/Beirut" }) }));
+vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ legacyWallets: state.wallets, categories: state.categories, timezone: "Asia/Beirut" }) }));
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ children, footer, onOpenChange }: { children: ReactNode; footer: ReactNode; onOpenChange: (open: boolean) => void }) => <section><button onClick={() => onOpenChange(false)}>Dismiss</button>{children}{footer}</section> }));
 vi.mock("@/components/categories/category-select", () => ({ CategorySelect: ({ label, value, onChange, categories }: { label: string; value: string; onChange: (value: string) => void; categories: { id: string; nameEn: string }[] }) => <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}><option value="" />{categories.map((c) => <option key={c.id} value={c.id}>{c.nameEn}</option>)}</select> }));

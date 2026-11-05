@@ -28,7 +28,7 @@ function Form({ state, onClose, onBusy }: { state: InstallmentPayState; onClose:
   const tb = useTranslations("Breakdown");
   const tc = useTranslations("Categories");
   const router = useRouter();
-  const { wallets, timezone } = useAppData();
+  const { legacyWallets: wallets, timezone } = useAppData();
   const { digits } = useDisplayPrefs();
   const [pending, startTransition] = useTransition();
   const inFlight = useRef(false);

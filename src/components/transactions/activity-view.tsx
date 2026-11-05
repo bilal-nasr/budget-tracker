@@ -43,7 +43,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
   const t = useTranslations("Activity");
   const router = useRouter();
   const pathname = usePathname();
-  const { wallets } = useAppData();
+  const { legacyWallets: wallets } = useAppData();
   const { openAdd } = useComposer();
   const [rows, setRows] = useState(initial.rows);
   const [next, setNext] = useState<Cursor | null>(initial.next);

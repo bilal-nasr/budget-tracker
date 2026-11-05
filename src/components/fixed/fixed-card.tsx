@@ -47,7 +47,7 @@ export function FixedCard({
   const breakdownLabels = useExpenseBreakdownLabels();
   const tc = useTranslations("Categories");
   const locale = useLocale();
-  const { walletById, categoryById, timezone, salary } = useAppData();
+  const { legacyWalletById, categoryById, timezone, salary } = useAppData();
   const { openFixed } = useComposer();
   const { digits } = useDisplayPrefs();
   const [pending, startTransition] = useTransition();
@@ -81,7 +81,7 @@ export function FixedCard({
   };
 
   // Currencies are never combined.
-  const summary = summarizeFixed(items, walletById, salary, installments);
+  const summary = summarizeFixed(items, legacyWalletById, salary, installments);
   const left = summary.left;
   const leftCurrencies = CURRENCIES.filter((c) => left[c] > 0);
   const currencies = CURRENCIES.filter((c) => summary.total[c] > 0);
@@ -118,7 +118,7 @@ export function FixedCard({
       {items.length > 0 ? (
         <ul className="-mx-1 flex flex-col">
           {items.map((item) => {
-            const wallet = walletById(item.walletId);
+            const wallet = legacyWalletById(item.walletId);
             const category = categoryById(item.categoryId);
             const paid = item.paidOn !== null;
             return (
@@ -216,7 +216,7 @@ export function FixedCard({
             <h3 id="h-fixed-wallets" className="text-sm font-medium">{t("perWallet")}</h3>
             <ul aria-labelledby="h-fixed-wallets" className="flex flex-col gap-1">
               {summary.byWallet.map((need) => {
-                const w = walletById(need.walletId);
+                const w = legacyWalletById(need.walletId);
                 return (
                   <li key={need.walletId} className="flex items-baseline justify-between gap-3 text-[15px]">
                     <span className="min-w-0 truncate"><bdi>{w?.name}</bdi></span>

@@ -13,7 +13,7 @@ const model = vi.hoisted(() => ({ wallets: [
 ] }));
 vi.mock("@/features/loans/actions", () => ({ recordLoanPayment: action, voidLoanPayment: vi.fn() }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ children, footer, onOpenChange }: { children: ReactNode; footer: ReactNode; onOpenChange: (open: boolean) => void }) => <section><button onClick={() => onOpenChange(false)}>Dismiss</button>{children}{footer}</section> }));
-vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ timezone: "Asia/Beirut", wallets: model.wallets }) }));
+vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ timezone: "Asia/Beirut", legacyWallets: model.wallets }) }));
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { LoanPaymentSheet } from "./loan-payment-sheet";
 const item: Loan = {

@@ -12,14 +12,14 @@ import { CURRENCY_DECIMALS, parseAmount, toInputText } from "@/lib/money";
 function Form({ onClose }: { onClose: () => void }) {
   const t = useTranslations("Salary");
   const tCurrencies = useTranslations("Currencies");
-  const { wallets, salary, walletById } = useAppData();
+  const { legacyWallets: wallets, salary, legacyWalletById } = useAppData();
   const [pending, startTransition] = useTransition();
   const usable = wallets.filter((w) => !w.archived);
   const [walletId, setWalletId] = useState(() => {
     if (salary && usable.some((w) => w.id === salary.walletId)) return salary.walletId;
     return usable[0]?.id ?? "";
   });
-  const wallet = walletById(walletId);
+  const wallet = legacyWalletById(walletId);
   const currency = wallet?.currency ?? "USD";
   const [amount, setAmount] = useState(
     salary && wallet?.id === salary.walletId ? toInputText(salary.amountMinor, wallet.currency) : "",

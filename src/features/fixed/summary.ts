@@ -27,7 +27,7 @@ export type FixedSummary = {
 /** Per-wallet needs, totals and salary left after fixed expenses. Currencies are never combined. */
 export function summarizeFixed(
   items: readonly FixedExpense[],
-  walletById: (id: string) => Wallet | undefined,
+  legacyWalletById: (id: string) => Wallet | undefined,
   salary: { amountMinor: number; walletId: string } | null,
   installments: readonly Installment[] = [],
 ): FixedSummary {
@@ -49,7 +49,7 @@ export function summarizeFixed(
   ].filter((line) => line.amountMinor > 0);
 
   for (const line of lines) {
-    const wallet = walletById(line.walletId);
+    const wallet = legacyWalletById(line.walletId);
     if (!wallet) continue;
     const unpaid = line.unpaid;
     total[wallet.currency] = sumMinor([total[wallet.currency], line.amountMinor]);
@@ -78,7 +78,7 @@ export function summarizeFixed(
       shortMinor: Math.max(0, sumMinor([n.unpaidMinor, -n.balance])),
     }));
 
-  const salaryWallet = salary ? walletById(salary.walletId) : undefined;
+  const salaryWallet = salary ? legacyWalletById(salary.walletId) : undefined;
   let salaryAfter: FixedSummary["salaryAfter"] = null;
   if (salary && salaryWallet) {
     salaryAfter = {

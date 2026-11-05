@@ -16,7 +16,7 @@ import { Link } from "@/i18n/navigation";
  */
 export function PendingReceiptHistory({ item, formatDate }: { item: PendingPayment; formatDate: (date: string) => string }) {
   const t = useTranslations("PendingPayments");
-  const { walletById } = useAppData();
+  const { legacyWalletById } = useAppData();
   const [receipts, setReceipts] = useState<PendingReceipt[] | null>(null);
   const [failed, setFailed] = useState(false);
   const loading = useRef(false);
@@ -29,7 +29,7 @@ export function PendingReceiptHistory({ item, formatDate }: { item: PendingPayme
   return <details className="border-t border-border pt-1" onToggle={(event) => { if (event.currentTarget.open) load(); }}>
     <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">{t("history")}{receipts ? ` (${receipts.length})` : null}</summary>
     {receipts ? <ul>{receipts.map((receipt) => <li key={receipt.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-border py-3 text-sm">
-      <span className="min-w-0"><time dateTime={receipt.occurredOn}>{formatDate(receipt.occurredOn)}</time>{walletById(receipt.walletId) ? <bdi className="block break-words text-muted-foreground">{walletById(receipt.walletId)?.name}</bdi> : null}</span>
+      <span className="min-w-0"><time dateTime={receipt.occurredOn}>{formatDate(receipt.occurredOn)}</time>{legacyWalletById(receipt.walletId) ? <bdi className="block break-words text-muted-foreground">{legacyWalletById(receipt.walletId)?.name}</bdi> : null}</span>
       <Amount minor={receipt.amountMinor} currency={item.currency} />
     </li>)}</ul> : failed ? <div role="alert" className="flex flex-wrap items-center gap-2 border-t border-border py-3 text-sm">
       {t("historyUnavailable")}<Button variant="outline" onClick={load}>{t("retry")}</Button>

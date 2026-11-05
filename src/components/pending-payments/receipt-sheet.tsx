@@ -20,7 +20,7 @@ export function ReceiptSheet({ item, onClose }: { item: PendingPayment; onClose:
   const t = useTranslations("PendingPayments");
   const locale = useLocale();
   const router = useRouter();
-  const { wallets, categories, timezone } = useAppData();
+  const { legacyWallets: wallets, categories, timezone } = useAppData();
   const usable = wallets.filter((wallet) => !wallet.archived && wallet.currency === item.currency);
   const income = categories.filter((category) => category.kind === "income" && category.archivedAt === null);
   const [requestId] = useState(() => crypto.randomUUID());

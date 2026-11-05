@@ -12,7 +12,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/features/loans/history-actions", () => ({ loadLoanHistory: state.load }));
 vi.mock("@/features/loans/actions", () => ({ cancelLoan: vi.fn(), restoreLoanPayment: vi.fn(), setLoanArchived: vi.fn(), voidLoanPayment: state.voidPayment, deleteLoan: state.deleteLoan, deleteLoanPayment: state.deletePayment }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ open, children, footer }: { open: boolean; children: ReactNode; footer?: ReactNode }) => open ? <section>{children}{footer}</section> : null }));
-vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ walletById: () => ({ name: "Synthetic wallet" }) }) }));
+vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ legacyWalletById: () => ({ name: "Synthetic wallet" }) }) }));
 import { LoanDetailSheet } from "./loan-detail-sheet";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });

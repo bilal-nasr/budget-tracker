@@ -59,7 +59,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
   const settlementLabels = useCashSettlementLabels();
   const tCurrencies = useTranslations("Currencies");
   const router = useRouter();
-  const { wallets, categories, timezone, walletById, usdLbpRate } = useAppData();
+  const { legacyWallets: wallets, categories, timezone, legacyWalletById, usdLbpRate } = useAppData();
   const [pending, startTransition] = useTransition();
   const initial = state.initial;
   const preset = state.mode === "add" ? state.preset : undefined;
@@ -80,8 +80,8 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
     return usable.find((w) => w.id === last)?.id ?? usable[0]?.id ?? "";
   });
   const [toWalletId, setToWalletId] = useState("");
-  const wallet = walletById(walletId);
-  const toWallet = walletById(toWalletId);
+  const wallet = legacyWalletById(walletId);
+  const toWallet = legacyWalletById(toWalletId);
   const currency: Currency = wallet?.currency ?? "USD";
   const [purchaseCurrency, setPurchaseCurrency] = useState<Currency>(initial?.currency ?? currency);
   const [cashDraft, setCashDraft] = useState(() => settlementDraftFromSnapshot(initial?.settlement ?? null, currency, walletId, state.mode === "add"));
@@ -153,7 +153,7 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
     setReceivedEdited(false);
   };
   const changeToWallet = (id: string) => {
-    if (walletById(id)?.currency !== toWallet?.currency) resetReceived();
+    if (legacyWalletById(id)?.currency !== toWallet?.currency) resetReceived();
     setToWalletId(id);
   };
   const editReceived = () => {
@@ -205,15 +205,15 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
   };
 
   const changeWallet = (id: string) => {
-    if (currencyLocked && !cashDraft.enabled && walletById(id)?.currency !== currency) { setError(tb("removeBeforeCurrencyChange")); return; }
+    if (currencyLocked && !cashDraft.enabled && legacyWalletById(id)?.currency !== currency) { setError(tb("removeBeforeCurrencyChange")); return; }
     setWalletId(id);
     setPickWallet(false);
     if (toWalletId === id) {
       setToWalletId("");
       resetReceived();
     }
-    if (walletById(id)?.currency !== currency) {
-      if (!cashDraft.enabled) { setTyped(""); setPurchaseCurrency(walletById(id)!.currency); }
+    if (legacyWalletById(id)?.currency !== currency) {
+      if (!cashDraft.enabled) { setTyped(""); setPurchaseCurrency(legacyWalletById(id)!.currency); }
       setCashDraft((previous) => ({ ...previous, tenderText: "" }));
       resetReceived();
     }
@@ -367,11 +367,11 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
         className="mt-2"
       /> : null}
 
-      {topUpId && mode !== "expense" && walletById(topUpId) ? (
+      {topUpId && mode !== "expense" && legacyWalletById(topUpId) ? (
         <p className="mt-2.5 rounded-lg bg-accent px-3.5 py-2.5 text-[13px] text-foreground">
           {mode === "move"
-            ? t("topUpMove", { wallet: walletById(topUpId)?.name ?? "" })
-            : t("topUpNew", { wallet: walletById(topUpId)?.name ?? "" })}
+            ? t("topUpMove", { wallet: legacyWalletById(topUpId)?.name ?? "" })
+            : t("topUpNew", { wallet: legacyWalletById(topUpId)?.name ?? "" })}
         </p>
       ) : null}
 

@@ -25,7 +25,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
   const tCurrencies = useTranslations("Currencies");
   const tc = useTranslations("Categories");
   const tAdd = useTranslations("Add");
-  const { wallets, categories, walletById } = useAppData();
+  const { legacyWallets: wallets, categories, legacyWalletById } = useAppData();
   const [pending, startTransition] = useTransition();
 
   // On edit the currency is locked, so only wallets in it are offered.
@@ -36,7 +36,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
 
   const [name, setName] = useState(item?.name ?? "");
   const [walletId, setWalletId] = useState(item?.walletId ?? usable[0]?.id ?? "");
-  const wallet = walletById(walletId);
+  const wallet = legacyWalletById(walletId);
   const currency: Currency = item?.currency ?? wallet?.currency ?? "USD";
   const asText = (minor: number | null | undefined) => (minor ? toInputText(minor, currency) : "");
   const [total, setTotal] = useState(asText(item?.totalMinor));

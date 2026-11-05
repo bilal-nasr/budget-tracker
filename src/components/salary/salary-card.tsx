@@ -39,7 +39,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
   const locale = useLocale();
   const router = useRouter();
   const tc = useTranslations("Categories");
-  const { salary, walletById, timezone } = useAppData();
+  const { salary, legacyWalletById, timezone } = useAppData();
   const { digits } = useDisplayPrefs();
   const { openSalary } = useComposer();
   const [pending, startTransition] = useTransition();
@@ -53,7 +53,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
     lastReceivedOn: todayIn(timezone),
     receivedThisMonth: true,
   }));
-  const wallet = salary ? walletById(salary.walletId) : undefined;
+  const wallet = salary ? legacyWalletById(salary.walletId) : undefined;
 
   const receive = () => {
     if (!draft || inFlight.current) return;

@@ -30,7 +30,7 @@ export function HomeView({ recent, commitments, budgetSummary }: {
   budgetSummary: React.ReactNode;
 }) {
   const t = useTranslations("Home");
-  const { wallets } = useAppData();
+  const { legacyWallets: wallets } = useAppData();
   const { openWallet } = useComposer();
   const active = wallets.filter((w) => !w.archived);
   const hasArchived = wallets.some((w) => w.archived);
@@ -84,7 +84,7 @@ export function HomeView({ recent, commitments, budgetSummary }: {
 
 function HomeWallets() {
   const t = useTranslations("Home");
-  const { wallets } = useAppData();
+  const { legacyWallets: wallets } = useAppData();
   const active = wallets.filter((w) => !w.archived);
 
   return (

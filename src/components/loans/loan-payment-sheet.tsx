@@ -19,7 +19,7 @@ import { CURRENCY_DECIMALS, parseAmount, toInputText } from "@/lib/money";
 export function LoanPaymentSheet({ item, onClose }: { item: Loan; onClose: () => void }) {
   const t = useTranslations("Loans");
   const router = useRouter();
-  const { wallets, timezone } = useAppData();
+  const { legacyWallets: wallets, timezone } = useAppData();
   const usable = wallets.filter((w) => !w.archived && w.currency === item.currency);
   const [requestId] = useState(() => crypto.randomUUID());
   const formId = useId();
