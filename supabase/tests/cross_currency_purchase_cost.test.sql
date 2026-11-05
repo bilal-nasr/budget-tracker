@@ -92,6 +92,15 @@ select is((select currency::text from public.transactions where id='cc200000-000
 select is((select cost_currency from public.transactions where id='cc200000-0000-4000-8000-000000000006'),null::public.currency,
   'matching payer and cost normalize the override to null');
 
+update item_revision set value=(select revision from public.transactions where id='cc200000-0000-4000-8000-000000000006');
+select lives_ok($$select * from public.save_transaction(
+  'cc200000-0000-4000-8000-000000000006',(select value from item_revision),
+  pg_temp.expense_input(340000,'cc100000-0000-4000-8000-000000000001','LBP','Payer differs from old currency'),null,
+  pg_temp.cashier())$$,'requested cost survives a payer change away from the old matching currency');
+select is((select currency::text from public.transactions where id='cc200000-0000-4000-8000-000000000006'),'USD','reverse payer edit derives USD');
+select is((select cost_currency::text from public.transactions where id='cc200000-0000-4000-8000-000000000006'),'LBP',
+  'reverse payer edit keeps the explicitly requested LBP cost');
+
 create temp table main_revision as select revision value from public.transactions where id='cc200000-0000-4000-8000-000000000001';
 grant all on main_revision to authenticated;
 select lives_ok($$select * from public.save_transaction(

@@ -7,10 +7,7 @@ begin
   select true,p.cost_currency into pending_found,requested_currency
   from cashier_private.pending_transaction_costs p
   where p.transaction_id=new.id and p.user_id=new.user_id;
-  if pending_found then
-    new.cost_currency:=case when requested_currency is null or requested_currency=new.currency
-      then null else requested_currency end;
-  end if;
+  if pending_found then new.cost_currency:=requested_currency; end if;
   return new;
 end;
 $$;
