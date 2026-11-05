@@ -59,7 +59,7 @@ it("freezes an unknown-outcome intent and retries with identical fields/request 
   await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
   expect((screen.getByLabelText("Amount") as HTMLInputElement).matches(":disabled")).toBe(true);
   const first = mocks.pay.mock.calls[0][0];
-  fireEvent.click(screen.getByRole("button", { name: /Retry same payment/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /Retry same payment/ }));
   await waitFor(() => expect(mocks.pay).toHaveBeenCalledTimes(2));
   expect(mocks.pay.mock.calls[1][0]).toEqual(first);
 });
