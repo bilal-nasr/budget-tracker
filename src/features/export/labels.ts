@@ -18,9 +18,11 @@ type ExportLabels = {
     "actual" | "variance" | "variancePercent" | "status" | "description" | "position" | "dueDay" |
     "dueDate" | "total" | "received" | "remaining" | "paidBefore" | "paid" | "monthlyPayment" | "direction" |
     "principal" | "feeRate" | "fee" | "totalDue" | "openedOn" | "client" | "project" | "revision" |
+    "borrowedOutstanding" | "lentOutstanding" | "installmentOutstanding" | "receivableOutstanding" |
     "metric" | "value" | "definition",
     string
   >;
+  enums: Record<string, string>;
   values: Record<
     "yes" | "no" | "under" | "over" | "on" | "unbudgeted" | "notAvailable" | "cashBasis" |
     "sourceDescription" | "currencyRule" | "limitation" | "exportedAt" | "cutoff" | "timezone" |
@@ -51,7 +53,15 @@ const en: ExportLabels = {
     received: "Received", remaining: "Remaining", paidBefore: "Paid before app", paid: "Paid", monthlyPayment: "Monthly payment",
     direction: "Direction", principal: "Principal", feeRate: "Fee rate", fee: "Fee", totalDue: "Total due",
     openedOn: "Opened on", client: "Client", project: "Project", revision: "Revision", metric: "Metric", value: "Value",
-    definition: "Definition",
+    definition: "Definition", borrowedOutstanding: "Borrowed loans outstanding", lentOutstanding: "Lent loans outstanding",
+    installmentOutstanding: "Installments outstanding", receivableOutstanding: "Receivables outstanding",
+  },
+  enums: {
+    income: "Income", expense: "Expense", transfer: "Transfer", loan: "Loan", "loan-in": "Loan cash in",
+    "loan-out": "Loan cash out", "transfer-in": "Transfer in", "transfer-out": "Transfer out",
+    "cash-change": "Cash change", salary: "Salary", fixed: "Fixed expense", installment: "Installment",
+    cash: "Cash", bank: "Bank", card: "Card", paidOff: "Paid off", unpaid: "Unpaid", partial: "Partially paid",
+    paid: "Paid", borrowed: "Borrowed", lent: "Lent", disbursement: "Disbursement", repayment: "Repayment",
   },
   values: {
     yes: "Yes", no: "No", under: "Under budget", over: "Over budget", on: "On budget", unbudgeted: "No budget",
@@ -87,7 +97,16 @@ const ar: ExportLabels = {
     received: "المحصّل", remaining: "المتبقي", paidBefore: "مدفوع قبل التطبيق", paid: "المدفوع", monthlyPayment: "الدفعة الشهرية",
     direction: "الاتجاه", principal: "أصل القرض", feeRate: "نسبة الرسوم", fee: "الرسوم", totalDue: "إجمالي المستحق",
     openedOn: "تاريخ البدء", client: "العميل", project: "المشروع", revision: "المراجعة", metric: "البند", value: "القيمة",
-    definition: "التعريف",
+    definition: "التعريف", borrowedOutstanding: "رصيد القروض المقترضة", lentOutstanding: "رصيد القروض المُقرضة",
+    installmentOutstanding: "رصيد الأقساط", receivableOutstanding: "رصيد المبالغ المستحقة",
+  },
+  enums: {
+    income: "دخل", expense: "مصروف", transfer: "تحويل", loan: "قرض", "loan-in": "نقد داخل من قرض",
+    "loan-out": "نقد خارج لقرض", "transfer-in": "تحويل داخل", "transfer-out": "تحويل خارج",
+    "cash-change": "باقي نقدي", salary: "راتب", fixed: "مصروف ثابت", installment: "قسط",
+    cash: "نقدية", bank: "مصرفية", card: "بطاقة", paidOff: "مسدّد بالكامل", unpaid: "غير مدفوع",
+    partial: "مدفوع جزئياً", paid: "مدفوع", borrowed: "مقترض", lent: "مُقرض", disbursement: "صرف",
+    repayment: "سداد",
   },
   values: {
     yes: "نعم", no: "لا", under: "أقل من الميزانية", over: "أعلى من الميزانية", on: "مطابق للميزانية", unbudgeted: "بلا ميزانية",

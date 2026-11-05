@@ -89,6 +89,40 @@ describe("accountant workbook structure", () => {
     expect(sheet.getCell(5, dateColumn).value).toBeInstanceOf(Date);
     expect(sheet.getCell(5, amountColumn).value).toBe(10);
   });
+
+  it("stores a cross-currency transfer destination currency and formats its amount independently", () => {
+    const source = fixture();
+    const data: ExportData = { ...source, wallets: [
+      { ...source.wallets[0], currency: "LBP", openingBalanceMinor: 0, balanceMinor: -100_000 },
+      { id: "usd-wallet", name: "USD wallet", kind: "bank", currency: "USD", openingBalanceMinor: 0,
+        balanceMinor: 1_234, position: 2, archived: false },
+    ], transactions: [{
+      ...source.transactions[0], kind: "transfer", categoryId: null, currency: "LBP", amountMinor: 100_000,
+      toWalletId: "usd-wallet", toAmountMinor: 1_234,
+    }] };
+    const labels = getExportLabels("en");
+    const sheet = buildExportWorkbook(data).getWorksheet("Transactions")!;
+    const destinationWalletId = columnAt(sheet, `${labels.columns.transferIn} ${labels.columns.walletId}`);
+    const destinationCurrency = columnAt(sheet, `${labels.columns.transferIn} ${labels.columns.currency}`);
+    const destinationAmount = columnAt(sheet, `${labels.columns.transferIn} ${labels.columns.amount}`);
+    expect(sheet.getCell(5, destinationWalletId).value).toBe("usd-wallet");
+    expect(sheet.getCell(5, destinationCurrency).value).toBe("USD");
+    expect(sheet.getCell(5, destinationAmount).value).toBe(12.34);
+    expect(sheet.getCell(5, destinationAmount).numFmt).toBe("#,##0.00;(#,##0.00);-");
+  });
+
+  it("localizes authored enum values in Arabic workpapers", () => {
+    const source = fixture("ar");
+    const data: ExportData = { ...source, transactions: source.transactions.map((row) => ({ ...row, source: "salary" })) };
+    const workbook = buildExportWorkbook(data);
+    const transactions = workbook.getWorksheet("المعاملات")!;
+    const wallets = workbook.getWorksheet("المحافظ")!;
+    const ledger = workbook.getWorksheet("دفتر المحافظ")!;
+    expect(transactions.getCell(5, columnAt(transactions, "النوع")).value).toBe("دخل");
+    expect(transactions.getCell(5, columnAt(transactions, "المصدر")).value).toBe("راتب");
+    expect(wallets.getCell(5, columnAt(wallets, "نوع المحفظة")).value).toBe("مصرفية");
+    expect(ledger.getCell(5, columnAt(ledger, "قيد المحفظة")).value).toBe("دخل");
+  });
 });
 
 it("uses a real ExcelJS workbook", () => {
@@ -127,8 +161,18 @@ describe("accountant workbook controls", () => {
     for (let row = 5; row <= 7; row++) {
       expect(formulaAt(sheet, row, 2).formula).toContain("ReconciliationTable");
       expect(formulaAt(sheet, row, 2).formula).toContain(`$A${row}`);
-      expect(formulaAt(sheet, row, 5).formula).toContain("MonthlyActivityTable");
+      expect(formulaAt(sheet, row, 11).formula).toContain("MonthlyActivityTable");
     }
+    const labels = getExportLabels("en");
+    expect(sheet.getRow(4).values).toEqual(expect.arrayContaining([
+      labels.columns.budget,
+      labels.columns.actual,
+      labels.columns.borrowedOutstanding,
+      labels.columns.lentOutstanding,
+      labels.columns.installmentOutstanding,
+      labels.columns.receivableOutstanding,
+    ]));
+    for (let column = 6; column <= 10; column++) expect(formulaAt(sheet, 5, column).formula).toContain("Table");
     expect(sheet.getCell("A8").value).toBeNull();
   });
 

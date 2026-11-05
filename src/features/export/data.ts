@@ -1,20 +1,17 @@
 import "server-only";
 
-import { getCategories } from "@/features/categories/queries";
 import type { Category } from "@/features/categories/schema";
-import { getFixedExpenses } from "@/features/fixed/queries";
 import type { FixedExpense } from "@/features/fixed/schema";
 import { getCycleSnapshot } from "@/features/installments/cycle-queries";
 import type { Installment } from "@/features/installments/schema";
 import { getLoans } from "@/features/loans/queries";
 import type { Loan } from "@/features/loans/schema";
-import { getPendingPayments, getPendingReceipts as getPendingReceiptsForPayment } from "@/features/pending-payments/queries";
+import { getPendingReceipts as getPendingReceiptsForPayment } from "@/features/pending-payments/queries";
 import type { PendingPayment } from "@/features/pending-payments/schema";
 import { getProfile } from "@/features/profile/queries";
 import type { Profile } from "@/features/profile/schema";
 import { todayIn } from "@/features/transactions/group";
 import { TRANSACTION_COLUMNS, toTransaction, type TransactionRow } from "@/features/transactions/queries";
-import { getWallets } from "@/features/wallets/queries";
 import type { Wallet } from "@/features/wallets/schema";
 import { demoBudgetData, demoFixed, demoInstallments, demoLoans, demoPage } from "@/lib/demo-data";
 import { isCurrency, readMinor } from "@/lib/money";
@@ -58,7 +55,7 @@ export type ExportSourceReaders = {
   getProfile: () => Promise<Profile>;
   getWallets: () => Promise<Wallet[]>;
   getCategories: () => Promise<Category[]>;
-  getTransactions: () => Promise<ExportTransaction[]>;
+  getTransactions: (exportedAt: Date) => Promise<ExportTransaction[]>;
   getBudgetRevisions: (cutoffDate: string) => Promise<BudgetRevision[]>;
   getFixedExpenses: (timezone: string) => Promise<FixedExpense[]>;
   getInstallments: (timezone: string) => Promise<Installment[]>;
@@ -72,7 +69,7 @@ export type ExportSourceReaders = {
 
 type ExportTransactionRow = TransactionRow & { pending_payment_id: string | null };
 
-async function getTransactionsForExport(): Promise<ExportTransaction[]> {
+async function getTransactionsForExport(exportedAt: Date): Promise<ExportTransaction[]> {
   if (!supabaseConfigured()) {
     const rows: ExportTransaction[] = [];
     let cursor: Parameters<typeof demoPage>[1] = null;
@@ -88,6 +85,7 @@ async function getTransactionsForExport(): Promise<ExportTransaction[]> {
     let query = db.from("transactions")
       .select(`${TRANSACTION_COLUMNS}, pending_payment_id`)
       .is("deleted_at", null)
+      .lte("created_at", exportedAt.toISOString())
       .order("id", { ascending: true })
       .limit(limit);
     if (afterId !== null) query = query.gt("id", afterId);
@@ -95,6 +93,127 @@ async function getTransactionsForExport(): Promise<ExportTransaction[]> {
     return { data: result.data as unknown as ExportTransactionRow[] | null, error: result.error };
   });
   return rows.map((row) => ({ ...toTransaction(row), pendingPaymentId: row.pending_payment_id }));
+}
+
+type WalletRow = {
+  id: string; name: string; kind: unknown; currency: unknown; opening_balance_minor: number | string;
+  position: number; archived_at: string | null;
+};
+type BalanceRow = { id: string; balance_minor: number | string };
+
+async function getWalletsForExport(): Promise<Wallet[]> {
+  if (!supabaseConfigured()) return (await import("@/lib/demo-data")).DEMO_WALLETS;
+  const db = await createClient();
+  const [walletRows, balanceRows] = await Promise.all([
+    readAllRowsById<WalletRow>(async (afterId, limit) => {
+      let query = db.from("wallets")
+        .select("id,name,kind,currency,opening_balance_minor,position,archived_at")
+        .order("id", { ascending: true }).limit(limit);
+      if (afterId !== null) query = query.gt("id", afterId);
+      const result = await query;
+      return { data: result.data as unknown as WalletRow[] | null, error: result.error };
+    }),
+    readAllRowsById<BalanceRow>(async (afterId, limit) => {
+      let query = db.from("wallet_balances").select("wallet_id,balance_minor")
+        .order("wallet_id", { ascending: true }).limit(limit);
+      if (afterId !== null) query = query.gt("wallet_id", afterId);
+      const result = await query;
+      const data = result.data?.map((row) => ({ id: row.wallet_id, balance_minor: row.balance_minor }));
+      return { data: data as BalanceRow[] | null, error: result.error };
+    }),
+  ]);
+  const balances = new Map(balanceRows.map((row) => [row.id, readMinor(row.balance_minor)]));
+  return walletRows.map((row) => {
+    if (!isCurrency(row.currency) || !["cash", "bank", "card"].includes(String(row.kind)) ||
+        !Number.isSafeInteger(row.position)) throw unavailable();
+    return {
+      id: row.id, name: row.name, kind: row.kind as Wallet["kind"], currency: row.currency,
+      openingBalanceMinor: readMinor(row.opening_balance_minor),
+      balanceMinor: balances.get(row.id) ?? readMinor(row.opening_balance_minor),
+      position: row.position, archived: row.archived_at !== null,
+    };
+  }).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+}
+
+type CategoryRow = {
+  id: string; kind: unknown; name_en: string | null; name_ar: string | null; tile: number; color: unknown;
+  position: number; parent_id: string | null; archived_at: string | null;
+};
+
+async function getCategoriesForExport(): Promise<Category[]> {
+  if (!supabaseConfigured()) {
+    const { DEMO_CATEGORIES } = await import("@/lib/demo-data");
+    return DEMO_CATEGORIES.map((row) => ({ ...row, parentId: row.parentId ?? null, archivedAt: row.archivedAt ?? null }));
+  }
+  const db = await createClient();
+  const rows = await readAllRowsById<CategoryRow>(async (afterId, limit) => {
+    let query = db.from("categories").select("id,kind,name_en,name_ar,tile,color,position,parent_id,archived_at")
+      .order("id", { ascending: true }).limit(limit);
+    if (afterId !== null) query = query.gt("id", afterId);
+    const result = await query;
+    return { data: result.data as unknown as CategoryRow[] | null, error: result.error };
+  });
+  return rows.map((row) => {
+    if (!(["expense", "income"] as unknown[]).includes(row.kind) || !["teal", "oxblood", "ochre"].includes(String(row.color)) ||
+        !Number.isSafeInteger(row.tile) || row.tile < 1 || row.tile > 8 || !Number.isSafeInteger(row.position)) throw unavailable();
+    return {
+      id: row.id, kind: row.kind as Category["kind"], nameEn: row.name_en, nameAr: row.name_ar,
+      tile: row.tile as Category["tile"], color: row.color as Category["color"], position: row.position,
+      parentId: row.parent_id, archivedAt: row.archived_at,
+    };
+  }).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+}
+
+type FixedRow = {
+  id: string; name: string; amount_minor: number | string; wallet_id: string; category_id: string;
+  due_day: number | null; items: FixedExpense["items"] | null;
+};
+
+async function getFixedExpensesForExport(): Promise<FixedExpense[]> {
+  if (!supabaseConfigured()) return demoFixed();
+  const db = await createClient();
+  const rows = await readAllRowsById<FixedRow>(async (afterId, limit) => {
+    let query = db.from("fixed_expenses").select("id,name,amount_minor,wallet_id,category_id,due_day,items")
+      .order("id", { ascending: true }).limit(limit);
+    if (afterId !== null) query = query.gt("id", afterId);
+    const result = await query;
+    return { data: result.data as unknown as FixedRow[] | null, error: result.error };
+  });
+  return rows.map((row) => ({
+    id: row.id, name: row.name, amountMinor: readMinor(row.amount_minor), walletId: row.wallet_id,
+    categoryId: row.category_id, dueDay: row.due_day, paidOn: null, items: row.items ?? [],
+  }));
+}
+
+type PendingPaymentRow = {
+  id: string; client: string; project: string; currency: unknown; total_minor: number | string;
+  received_minor: number | string; remaining_minor: number | string; due_on: string | null;
+  revision: number; has_receipt_history: boolean;
+};
+
+async function getPendingPaymentsForExport(): Promise<PendingPayment[]> {
+  if (!supabaseConfigured()) {
+    const { getPendingPayments } = await import("@/features/pending-payments/queries");
+    return getPendingPayments();
+  }
+  const db = await createClient();
+  const rows = await readAllRowsById<PendingPaymentRow>(async (afterId, limit) => {
+    let query = db.from("pending_payment_progress")
+      .select("id,client,project,currency,total_minor,received_minor,remaining_minor,due_on,revision,has_receipt_history")
+      .is("deleted_at", null).order("id", { ascending: true }).limit(limit);
+    if (afterId !== null) query = query.gt("id", afterId);
+    const result = await query;
+    return { data: result.data as unknown as PendingPaymentRow[] | null, error: result.error };
+  });
+  return rows.map((row) => {
+    if (!isCurrency(row.currency) || !Number.isSafeInteger(row.revision)) throw unavailable();
+    return {
+      id: row.id, client: row.client, project: row.project, currency: row.currency,
+      totalMinor: readMinor(row.total_minor), receivedMinor: readMinor(row.received_minor),
+      remainingMinor: readMinor(row.remaining_minor), dueOn: row.due_on, revision: row.revision,
+      hasReceiptHistory: row.has_receipt_history,
+    };
+  });
 }
 
 type BudgetRow = {
@@ -169,14 +288,14 @@ async function getPendingReceiptsForExport(
 
 const defaultReaders: ExportSourceReaders = {
   getProfile,
-  getWallets,
-  getCategories,
+  getWallets: getWalletsForExport,
+  getCategories: getCategoriesForExport,
   getTransactions: getTransactionsForExport,
   getBudgetRevisions: getBudgetRevisionsForExport,
-  getFixedExpenses: async (timezone) => supabaseConfigured() ? getFixedExpenses(timezone) : demoFixed(),
+  getFixedExpenses: getFixedExpensesForExport,
   getInstallments: async (timezone) => supabaseConfigured() ? (await getCycleSnapshot(timezone)).installments : demoInstallments(timezone),
   getLoans: async () => supabaseConfigured() ? getLoans() : demoLoans(),
-  getPendingPayments,
+  getPendingPayments: getPendingPaymentsForExport,
   getPendingReceipts: getPendingReceiptsForExport,
 };
 
@@ -192,7 +311,7 @@ export async function collectExportData(
     const [wallets, categories, transactions, budgetRevisions, fixedExpenses, installments, loans, pendingPayments] = await Promise.all([
       readers.getWallets(),
       readers.getCategories(),
-      readers.getTransactions(),
+      readers.getTransactions(exportedAt),
       readers.getBudgetRevisions(cutoffDate),
       readers.getFixedExpenses(profile.timezone),
       readers.getInstallments(profile.timezone),
@@ -210,7 +329,13 @@ export async function collectExportData(
       categories,
       transactions,
       budgetRevisions,
-      fixedExpenses,
+      fixedExpenses: fixedExpenses.map((fixed) => {
+        const paidOn = transactions.filter((transaction) => transaction.source === "fixed" &&
+          transaction.fixedExpenseId === fixed.id && transaction.occurredOn.slice(0, 7) === cutoffDate.slice(0, 7))
+          .reduce<string | null>((latest, transaction) => latest === null || transaction.occurredOn > latest
+            ? transaction.occurredOn : latest, null);
+        return { ...fixed, paidOn: paidOn ?? fixed.paidOn };
+      }),
       installments,
       loans: loans.filter((loan) => loan.deletedAt === null).map((loan) => ({
         ...loan,
@@ -224,12 +349,56 @@ export async function collectExportData(
   }
 }
 
+function canonicalSnapshot(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) {
+    return value.map(canonicalSnapshot).sort((left, right) =>
+      JSON.stringify(left).localeCompare(JSON.stringify(right)),
+    );
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, canonicalSnapshot(entry)]));
+  }
+  return value;
+}
+
+function snapshotToken(data: ExportData): string {
+  return JSON.stringify(canonicalSnapshot(data));
+}
+
+/**
+ * Supabase's HTTP API cannot hold one SQL transaction across several readers.
+ * Require two consecutive complete snapshots to match, retrying once; changing
+ * data is safer as a failed export than as internally inconsistent accounts.
+ */
+export async function collectConsistentExportData(
+  locale: ExportLocale,
+  exportedAt: Date,
+  readers: ExportSourceReaders,
+): Promise<ExportData> {
+  let previous = await collectExportData(locale, exportedAt, readers);
+  let previousToken = snapshotToken(previous);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const current = await collectExportData(locale, exportedAt, readers);
+    const currentToken = snapshotToken(current);
+    if (currentToken === previousToken) return current;
+    previous = current;
+    previousToken = currentToken;
+  }
+  throw unavailable();
+}
+
 export async function getExportData(
   locale: ExportLocale,
   exportedAt = new Date(),
 ): Promise<ExportData> {
-  const data = await collectExportData(locale, exportedAt, defaultReaders);
-  if (supabaseConfigured()) return data;
+  const configured = supabaseConfigured();
+  const data = configured
+    ? await collectConsistentExportData(locale, exportedAt, defaultReaders)
+    : await collectExportData(locale, exportedAt, defaultReaders);
+  if (configured) return data;
   // Demo wallet figures are illustrative UI snapshots. The export uses the
   // complete synthetic ledger, so derive its closing balances from the same
   // rows to keep the accountant reconciliation meaningful.

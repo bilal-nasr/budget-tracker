@@ -20,8 +20,12 @@ export function ExportButton() {
     setStatus("loading");
     let objectUrl: string | null = null;
     try {
-      const response = await fetch(`/${locale}/settings/export`, { method: "GET" });
+      const response = await fetch(`/${locale}/settings/export`, { method: "GET", redirect: "error" });
       if (!response.ok) throw new Error("export_failed");
+      const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+      if (response.redirected || contentType !== "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+        throw new Error("export_failed");
+      }
       objectUrl = URL.createObjectURL(await response.blob());
       const anchor = document.createElement("a");
       anchor.href = objectUrl;

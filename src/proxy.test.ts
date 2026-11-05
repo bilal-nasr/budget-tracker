@@ -112,6 +112,14 @@ describe("session and locale response composition", () => {
     expect((await proxy(new NextRequest("https://budget.example/en/reset-password"))).headers.get("location")).toBe("https://budget.example/en/sign-in");
   });
 
+  it("lets a signed-out export request reach the route's no-store 401 response", async () => {
+    auth.email = null;
+    const response = await proxy(new NextRequest("https://budget.example/en/settings/export"));
+    expect(response.headers.has("location")).toBe(false);
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expectCookies(response);
+  });
+
   it("keeps demo mode without calling Supabase", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     const response = await proxy(new NextRequest("https://budget.example/en/wallets"));

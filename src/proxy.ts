@@ -7,6 +7,9 @@ const intl = createIntlMiddleware(routing);
 
 // Pages a signed-out visitor may open. A signed-in one is sent into the app instead.
 const PUBLIC = /^\/(en|ar)\/(sign-in|sign-up|check-email|forgot-password)\/?$/;
+// Export requests must reach their route so an expired session receives a
+// machine-readable 401 instead of a followed sign-in redirect and HTML file.
+const AUTHENTICATED_API = /^\/(en|ar)\/settings\/export\/?$/;
 
 export async function proxy(request: NextRequest) {
   // Without Supabase configured (fresh checkout), skip auth so the shell loads.
@@ -23,7 +26,7 @@ export async function proxy(request: NextRequest) {
   if (response.headers.get("location")) return finish(response);
   const { pathname } = request.nextUrl;
 
-  if (!email && !PUBLIC.test(pathname)) {
+  if (!email && !PUBLIC.test(pathname) && !AUTHENTICATED_API.test(pathname)) {
     const locale = pathname.split("/")[1];
     const target = routing.locales.includes(locale as never)
       ? locale

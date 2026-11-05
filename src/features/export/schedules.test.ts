@@ -169,6 +169,24 @@ describe("accounting schedules", () => {
     expect(buildBudgetActuals(budgetData()).every((row) => row.categoryId === "c-parent" && row.categoryName === "Food")).toBe(true);
   });
 
+  it("counts realized outbound loan fees as budget expenses without counting principal", () => {
+    const source = budgetData();
+    const data: ExportData = {
+      ...source,
+      cutoffDate: "2026-01-31",
+      transactions: [transaction({
+        id: "loan-fee", kind: "loan", amountMinor: 10_150, currency: "USD", walletId: "w-usd",
+        categoryId: "c-child", occurredOn: "2026-01-15", loanFlow: "out", loanEvent: "repayment",
+        loanPrincipalMinor: 10_000, loanFeeMinor: 150,
+      })],
+      budgetRevisions: [{ id: "fee-budget", categoryId: "c-parent", currency: "USD", startsMonth: "2026-01-01", limitMinor: 1_000 }],
+    };
+    expect(buildBudgetActuals(data)).toMatchObject([
+      { month: "2026-01", actualMinor: 150, varianceMinor: 850, status: "under" },
+    ]);
+    expect(buildMonthlyActivity(data)[0]).toMatchObject({ operatingExpenseMinor: 150, loanOutMinor: 10_150 });
+  });
+
   it("reports unavailable variance percent for a missing or zero budget", () => {
     expect(buildBudgetActuals(budgetData()).find((row) => row.month === "2026-03"))
       .toMatchObject({ limitMinor: null, varianceMinor: null, variancePercent: null, status: "unbudgeted" });

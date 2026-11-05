@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({ configured: false }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/proxy", () => ({ supabaseConfigured: () => state.configured }));
 
-import { collectExportData, getExportData, readAllRowsById } from "./data";
+import { collectConsistentExportData, collectExportData, getExportData, readAllRowsById } from "./data";
 
 describe("readAllRowsById", () => {
   it("reads every row across more than one thousand records using a stable id cursor", async () => {
@@ -116,5 +116,30 @@ describe("export snapshot", () => {
     await expect(collectExportData("en", new Date("2026-11-05T08:00:00Z"), readers({
       getWallets: async () => { throw new Error("sensitive database detail"); },
     }))).rejects.toThrow("export_data_unavailable");
+  });
+
+  it("retries independently changing reads and returns only two matching complete snapshots", async () => {
+    let walletReads = 0;
+    const changing = readers({
+      getWallets: async () => {
+        walletReads++;
+        const balanceMinor = walletReads === 1 ? 500 : 1_000;
+        return [{ id: "wallet", name: "Wallet", kind: "cash", currency: "USD", openingBalanceMinor: 0,
+          balanceMinor, position: 1, archived: false }];
+      },
+    });
+    const data = await collectConsistentExportData("en", new Date("2026-11-05T08:00:00Z"), changing);
+    expect(walletReads).toBe(3);
+    expect(data.wallets[0].balanceMinor).toBe(1_000);
+  });
+
+  it("fails closed when no two complete snapshots match", async () => {
+    let walletReads = 0;
+    const changing = readers({
+      getWallets: async () => [{ id: "wallet", name: "Wallet", kind: "cash", currency: "USD", openingBalanceMinor: 0,
+        balanceMinor: ++walletReads, position: 1, archived: false }],
+    });
+    await expect(collectConsistentExportData("en", new Date("2026-11-05T08:00:00Z"), changing))
+      .rejects.toThrow("export_data_unavailable");
   });
 });

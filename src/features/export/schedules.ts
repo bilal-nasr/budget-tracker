@@ -138,7 +138,12 @@ export function buildMonthlyActivity(data: ExportData): MonthlyActivityRow[] {
     if (transaction.kind === "income") row.operatingIncomeMinor = addSafe(row.operatingIncomeMinor, transaction.amountMinor);
     else if (transaction.kind === "expense") row.operatingExpenseMinor = addSafe(row.operatingExpenseMinor, transaction.amountMinor);
     else if (transaction.kind === "loan" && transaction.loanFlow === "in") row.loanInMinor = addSafe(row.loanInMinor, transaction.amountMinor);
-    else if (transaction.kind === "loan" && transaction.loanFlow === "out") row.loanOutMinor = addSafe(row.loanOutMinor, transaction.amountMinor);
+    else if (transaction.kind === "loan" && transaction.loanFlow === "out") {
+      row.loanOutMinor = addSafe(row.loanOutMinor, transaction.amountMinor);
+      if (transaction.loanFeeMinor) {
+        row.operatingExpenseMinor = addSafe(row.operatingExpenseMinor, transaction.loanFeeMinor);
+      }
+    }
     else if (transaction.kind === "transfer") {
       row.transferOutMinor = addSafe(row.transferOutMinor, transaction.amountMinor);
       if (!transaction.toWalletId || transaction.toAmountMinor === null) throw new Error("export_data_unavailable");
@@ -178,7 +183,12 @@ export function buildBudgetActuals(data: ExportData): BudgetActualRow[] {
   const revisions = new Map<string, typeof data.budgetRevisions>();
 
   for (const transaction of data.transactions) {
-    if (transaction.kind !== "expense" || !transaction.categoryId) continue;
+    const actualMinor = transaction.kind === "expense"
+      ? transaction.amountMinor
+      : transaction.kind === "loan" && transaction.loanFlow === "out"
+        ? transaction.loanFeeMinor
+        : null;
+    if (!actualMinor || !transaction.categoryId) continue;
     const category = categories.get(transaction.categoryId);
     if (!category) throw new Error("export_data_unavailable");
     const categoryId = category.parentId ?? category.id;
@@ -188,7 +198,7 @@ export function buildBudgetActuals(data: ExportData): BudgetActualRow[] {
     const key = `${month}|${combination}`;
     combinations.add(combination);
     firstMonth.set(combination, firstMonth.has(combination) && firstMonth.get(combination)! < month ? firstMonth.get(combination)! : month);
-    actuals.set(key, addSafe(actuals.get(key) ?? 0, transaction.amountMinor));
+    actuals.set(key, addSafe(actuals.get(key) ?? 0, actualMinor));
   }
 
   for (const revision of data.budgetRevisions) {

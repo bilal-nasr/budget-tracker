@@ -38,14 +38,17 @@ afterEach(() => {
 it("downloads the workbook using the active locale and server filename", async () => {
   fetchMock.mockResolvedValue(new Response("xlsx", {
     status: 200,
-    headers: { "Content-Disposition": 'attachment; filename="budget-export-2026-11-05.xlsx"' },
+    headers: {
+      "Content-Disposition": 'attachment; filename="budget-export-2026-11-05.xlsx"',
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    },
   }));
   view("ar");
   fireEvent.click(screen.getByRole("button", { name: ar.Settings.exportButton }));
   await waitFor(() => expect(clickedDownloads).toEqual([
     { href: "blob:accountant-export", download: "budget-export-2026-11-05.xlsx" },
   ]));
-  expect(fetchMock).toHaveBeenCalledWith("/ar/settings/export", { method: "GET" });
+  expect(fetchMock).toHaveBeenCalledWith("/ar/settings/export", { method: "GET", redirect: "error" });
 });
 
 it("disables the button and announces progress while the export is generated", async () => {
@@ -63,8 +66,22 @@ it("shows a localized retry message when the export response fails", async () =>
   expect((await screen.findByRole("alert")).textContent).toContain(ar.Settings.exportFailed);
 });
 
+it("rejects a successful HTML response instead of downloading it as Excel", async () => {
+  fetchMock.mockResolvedValue(new Response("<html>sign in</html>", {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  }));
+  view("ar");
+  fireEvent.click(screen.getByRole("button", { name: ar.Settings.exportButton }));
+  expect((await screen.findByRole("alert")).textContent).toContain(ar.Settings.exportFailed);
+  expect(clickedDownloads).toHaveLength(0);
+});
+
 it("revokes the temporary object URL after starting the download", async () => {
-  fetchMock.mockResolvedValue(new Response("xlsx", { status: 200 }));
+  fetchMock.mockResolvedValue(new Response("xlsx", {
+    status: 200,
+    headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+  }));
   view();
   fireEvent.click(screen.getByRole("button", { name: en.Settings.exportButton }));
   await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:accountant-export"));

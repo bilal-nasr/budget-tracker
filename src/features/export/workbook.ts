@@ -62,6 +62,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   const categoryLabel = (id: string | null) => id ? (categories.get(id) ? categoryName(categories.get(id)!, data.locale) : id) : "";
   const yesNo = (value: boolean) => value ? labels.values.yes : labels.values.no;
   const budgetStatus = (value: "under" | "over" | "on" | "unbudgeted") => labels.values[value];
+  const enumLabel = (value: string | null) => value === null ? "" : labels.enums[value] ?? value;
 
   const cover = title("cover");
   cover.getCell("A2").value = labels.values.workbookTitle;
@@ -76,14 +77,27 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
 
   const summary = title("summary");
   summary.getRow(4).values = [labels.columns.currency, labels.columns.appClosing, labels.columns.operatingIncome,
-    labels.columns.operatingExpense, labels.columns.netActivity];
+    labels.columns.operatingExpense, labels.columns.budget, labels.columns.actual, labels.columns.borrowedOutstanding,
+    labels.columns.lentOutstanding, labels.columns.installmentOutstanding, labels.columns.receivableOutstanding,
+    labels.columns.netActivity];
   (["USD", "LBP", "SYP"] as const).forEach((currency, index) => {
     const reconciliations = schedules.reconciliations.filter((row) => row.currency === currency);
     const activity = schedules.monthlyActivity.filter((row) => row.currency === currency);
+    const budgets = schedules.budgetActuals.filter((row) => row.currency === currency);
     summary.getRow(5 + index).values = [currency,
       reconciliations.reduce((sum, row) => sum + money(row.exportedClosingMinor, currency)!, 0),
       activity.reduce((sum, row) => sum + money(row.operatingIncomeMinor, currency)!, 0),
       activity.reduce((sum, row) => sum + money(row.operatingExpenseMinor, currency)!, 0),
+      budgets.reduce((sum, row) => sum + (money(row.limitMinor, currency) ?? 0), 0),
+      budgets.reduce((sum, row) => sum + money(row.actualMinor, currency)!, 0),
+      data.loans.filter((row) => row.currency === currency && row.direction === "borrowed")
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0),
+      data.loans.filter((row) => row.currency === currency && row.direction === "lent")
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0),
+      data.installments.filter((row) => row.currency === currency)
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0),
+      data.pendingPayments.filter((row) => row.currency === currency)
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0),
       activity.reduce((sum, row) => sum + money(row.netWalletActivityMinor, currency)!, 0)];
   });
 
@@ -118,9 +132,9 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "note", label: labels.columns.note }, { key: "source", label: labels.columns.source },
     { key: "fixed", label: labels.columns.fixedExpenseId }, { key: "installment", label: labels.columns.installmentId },
     { key: "loan", label: labels.columns.loanId }, { key: "receivable", label: labels.columns.receivableId },
-  ], schedules.walletLedger.map((row) => [dateValue(row.occurredOn), row.transactionId, row.leg, row.walletName, row.walletId,
+  ], schedules.walletLedger.map((row) => [dateValue(row.occurredOn), row.transactionId, enumLabel(row.leg), row.walletName, row.walletId,
     row.currency, money(row.inflowMinor, row.currency), money(row.outflowMinor, row.currency), row.categoryName, row.categoryId,
-    row.note, row.source, row.fixedExpenseId, row.installmentId, row.loanId, row.pendingPaymentId]));
+    row.note, enumLabel(row.source), row.fixedExpenseId, row.installmentId, row.loanId, row.pendingPaymentId]));
 
   table("budgetActual", "BudgetActualTable", [
     { key: "month", label: labels.columns.month }, { key: "category", label: labels.columns.categoryName },
@@ -140,12 +154,16 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "amount", label: labels.columns.amount }, { key: "note", label: labels.columns.note },
     { key: "source", label: labels.columns.source }, { key: "revision", label: labels.columns.revision },
     { key: "toWallet", label: `${labels.columns.transferIn} ${labels.columns.walletName}` },
+    { key: "toWalletId", label: `${labels.columns.transferIn} ${labels.columns.walletId}` },
+    { key: "toCurrency", label: `${labels.columns.transferIn} ${labels.columns.currency}` },
     { key: "toAmount", label: `${labels.columns.transferIn} ${labels.columns.amount}` },
     { key: "fixed", label: labels.columns.fixedExpenseId }, { key: "installment", label: labels.columns.installmentId },
     { key: "loan", label: labels.columns.loanId }, { key: "receivable", label: labels.columns.receivableId },
-  ], data.transactions.map((row) => [dateValue(row.occurredOn), row.id, row.kind, walletName(row.walletId), row.walletId,
-    categoryLabel(row.categoryId), row.categoryId, row.currency, money(row.amountMinor, row.currency), row.note, row.source,
-    row.revision, row.toWalletId ? walletName(row.toWalletId) : null, row.toAmountMinor === null ? null : money(row.toAmountMinor, wallets.get(row.toWalletId!)?.currency ?? row.currency),
+  ], data.transactions.map((row) => [dateValue(row.occurredOn), row.id, enumLabel(row.kind), walletName(row.walletId), row.walletId,
+    categoryLabel(row.categoryId), row.categoryId, row.currency, money(row.amountMinor, row.currency), row.note, enumLabel(row.source),
+    row.revision, row.toWalletId ? walletName(row.toWalletId) : null, row.toWalletId,
+    row.toWalletId ? wallets.get(row.toWalletId)?.currency ?? null : null,
+    row.toAmountMinor === null ? null : money(row.toAmountMinor, wallets.get(row.toWalletId!)?.currency ?? row.currency),
     row.fixedExpenseId, row.installmentId, row.loanId, row.pendingPaymentId ?? null]));
 
   table("expenseItems", "ExpenseItemsTable", [
@@ -160,14 +178,14 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "type", label: labels.columns.walletKind }, { key: "currency", label: labels.columns.currency },
     { key: "opening", label: labels.columns.openingBalance }, { key: "closing", label: labels.columns.appClosing },
     { key: "archived", label: labels.columns.archived }, { key: "position", label: labels.columns.position },
-  ], data.wallets.map((row) => [row.name, row.id, row.kind, row.currency, money(row.openingBalanceMinor, row.currency),
+  ], data.wallets.map((row) => [row.name, row.id, enumLabel(row.kind), row.currency, money(row.openingBalanceMinor, row.currency),
     money(row.balanceMinor, row.currency), yesNo(row.archived), row.position]));
 
   table("categories", "CategoriesTable", [
     { key: "name", label: labels.columns.categoryName }, { key: "id", label: labels.columns.categoryId },
     { key: "kind", label: labels.columns.categoryKind }, { key: "parent", label: labels.columns.parentCategory },
     { key: "archived", label: labels.columns.archived }, { key: "position", label: labels.columns.position },
-  ], data.categories.map((row) => [categoryName(row, data.locale), row.id, row.kind, categoryLabel(row.parentId),
+  ], data.categories.map((row) => [categoryName(row, data.locale), row.id, enumLabel(row.kind), categoryLabel(row.parentId),
     yesNo(row.archivedAt !== null), row.position]));
 
   const salary = data.profile.salary;
@@ -198,7 +216,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "due", label: labels.columns.dueDay }, { key: "status", label: labels.columns.status },
   ], data.installments.map((row) => [row.name, row.id, walletName(row.walletId), categoryLabel(row.categoryId), row.currency,
     money(row.totalMinor, row.currency), money(row.paidBeforeMinor, row.currency), money(row.paidMinor, row.currency),
-    money(row.remainingMinor, row.currency), money(row.monthlyMinor, row.currency), row.dueDay, row.cycleStatus]));
+    money(row.remainingMinor, row.currency), money(row.monthlyMinor, row.currency), row.dueDay, enumLabel(row.cycleStatus)]));
 
   table("installmentPayments", "InstallmentPaymentsTable", [
     { key: "date", label: labels.columns.date }, { key: "transaction", label: labels.columns.transactionId },
@@ -215,7 +233,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "fee", label: labels.columns.fee }, { key: "total", label: labels.columns.totalDue },
     { key: "paid", label: labels.columns.paid }, { key: "remaining", label: labels.columns.remaining },
     { key: "archived", label: labels.columns.archived },
-  ], data.loans.map((row) => [row.name, row.id, row.direction, walletName(row.walletId), row.currency, dateValue(row.openedOn),
+  ], data.loans.map((row) => [row.name, row.id, enumLabel(row.direction), walletName(row.walletId), row.currency, dateValue(row.openedOn),
     money(row.principalMinor, row.currency), row.feeBps / 10_000, money(row.feeMinor, row.currency), money(row.totalDueMinor, row.currency),
     money(row.principalPaidMinor + row.feePaidMinor, row.currency), money(row.remainingMinor, row.currency), yesNo(row.archivedAt !== null)]));
 
@@ -226,7 +244,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "amount", label: labels.columns.amount }, { key: "principal", label: labels.columns.principal },
     { key: "fee", label: labels.columns.fee },
   ], data.transactions.filter((row) => row.kind === "loan").map((row) => [dateValue(row.occurredOn), row.id, row.loanId,
-    row.loanEvent, walletName(row.walletId), row.currency, money(row.amountMinor, row.currency),
+    enumLabel(row.loanEvent), walletName(row.walletId), row.currency, money(row.amountMinor, row.currency),
     money(row.loanPrincipalMinor, row.currency), money(row.loanFeeMinor, row.currency)]));
 
   table("receivables", "ReceivablesTable", [
@@ -323,6 +341,30 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
       `SUMIFS(${tableColumn("MonthlyActivityTable", labels.columns.operatingExpense)},${tableColumn("MonthlyActivityTable", labels.columns.currency)},$A${excelRow})`,
       activity.reduce((sum, row) => sum + money(row.operatingExpenseMinor, currency)!, 0));
     formula(summary.getCell(excelRow, 5),
+      `SUMIFS(${tableColumn("BudgetActualTable", labels.columns.budget)},${tableColumn("BudgetActualTable", labels.columns.currency)},$A${excelRow})`,
+      schedules.budgetActuals.filter((row) => row.currency === currency)
+        .reduce((sum, row) => sum + (money(row.limitMinor, currency) ?? 0), 0));
+    formula(summary.getCell(excelRow, 6),
+      `SUMIFS(${tableColumn("BudgetActualTable", labels.columns.actual)},${tableColumn("BudgetActualTable", labels.columns.currency)},$A${excelRow})`,
+      schedules.budgetActuals.filter((row) => row.currency === currency)
+        .reduce((sum, row) => sum + money(row.actualMinor, currency)!, 0));
+    formula(summary.getCell(excelRow, 7),
+      `SUMIFS(${tableColumn("LoansTable", labels.columns.remaining)},${tableColumn("LoansTable", labels.columns.currency)},$A${excelRow},${tableColumn("LoansTable", labels.columns.direction)},"${enumLabel("borrowed")}")`,
+      data.loans.filter((row) => row.currency === currency && row.direction === "borrowed")
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0));
+    formula(summary.getCell(excelRow, 8),
+      `SUMIFS(${tableColumn("LoansTable", labels.columns.remaining)},${tableColumn("LoansTable", labels.columns.currency)},$A${excelRow},${tableColumn("LoansTable", labels.columns.direction)},"${enumLabel("lent")}")`,
+      data.loans.filter((row) => row.currency === currency && row.direction === "lent")
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0));
+    formula(summary.getCell(excelRow, 9),
+      `SUMIFS(${tableColumn("InstallmentsTable", labels.columns.remaining)},${tableColumn("InstallmentsTable", labels.columns.currency)},$A${excelRow})`,
+      data.installments.filter((row) => row.currency === currency)
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0));
+    formula(summary.getCell(excelRow, 10),
+      `SUMIFS(${tableColumn("ReceivablesTable", labels.columns.remaining)},${tableColumn("ReceivablesTable", labels.columns.currency)},$A${excelRow})`,
+      data.pendingPayments.filter((row) => row.currency === currency)
+        .reduce((sum, row) => sum + money(row.remainingMinor, currency)!, 0));
+    formula(summary.getCell(excelRow, 11),
       `SUMIFS(${tableColumn("MonthlyActivityTable", labels.columns.netActivity)},${tableColumn("MonthlyActivityTable", labels.columns.currency)},$A${excelRow})`,
       activity.reduce((sum, row) => sum + money(row.netWalletActivityMinor, currency)!, 0));
   });
@@ -371,7 +413,17 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     labels.columns.netActivity]);
   moneyColumns("walletLedger", [labels.columns.inflow, labels.columns.outflow]);
   moneyColumns("budgetActual", [labels.columns.budget, labels.columns.actual, labels.columns.variance]);
-  moneyColumns("transactions", [labels.columns.amount, `${labels.columns.transferIn} ${labels.columns.amount}`]);
+  moneyColumns("transactions", [labels.columns.amount]);
+  const transactionSheet = sheets.get("transactions")!;
+  const destinationCurrencyColumn = headerColumn(transactionSheet, `${labels.columns.transferIn} ${labels.columns.currency}`);
+  const destinationAmountColumn = headerColumn(transactionSheet, `${labels.columns.transferIn} ${labels.columns.amount}`);
+  if (destinationCurrencyColumn !== null && destinationAmountColumn !== null) {
+    for (let row = 5; row <= transactionSheet.rowCount; row++) {
+      transactionSheet.getCell(row, destinationAmountColumn).numFmt = accountingFormat(
+        String(transactionSheet.getCell(row, destinationCurrencyColumn).value ?? ""),
+      );
+    }
+  }
   moneyColumns("expenseItems", [labels.columns.amount]);
   moneyColumns("wallets", [labels.columns.openingBalance, labels.columns.appClosing]);
   moneyColumns("salary", [labels.columns.amount]);
@@ -385,7 +437,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
 
   for (let row = 5; row <= 7; row++) {
     const numFmt = accountingFormat(String(summary.getCell(row, 1).value));
-    for (let column = 2; column <= 5; column++) summary.getCell(row, column).numFmt = numFmt;
+    for (let column = 2; column <= 11; column++) summary.getCell(row, column).numFmt = numFmt;
   }
   const budgetPercentColumn = headerColumn(sheets.get("budgetActual")!, labels.columns.variancePercent);
   if (budgetPercentColumn !== null) sheets.get("budgetActual")!.getColumn(budgetPercentColumn).numFmt = "0.0%;(0.0%);-";
