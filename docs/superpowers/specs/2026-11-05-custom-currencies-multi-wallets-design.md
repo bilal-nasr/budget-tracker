@@ -165,6 +165,13 @@ If a global currency is being disabled and is a wallet default, the database swi
 
 ## Transfers and cross-currency moves
 
+Product terminology is strict:
+
+- **Move** means money travels between two different wallet containers. A move may keep the same currency or use different currencies when both selected balances already exist.
+- **Exchange** means money changes between two different currency balances inside the same wallet container.
+
+Both operations share the same two-leg accounting primitive, but headings, buttons, Activity labels, filters, and accessibility names use the correct product term.
+
 A transfer has an exact source balance and destination balance:
 
 - Source wallet selection preselects its default balance; the user may switch among currencies actually held by that wallet.
