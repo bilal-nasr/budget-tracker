@@ -238,12 +238,14 @@ function build(): Transaction[] {
       note,
       settlement: note === "Coffee" && ago === 0 ? {
         tenderMinor: 2000,
+        tenderCurrency: wallets.get(walletId)!.currency,
         changes: [
           { walletId: id(1), amountMinor: 500, currency: "USD" as const },
           { walletId: id(3), amountMinor: 223750, currency: "LBP" as const },
         ],
       } : note === "Synthetic SYP groceries" ? {
         tenderMinor: 2500,
+        tenderCurrency: wallets.get(walletId)!.currency,
         changes: [{ walletId: id(3), amountMinor: 1250, currency: "LBP" as const,
           rate: { base: "LBP" as const, quote: "SYP" as const, quoteMajorNumerator: 1, quoteMajorDenominator: 100 } }],
       } : null,

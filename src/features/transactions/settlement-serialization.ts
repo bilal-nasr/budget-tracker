@@ -25,7 +25,7 @@ export type SettlementChangeSnapshot = {
   currency: Currency;
   rate?: SettlementRate;
 };
-export type SettlementSnapshot = { tenderMinor: number; changes: SettlementChangeSnapshot[] };
+export type SettlementSnapshot = { tenderMinor: number; tenderCurrency: Currency; changes: SettlementChangeSnapshot[] };
 
 export class SettlementSnapshotError extends Error {
   constructor() {
@@ -71,7 +71,7 @@ function readChange(value: unknown): { position: number; change: SettlementChang
 /** Reject missing/partial projections instead of hiding corrupt settlement data. */
 export function readSettlementSnapshot(
   row: Partial<SettlementRow>,
-  parent: { kind: string; currency: Currency; amountMinor: number },
+  parent: { kind: string; costCurrency: Currency; payCurrency: Currency; amountMinor: number },
 ): SettlementSnapshot | null {
   if (!Object.hasOwn(row, "tender_minor") || row.tender_minor === undefined ||
       !Object.hasOwn(row, "cashier_changes") || !Array.isArray(row.cashier_changes)) {
@@ -86,11 +86,12 @@ export function readSettlementSnapshot(
   const positioned = row.cashier_changes.map(readChange).sort((a, b) => a.position - b.position);
   if (new Set(positioned.map(({ position }) => position)).size !== positioned.length) throw new SettlementSnapshotError();
   const changes = positioned.map(({ change }) => change);
-  const snapshot = { tenderMinor, changes };
+  const snapshot = { tenderMinor, tenderCurrency: parent.payCurrency, changes };
   const settlement = settlementInputFromSnapshot(snapshot);
   if (!validateSettlement({
     costMinor: parent.amountMinor,
-    payCurrency: parent.currency,
+    costCurrency: parent.costCurrency,
+    payCurrency: parent.payCurrency,
     changeCurrencies: changes.map(({ currency }) => currency),
     settlement,
   }).ok) throw new SettlementSnapshotError();

@@ -41,7 +41,7 @@ const transactions: Transaction[] = [
   }),
   transaction({
     id: "t-settlement", kind: "expense", amountMinor: 1_000, currency: "USD", walletId: "w-usd",
-    settlement: { tenderMinor: 2_000, changes: [
+    settlement: { tenderMinor: 2_000, tenderCurrency: "USD", changes: [
       { walletId: "w-usd-archived", amountMinor: 500, currency: "USD" },
       { walletId: "w-syp", amountMinor: 600, currency: "SYP" },
     ] },

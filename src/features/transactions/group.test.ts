@@ -20,7 +20,7 @@ const tx = (over: Partial<Transaction>): Transaction => ({
 
 describe("groupByDay", () => {
   it("counts purchase cost once while cashier tender and foreign change remain wallet movements", () => {
-    const groups = groupByDay([tx({ amountMinor: 1250, settlement: { tenderMinor: 2000,
+    const groups = groupByDay([tx({ amountMinor: 1250, settlement: { tenderMinor: 2000, tenderCurrency: "USD",
       changes: [{ walletId: "00000000-0000-4000-8000-000000000003", currency: "LBP", amountMinor: 671250,
         rate: { base: "USD", quote: "LBP", quoteMajorNumerator: 89500, quoteMajorDenominator: 1 } }],
     } })]);

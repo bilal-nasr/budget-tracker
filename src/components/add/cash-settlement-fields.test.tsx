@@ -35,6 +35,7 @@ const editContext = {
     amountMinor: 1250,
     settlement: {
       tenderMinor: 2000,
+      tenderCurrency: "USD" as const,
       changes: [
         { walletId: usd.id, amountMinor: 500, currency: usd.currency },
         { walletId: lbp.id, amountMinor: 223750, currency: lbp.currency, rate: historicalRate },

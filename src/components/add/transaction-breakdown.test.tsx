@@ -275,7 +275,7 @@ describe.each(["en", "ar"] as const)("%s explicit conflict recovery", (locale) =
 describe("cashier aggregate integration", () => {
   const cashSaved: Transaction = { ...saved, amountMinor: 1250,
     items: [{ ...saved.items[0], amountMinor: 1000 }],
-    settlement: { tenderMinor: 2000, changes: [
+    settlement: { tenderMinor: 2000, tenderCurrency: "USD", changes: [
       { walletId, amountMinor: 500, currency: "USD" },
       { walletId: wallets[1].id, amountMinor: 32500, currency: "SYP",
         rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } },

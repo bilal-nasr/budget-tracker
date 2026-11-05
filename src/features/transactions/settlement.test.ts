@@ -5,30 +5,50 @@ import { cashSettlementInputSchema, convertSettlementMinor, parseSettlementRate,
 const walletId = "aaaaaaaa-0000-4000-8000-000000000001";
 const rate = { base: "USD" as const, quote: "LBP" as const, quoteMajorNumerator: 89500, quoteMajorDenominator: 1 };
 describe("cash settlement", () => {
+  it("records an LBP purchase cost with USD tender and exact LBP change without conversion", () => {
+    expect(validateSettlement({
+      costMinor: 340000,
+      costCurrency: "LBP",
+      payCurrency: "USD",
+      changeCurrencies: ["LBP"],
+      settlement: { tenderMinor: 500, changes: [{ walletId, amountMinor: 110000 }] },
+    })).toEqual({ ok: true });
+  });
+
+  it("accepts a foreign-currency tender with no returned change", () => {
+    expect(validateSettlement({
+      costMinor: 340000,
+      costCurrency: "LBP",
+      payCurrency: "USD",
+      changeCurrencies: [],
+      settlement: { tenderMinor: 500, changes: [] },
+    })).toEqual({ ok: true });
+  });
+
   it("records USD and LBP change from one USD tender without calculating a rate", () => {
     const settlement = { tenderMinor: 2000, changes: [
       { walletId, amountMinor: 500 },
       { walletId: "aaaaaaaa-0000-4000-8000-000000000002", amountMinor: 223750 },
     ] };
-    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrencies: ["USD", "LBP"], settlement })).toEqual({ ok: true });
+    expect(validateSettlement({ costMinor: 1250, costCurrency: "USD", payCurrency: "USD", changeCurrencies: ["USD", "LBP"], settlement })).toEqual({ ok: true });
     expect(cashSettlementInputSchema.parse(settlement)).toEqual(settlement);
   });
   it("requires exact same-currency reconciliation, including exact tender without change", () => {
-    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrencies: [], settlement: { tenderMinor: 1250, changes: [] } })).toEqual({ ok: true });
-    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrencies: [], settlement: { tenderMinor: 2000, changes: [] } })).toEqual({ ok: false, reason: "mismatch" });
-    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrencies: ["USD", "USD"], settlement: { tenderMinor: 2000, changes: [
+    expect(validateSettlement({ costMinor: 1250, costCurrency: "USD", payCurrency: "USD", changeCurrencies: [], settlement: { tenderMinor: 1250, changes: [] } })).toEqual({ ok: true });
+    expect(validateSettlement({ costMinor: 1250, costCurrency: "USD", payCurrency: "USD", changeCurrencies: [], settlement: { tenderMinor: 2000, changes: [] } })).toEqual({ ok: false, reason: "mismatch" });
+    expect(validateSettlement({ costMinor: 1250, costCurrency: "USD", payCurrency: "USD", changeCurrencies: ["USD", "USD"], settlement: { tenderMinor: 2000, changes: [
       { walletId, amountMinor: 500 }, { walletId, amountMinor: 250 },
     ] } })).toEqual({ ok: true });
   });
   it.each([ ["USD", "LBP"], ["LBP", "USD"], ["USD", "SYP"], ["SYP", "LBP"] ] as const)("records actual %s paid and %s change without a rate", (payCurrency, changeCurrency) => {
-    expect(validateSettlement({ costMinor: 400, payCurrency, changeCurrencies: [changeCurrency],
+    expect(validateSettlement({ costMinor: 400, costCurrency: payCurrency, payCurrency, changeCurrencies: [changeCurrency],
       settlement: { tenderMinor: 500, changes: [{ walletId, amountMinor: 10000 }] } })).toEqual({ ok: true });
-    expect(validateSettlement({ costMinor: 500, payCurrency, changeCurrencies: [changeCurrency],
+    expect(validateSettlement({ costMinor: 500, costCurrency: payCurrency, payCurrency, changeCurrencies: [changeCurrency],
       settlement: { tenderMinor: 500, changes: [{ walletId, amountMinor: 10000 }] } })).toEqual({ ok: false, reason: "mismatch" });
   });
   it("rejects mixed change when same-currency returns leave no value for the foreign leg", () => {
     for (const usdChange of [750, 800]) {
-      expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrencies: ["USD", "LBP"],
+      expect(validateSettlement({ costMinor: 1250, costCurrency: "USD", payCurrency: "USD", changeCurrencies: ["USD", "LBP"],
         settlement: { tenderMinor: 2000, changes: [
           { walletId, amountMinor: usdChange }, { walletId, amountMinor: 1 },
         ] } })).toEqual({ ok: false, reason: "mismatch" });
@@ -37,13 +57,20 @@ describe("cash settlement", () => {
   it("rejects malformed legs and exact aggregate overflow", () => {
     expect(cashSettlementInputSchema.safeParse({ tenderMinor: 2000, changes: [{ walletId, amountMinor: 0 }] }).success).toBe(false);
     expect(cashSettlementInputSchema.safeParse({ tenderMinor: 2000, changes: [{ walletId, amountMinor: 1, currency: "USD" }] }).success).toBe(false);
-    expect(validateSettlement({ costMinor: 1, payCurrency: "USD", changeCurrencies: Array(10).fill("USD"),
+    expect(validateSettlement({ costMinor: 1, costCurrency: "USD", payCurrency: "USD", changeCurrencies: Array(10).fill("USD"),
       settlement: { tenderMinor: MAX_MINOR, changes: Array.from({ length: 10 }, () => ({ walletId, amountMinor: MAX_MINOR })) } })).toEqual({ ok: false, reason: "mismatch" });
+  });
+  it("rejects malformed cost and tender currencies", () => {
+    const settlement = { tenderMinor: 500, changes: [] };
+    expect(validateSettlement({ costMinor: 340000, costCurrency: "EUR" as Currency, payCurrency: "USD",
+      changeCurrencies: [], settlement })).toEqual({ ok: false, reason: "amount" });
+    expect(validateSettlement({ costMinor: 340000, costCurrency: "LBP", payCurrency: "EUR" as Currency,
+      changeCurrencies: [], settlement })).toEqual({ ok: false, reason: "amount" });
   });
   it("uses half-up rounding once and preserves actual cash", () => {
     const r = { ...rate, quoteMajorNumerator: 200 };
     expect(convertSettlementMinor(1, "LBP", "USD", r)).toBe(1);
-    expect(validateSettlement({ costMinor: 999, payCurrency: "USD", changeCurrencies: ["LBP"], settlement: { tenderMinor: 1000, changes: [{ walletId, amountMinor: 1, rate: r }] } })).toEqual({ ok: true });
+    expect(validateSettlement({ costMinor: 999, costCurrency: "USD", payCurrency: "USD", changeCurrencies: ["LBP"], settlement: { tenderMinor: 1000, changes: [{ walletId, amountMinor: 1, rate: r }] } })).toEqual({ ok: true });
     expect(convertSettlementMinor(MAX_MINOR, "USD", "LBP", rate)).toBeNull();
   });
   it("keeps the exact sub-half boundary at a large direct SYP quote", () => {
@@ -61,7 +88,7 @@ describe("cash settlement", () => {
       expect(convertSettlementMinor(1, "USD", "LBP", { ...rate, quoteMajorDenominator: invalid })).toBeNull();
     }
     expect(cashSettlementInputSchema.safeParse({ tenderMinor: 2000, hidden: true, changes: [] }).success).toBe(false);
-    expect(validateSettlement({ costMinor: 1250, payCurrency: "USD", changeCurrencies: ["USD"], settlement: { tenderMinor: 2000, changes: [{ walletId, amountMinor: 750, rate }] } }).ok).toBe(false);
+    expect(validateSettlement({ costMinor: 1250, costCurrency: "USD", payCurrency: "USD", changeCurrencies: ["USD"], settlement: { tenderMinor: 2000, changes: [{ walletId, amountMinor: 750, rate }] } }).ok).toBe(false);
   });
   it("parses canonical quotes exactly with bilingual digits", () => {
     expect(parseSettlementRate("٨٩٬٥٠٠", "LBP", "USD")).toEqual(rate);

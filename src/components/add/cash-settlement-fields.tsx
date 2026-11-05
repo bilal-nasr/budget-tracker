@@ -109,7 +109,13 @@ export function parseSettlementDraft(
   const settlement: CashSettlementInput = unchanged
     ? candidate
     : { tenderMinor, changes: changes.map(({ walletId, amountMinor }) => ({ walletId, amountMinor })) };
-  const validation = validateSettlement({ costMinor, payCurrency, changeCurrencies: currencies, settlement });
+  const validation = validateSettlement({
+    costMinor,
+    costCurrency: payCurrency,
+    payCurrency,
+    changeCurrencies: currencies,
+    settlement,
+  });
   return validation.ok ? { ok: true, settlement } : { ok: false, error: validation.reason };
 }
 

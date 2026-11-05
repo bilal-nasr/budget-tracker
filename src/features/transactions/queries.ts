@@ -50,7 +50,12 @@ export const toTransaction = (r: TransactionRow): Transaction => ({
   note: r.note,
   createdAt: r.created_at,
   revision: r.revision,
-  settlement: readSettlementSnapshot(r, { kind: r.kind, currency: r.currency, amountMinor: readMinor(r.amount_minor) }),
+  settlement: readSettlementSnapshot(r, {
+    kind: r.kind,
+    costCurrency: r.currency,
+    payCurrency: r.currency,
+    amountMinor: readMinor(r.amount_minor),
+  }),
   source: r.source ?? null,
   fixedExpenseId: r.fixed_expense_id ?? null,
   installmentId: r.installment_id ?? null,

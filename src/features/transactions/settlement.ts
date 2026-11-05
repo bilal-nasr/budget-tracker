@@ -86,16 +86,17 @@ export function convertSettlementMinor(minor: number, from: Currency, to: Curren
 
 export type SettlementError = "amount" | "rate" | "unsupportedPair" | "mismatch";
 export function validateSettlement(input: {
-  costMinor: number; payCurrency: Currency; changeCurrencies: Currency[]; settlement: CashSettlementInput;
+  costMinor: number; costCurrency: Currency; payCurrency: Currency; changeCurrencies: Currency[]; settlement: CashSettlementInput;
 }): { ok: true } | { ok: false; reason: SettlementError } {
-  const { costMinor, payCurrency, changeCurrencies } = input;
+  const { costMinor, costCurrency, payCurrency, changeCurrencies } = input;
   const parsed = cashSettlementInputSchema.safeParse(input.settlement);
-  if (!parsed.success || !Number.isSafeInteger(costMinor) || costMinor < 1 || costMinor > MAX_MINOR || !isCurrency(payCurrency) ||
+  if (!parsed.success || !Number.isSafeInteger(costMinor) || costMinor < 1 || costMinor > MAX_MINOR ||
+      !isCurrency(costCurrency) || !isCurrency(payCurrency) ||
       changeCurrencies.length !== (parsed.success ? parsed.data.changes.length : 0) || changeCurrencies.some((currency) => !isCurrency(currency))) {
     return { ok: false, reason: "amount" };
   }
   const { tenderMinor, changes } = parsed.data;
-  if (tenderMinor < costMinor) return { ok: false, reason: "mismatch" };
+  if (costCurrency === payCurrency && tenderMinor < costMinor) return { ok: false, reason: "mismatch" };
   let sameCurrencyReturned = 0n;
   let hasCrossCurrency = false;
   for (let index = 0; index < changes.length; index++) {
@@ -113,6 +114,7 @@ export function validateSettlement(input: {
       return { ok: false, reason: "rate" };
     }
   }
+  if (costCurrency !== payCurrency) return { ok: true };
   const netSameCurrency = BigInt(tenderMinor) - sameCurrencyReturned;
   return (hasCrossCurrency ? netSameCurrency > BigInt(costMinor) : netSameCurrency === BigInt(costMinor))
     ? { ok: true }

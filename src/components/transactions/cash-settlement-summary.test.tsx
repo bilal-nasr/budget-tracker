@@ -11,7 +11,7 @@ const usdWallet = "00000000-0000-4000-8000-000000000001";
 const lbpWallet = "00000000-0000-4000-8000-000000000003";
 const renderSummary = (changes: Array<{ walletId: string; amountMinor: number; currency: "USD" | "LBP" }>) => render(
   <NextIntlClientProvider locale="en" messages={en}>
-    <CashSettlementSummary settlement={{ tenderMinor: 2000, changes }} costMinor={1250} currency="USD"
+    <CashSettlementSummary settlement={{ tenderMinor: 2000, tenderCurrency: "USD", changes }} costMinor={1250} currency="USD"
       changeWalletNames={changes.map((change) => change.walletId === usdWallet ? "Cash" : "Lebanese cash")} />
   </NextIntlClientProvider>,
 );

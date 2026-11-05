@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
 import { readSettlementSnapshot, serializeSettlement, settlementInputFromSnapshot, SettlementSnapshotError, type SettlementRow } from "./settlement-serialization";
 
-const context = { kind: "expense", currency: "USD" as const, amountMinor: 1250 };
+const context = { kind: "expense", costCurrency: "USD" as const, payCurrency: "USD" as const, amountMinor: 1250 };
 const usdWallet = "aaaaaaaa-0000-4000-8000-000000000001";
 const lbpWallet = "aaaaaaaa-0000-4000-8000-000000000002";
 const empty: SettlementRow = { tender_minor: null, cashier_changes: [] };
@@ -23,7 +23,7 @@ describe("settlement row boundary", () => {
 
   it("decodes ordered USD and LBP change while preserving historical rate metadata", () => {
     const snapshot = readSettlementSnapshot({ tender_minor: "2000", cashier_changes: [...rows].reverse() }, context)!;
-    expect(snapshot).toEqual({ tenderMinor: 2000, changes: [
+    expect(snapshot).toEqual({ tenderMinor: 2000, tenderCurrency: "USD", changes: [
       { walletId: usdWallet, amountMinor: 500, currency: "USD" },
       { walletId: lbpWallet, amountMinor: 223750, currency: "LBP",
         rate: { base: "USD", quote: "LBP", quoteMajorNumerator: 89500, quoteMajorDenominator: 1 } },
@@ -35,17 +35,27 @@ describe("settlement row boundary", () => {
   });
 
   it("reads no-change and same-currency snapshots without inventing a rate", () => {
-    expect(readSettlementSnapshot({ tender_minor: 1250, cashier_changes: [] }, context)).toEqual({ tenderMinor: 1250, changes: [] });
+    expect(readSettlementSnapshot({ tender_minor: 1250, cashier_changes: [] }, context)).toEqual({ tenderMinor: 1250, tenderCurrency: "USD", changes: [] });
     expect(readSettlementSnapshot({ tender_minor: 2000, cashier_changes: [{ ...rows[0], amount_minor: "750" }] }, context))
-      .toEqual({ tenderMinor: 2000, changes: [{ walletId: usdWallet, amountMinor: 750, currency: "USD" }] });
+      .toEqual({ tenderMinor: 2000, tenderCurrency: "USD", changes: [{ walletId: usdWallet, amountMinor: 750, currency: "USD" }] });
   });
 
   it.each(["LBP", "SYP"] as const)("reads and serializes actual %s change without a quote", (currency) => {
     const snapshot = readSettlementSnapshot({ tender_minor: 2000, cashier_changes: [{ ...rows[0], wallet_id: lbpWallet,
       amount_minor: 10000, currency }] }, context)!;
-    expect(snapshot).toEqual({ tenderMinor: 2000, changes: [{ walletId: lbpWallet, amountMinor: 10000, currency }] });
+    expect(snapshot).toEqual({ tenderMinor: 2000, tenderCurrency: "USD", changes: [{ walletId: lbpWallet, amountMinor: 10000, currency }] });
     expect(serializeSettlement(settlementInputFromSnapshot(snapshot))).toEqual({ tenderMinor: 2000,
       changes: [{ walletId: lbpWallet, amountMinor: 10000 }] });
+  });
+
+  it("hydrates LBP purchase cost separately from its USD tender currency", () => {
+    const snapshot = readSettlementSnapshot({ tender_minor: 500, cashier_changes: [{ ...rows[1],
+      amount_minor: 110000, rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null }] }, {
+      kind: "expense", costCurrency: "LBP", payCurrency: "USD", amountMinor: 340000,
+    });
+    expect(snapshot).toEqual({ tenderMinor: 500, tenderCurrency: "USD", changes: [
+      { walletId: lbpWallet, amountMinor: 110000, currency: "LBP" },
+    ] });
   });
 
   it("rejects unsafe, partial, duplicate-position, and malformed child data", () => {
