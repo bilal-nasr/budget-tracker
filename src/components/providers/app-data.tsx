@@ -120,18 +120,15 @@ export function AppDataProvider({
     });
     const legacyIndex = new Map(legacyWallets.map((wallet) => [wallet.id, wallet]));
     const c = new Map(categories.map((x) => [x.id, x]));
+    const projectEnabledBalances = (wallet: WalletContainer): WalletContainer => ({
+      ...wallet,
+      balances: wallet.balances.filter((balance) => !balance.detached && !currencyIndex.get(balance.currency)!.disabled)
+        .sort((left, right) => currencyOrder.get(left.currency)! - currencyOrder.get(right.currency)!),
+    });
     return {
       legacyWallets,
-      walletContainers: walletContainers.filter((wallet) => !wallet.deleted && !wallet.needsAttention).map((wallet) => ({
-        ...wallet,
-        balances: wallet.balances.filter((balance) => !balance.detached && !currencyIndex.get(balance.currency)!.disabled)
-          .sort((left, right) => currencyOrder.get(left.currency)! - currencyOrder.get(right.currency)!),
-      })),
-      needsAttentionWallets: walletContainers.filter((wallet) => !wallet.deleted && wallet.needsAttention).map((wallet) => ({
-        ...wallet,
-        balances: wallet.balances.filter((balance) => !balance.detached && !currencyIndex.get(balance.currency)!.disabled)
-          .sort((left, right) => currencyOrder.get(left.currency)! - currencyOrder.get(right.currency)!),
-      })),
+      walletContainers: walletContainers.filter((wallet) => !wallet.deleted && !wallet.needsAttention).map(projectEnabledBalances),
+      needsAttentionWallets: walletContainers.filter((wallet) => !wallet.deleted && wallet.needsAttention).map(projectEnabledBalances),
       currencies,
       enabledCurrencies,
       categories,

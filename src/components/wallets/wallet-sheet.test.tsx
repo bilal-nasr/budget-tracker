@@ -75,3 +75,19 @@ it.each(["disabled", "precision"])("clears the opening amount after a %s currenc
   await waitFor(() => expect(done).toHaveBeenCalledOnce());
   expect(actions.createWallet).toHaveBeenCalledWith({ name: "First", kind: "cash", currency: change === "disabled" ? "EUR" : "TOKEN", openingBalanceMinor: 0 });
 });
+
+it.each(["disabled", "precision"])("does not restore an opening draft after a %s catalog round trip", async (change) => {
+  const done = vi.fn();
+  const view = (catalog: CurrencyDefinition[]) => <NextIntlClientProvider locale="en" messages={en}><WalletForm wallet={null} currencies={catalog} onDone={done} /></NextIntlClientProvider>;
+  const rendered = render(view(currencies));
+  fireEvent.change(screen.getByLabelText(en.Wallets.name), { target: { value: "First" } });
+  fireEvent.change(screen.getByLabelText(en.Wallets.amount), { target: { value: "1.23456789" } });
+  rendered.rerender(view(currencies.map((currency) => currency.code === "TOKEN" ? { ...currency, disabled: change === "disabled", decimalPlaces: change === "precision" ? 2 : 8 } : currency)));
+  expect((screen.getByLabelText(en.Wallets.amount) as HTMLInputElement).value).toBe("");
+  rendered.rerender(view(currencies));
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("TOKEN");
+  expect((screen.getByLabelText(en.Wallets.amount) as HTMLInputElement).value).toBe("");
+  fireEvent.click(screen.getByRole("button", { name: en.Wallets.create }));
+  await waitFor(() => expect(done).toHaveBeenCalledOnce());
+  expect(actions.createWallet).toHaveBeenCalledWith({ name: "First", kind: "cash", currency: "TOKEN", openingBalanceMinor: 0 });
+});

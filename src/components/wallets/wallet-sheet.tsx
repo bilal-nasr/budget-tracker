@@ -34,7 +34,10 @@ export function WalletForm({ wallet, onDone, submitLabel, currencies: catalog, o
   const currency = currencies.find((item) => item.code === (selectedCode ?? originalDefault?.currency)) ?? currencies[0];
   const [owe, setOwe] = useState(false);
   const [amountDraft, setAmountDraft] = useState<{ text: string; code: string; decimalPlaces: number } | null>(null);
-  const amount = amountDraft?.code === currency?.code && amountDraft?.decimalPlaces === currency?.decimalPlaces ? amountDraft?.text ?? "" : "";
+  const draftMatchesCurrency = amountDraft?.code === currency?.code && amountDraft?.decimalPlaces === currency?.decimalPlaces;
+  // Discard incompatible drafts so later catalog refreshes cannot revive them.
+  if (amountDraft && !draftMatchesCurrency) setAmountDraft(null);
+  const amount = draftMatchesCurrency ? amountDraft?.text ?? "" : "";
   const [error, setError] = useState<string | null>(null);
   const parsedAmount = !wallet && amount.trim() !== "" ? currency ? parseAmount(amount, currency) : null : 0;
   const nameOk = name.trim().length > 0;
