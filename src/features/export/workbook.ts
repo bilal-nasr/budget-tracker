@@ -51,7 +51,9 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
       totalsRow: false,
       style: { theme: "TableStyleMedium2", showRowStripes: true, showFirstColumn: false, showLastColumn: false },
       columns: columns.map((column): TableColumnProperties => ({ name: column.label, filterButton: true })),
-      rows,
+      // Excel repairs header-only tables. Keep an empty data row without
+      // inventing records or numeric amounts for an empty schedule.
+      rows: rows.length > 0 ? rows : [columns.map(() => null)],
     });
     return sheet;
   };
@@ -403,6 +405,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     const columns = labelsToFormat.map((label) => headerColumn(sheet, label)).filter((value): value is number => value !== null);
     for (let row = 5; row <= sheet.rowCount; row++) {
       const currency = String(sheet.getCell(row, currencyColumn).value ?? "");
+      if (!currency) continue;
       for (const column of columns) sheet.getCell(row, column).numFmt = accountingFormat(currency);
     }
   };
