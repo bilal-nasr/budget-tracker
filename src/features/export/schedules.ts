@@ -20,7 +20,7 @@ function safeTotal(values: readonly number[]): number {
 export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
   const wallets = new Map(data.wallets.map((wallet) => [wallet.id, wallet]));
   const categories = new Map(data.categories.map((category) => [category.id, category]));
-  const rows: Array<WalletLedgerRow & { legOrder: number }> = [];
+  const rows: Array<{ row: WalletLedgerRow; legOrder: number }> = [];
 
   for (const transaction of data.transactions) {
     const addLeg = (
@@ -35,24 +35,26 @@ export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
       if (!wallet || wallet.currency !== currency) throw new Error("export_data_unavailable");
       const category = transaction.categoryId ? categories.get(transaction.categoryId) : undefined;
       rows.push({
-        rowId: `${transaction.id}:${leg}:${legOrder}`,
-        transactionId: transaction.id,
-        occurredOn: transaction.occurredOn,
-        createdAt: transaction.createdAt,
-        walletId,
-        walletName: wallet.name,
-        currency,
-        leg,
-        inflowMinor: readMinor(inflowMinor),
-        outflowMinor: readMinor(outflowMinor),
-        categoryId: transaction.categoryId,
-        categoryName: category ? categoryName(category, data.locale) : "",
-        note: transaction.note,
-        source: transaction.source,
-        fixedExpenseId: transaction.fixedExpenseId,
-        installmentId: transaction.installmentId,
-        loanId: transaction.loanId,
-        pendingPaymentId: transaction.pendingPaymentId ?? null,
+        row: {
+          rowId: `${transaction.id}:${leg}:${legOrder}`,
+          transactionId: transaction.id,
+          occurredOn: transaction.occurredOn,
+          createdAt: transaction.createdAt,
+          walletId,
+          walletName: wallet.name,
+          currency,
+          leg,
+          inflowMinor: readMinor(inflowMinor),
+          outflowMinor: readMinor(outflowMinor),
+          categoryId: transaction.categoryId,
+          categoryName: category ? categoryName(category, data.locale) : "",
+          note: transaction.note,
+          source: transaction.source,
+          fixedExpenseId: transaction.fixedExpenseId,
+          installmentId: transaction.installmentId,
+          loanId: transaction.loanId,
+          pendingPaymentId: transaction.pendingPaymentId ?? null,
+        },
         legOrder,
       });
     };
@@ -78,9 +80,9 @@ export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
   }
 
   return rows.sort((a, b) =>
-    a.occurredOn.localeCompare(b.occurredOn) || a.createdAt.localeCompare(b.createdAt) ||
-    a.transactionId.localeCompare(b.transactionId) || a.legOrder - b.legOrder,
-  ).map(({ legOrder: _legOrder, ...row }) => row);
+    a.row.occurredOn.localeCompare(b.row.occurredOn) || a.row.createdAt.localeCompare(b.row.createdAt) ||
+    a.row.transactionId.localeCompare(b.row.transactionId) || a.legOrder - b.legOrder,
+  ).map((entry) => entry.row);
 }
 
 export function buildReconciliations(

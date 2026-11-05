@@ -14,7 +14,6 @@ import { getProfile } from "@/features/profile/queries";
 import type { Profile } from "@/features/profile/schema";
 import { todayIn } from "@/features/transactions/group";
 import { TRANSACTION_COLUMNS, toTransaction, type TransactionRow } from "@/features/transactions/queries";
-import type { Transaction } from "@/features/transactions/schema";
 import { getWallets } from "@/features/wallets/queries";
 import type { Wallet } from "@/features/wallets/schema";
 import { demoBudgetData, demoFixed, demoInstallments, demoLoans, demoPage } from "@/lib/demo-data";
@@ -22,6 +21,7 @@ import { isCurrency, readMinor } from "@/lib/money";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { createClient } from "@/lib/supabase/server";
 import type { BudgetRevision, ExportData, ExportLocale, ExportTransaction, PendingReceiptExport } from "./model";
+import { buildReconciliations, buildWalletLedger } from "./schedules";
 
 const EXPORT_PAGE_SIZE = 500;
 
@@ -228,5 +228,19 @@ export async function getExportData(
   locale: ExportLocale,
   exportedAt = new Date(),
 ): Promise<ExportData> {
-  return collectExportData(locale, exportedAt, defaultReaders);
+  const data = await collectExportData(locale, exportedAt, defaultReaders);
+  if (supabaseConfigured()) return data;
+  // Demo wallet figures are illustrative UI snapshots. The export uses the
+  // complete synthetic ledger, so derive its closing balances from the same
+  // rows to keep the accountant reconciliation meaningful.
+  const closingByWallet = new Map(
+    buildReconciliations(data, buildWalletLedger(data)).map((row) => [row.walletId, row.calculatedClosingMinor]),
+  );
+  return {
+    ...data,
+    wallets: data.wallets.map((wallet) => ({
+      ...wallet,
+      balanceMinor: closingByWallet.get(wallet.id) ?? wallet.openingBalanceMinor,
+    })),
+  };
 }

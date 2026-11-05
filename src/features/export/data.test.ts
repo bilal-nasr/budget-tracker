@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Transaction } from "@/features/transactions/schema";
 import { emptyTransactionMetadata } from "@/features/transactions/schema";
 import type { ExportSourceReaders } from "./data";
+import { buildReconciliations, buildWalletLedger } from "./schedules";
 
 const state = vi.hoisted(() => ({ configured: false }));
 vi.mock("server-only", () => ({}));
@@ -108,6 +109,7 @@ describe("export snapshot", () => {
     expect(data.loans.length).toBeGreaterThan(0);
     expect(data.pendingPayments.length).toBeGreaterThan(0);
     expect(data.pendingReceipts.length).toBeGreaterThan(0);
+    expect(buildReconciliations(data, buildWalletLedger(data)).every((row) => row.differenceMinor === 0)).toBe(true);
   });
 
   it("fails the whole export when any required source is unavailable", async () => {
