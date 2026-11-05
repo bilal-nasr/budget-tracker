@@ -708,6 +708,8 @@
     "change": "Change received",
     "currency": "Change currency",
     "wallet": "Put change in",
+    "addChange": "Add another change",
+    "removeChange": "Remove change",
     "rate": "Transaction exchange rate",
     "confirmRate": "Use this rate for this purchase",
     "createWallet": "Create wallet",

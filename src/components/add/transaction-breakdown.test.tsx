@@ -275,20 +275,26 @@ describe.each(["en", "ar"] as const)("%s explicit conflict recovery", (locale) =
 describe("cashier aggregate integration", () => {
   const cashSaved: Transaction = { ...saved, amountMinor: 1250,
     items: [{ ...saved.items[0], amountMinor: 1000 }],
-    settlement: { tenderMinor: 2000, change: { walletId: wallets[1].id, amountMinor: 97500, currency: "SYP",
-      rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } } },
+    settlement: { tenderMinor: 2000, changes: [
+      { walletId, amountMinor: 500, currency: "USD" },
+      { walletId: wallets[1].id, amountMinor: 32500, currency: "SYP",
+        rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } },
+    ] },
   };
-  it.each(["en", "ar"] as const)("%s hydrates the persisted rate, keeps cost/items separate and saves one captured revision", async (locale) => {
+  it.each(["en", "ar"] as const)("%s hydrates every return, keeps cost/items separate and saves one captured revision", async (locale) => {
     const m = locale === "ar" ? ar : en;
     mount({ mode: "edit", initial: cashSaved }, locale);
     expect((screen.getByLabelText(m.Cashier.tender) as HTMLInputElement).value).toBe("20");
-    expect((screen.getByLabelText(m.Cashier.change) as HTMLInputElement).value).toBe("97500");
+    expect(screen.getAllByLabelText(m.Cashier.change).map((input) => (input as HTMLInputElement).value)).toEqual(["5", "32500"]);
     expect(screen.queryByLabelText(m.Cashier.rate)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: m.Add.saveChanges }));
     await waitFor(() => expect(mock.updateTransaction).toHaveBeenCalledWith(id, expect.objectContaining({
       amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
-      settlement: { tenderMinor: 2000, change: { walletId: wallets[1].id, amountMinor: 97500,
-        rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } } },
+      settlement: { tenderMinor: 2000, changes: [
+        { walletId, amountMinor: 500 },
+        { walletId: wallets[1].id, amountMinor: 32500,
+          rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } },
+      ] },
     }), 17));
     expect(mock.updateTransaction).toHaveBeenCalledOnce();
   });
