@@ -1,11 +1,53 @@
 import { z } from "zod";
 import { CURRENCIES, MAX_MINOR, type Currency } from "@/lib/money";
-export { totalsByCurrency } from "./totals";
+export { attachedBalances, defaultBalance, nextDefaultBalance, totalsByCurrency } from "./totals";
 
 export const currencySchema = z.enum(CURRENCIES);
 export const walletKindSchema = z.enum(["cash", "bank", "card"]);
 
 export type WalletKind = z.infer<typeof walletKindSchema>;
+
+const minorSchema = z.number().int().min(-MAX_MINOR).max(MAX_MINOR);
+
+export const walletBalanceSchema = z.object({
+  id: z.string().min(1),
+  walletId: z.string().min(1),
+  currency: z.string().regex(/^[A-Z][A-Z0-9]{0,11}$/),
+  openingBalanceMinor: minorSchema,
+  balanceMinor: minorSchema,
+  position: z.number().int().nonnegative(),
+  detached: z.boolean(),
+});
+
+export type WalletBalance = z.infer<typeof walletBalanceSchema>;
+
+/** Strict container model; promoted to Wallet when existing callers migrate. */
+export const walletContainerSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(40),
+  kind: walletKindSchema,
+  position: z.number().int().nonnegative(),
+  deleted: z.boolean(),
+  needsAttention: z.boolean(),
+  defaultBalanceId: z.string().min(1),
+  balances: z.array(walletBalanceSchema).min(1),
+}).superRefine((wallet, context) => {
+  const currencies = new Set<string>();
+  const ids = new Set<string>();
+  for (const [index, balance] of wallet.balances.entries()) {
+    if (balance.walletId !== wallet.id || currencies.has(balance.currency) || ids.has(balance.id)) {
+      context.addIssue({ code: "custom", path: ["balances", index], message: "Invalid wallet balance ownership or duplicate balance" });
+    }
+    currencies.add(balance.currency);
+    ids.add(balance.id);
+  }
+  const selected = wallet.balances.find((balance) => balance.id === wallet.defaultBalanceId);
+  if (!selected || selected.detached) {
+    context.addIssue({ code: "custom", path: ["defaultBalanceId"], message: "Default must be an attached balance owned by this wallet" });
+  }
+});
+
+export type WalletContainer = z.infer<typeof walletContainerSchema>;
 
 export const walletInputSchema = z.object({
   name: z.string().trim().min(1).max(40),
@@ -25,6 +67,7 @@ export const walletFundingSchema = z.object({
 });
 export type WalletFunding = z.infer<typeof walletFundingSchema>;
 
+/** Temporary single-currency model for untouched queries and UI. */
 export type Wallet = {
   id: string;
   name: string;

@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { formatAmount, parseAmount } from "./money";
 
+describe("runtime money definitions", () => {
+  const btc = { code: "BTC", symbol: "₿", decimalPlaces: 8, disabled: false, firstUsed: false };
+  const lbp = { code: "LBP", symbol: "LBP", decimalPlaces: 0, disabled: false, firstUsed: false };
+
+  it("formats runtime precision without floating point", () => {
+    expect(parseAmount("0.00000001", btc)).toBe(1);
+    expect(formatAmount(1, btc)).toBe("₿0.00000001");
+    expect(parseAmount("10000000.00000001", btc)).toBeNull();
+    expect(parseAmount("10000000.00000000", btc)).toBe(MAX_MINOR);
+    expect(formatAmount(MAX_MINOR - 1, btc)).toBe("₿9,999,999.99999999");
+    expect(toInputText(MAX_MINOR - 1, btc)).toBe("9999999.99999999");
+    expect(toInputText(120000000, btc)).toBe("1.2");
+    expect(parseAmount("٠٫٠٠٠٠٠٠٠١", btc)).toBe(1);
+    expect(formatAmount(-1, btc, { digits: "arabic" })).toBe("−₿٠٫٠٠٠٠٠٠٠١");
+    expect(parseAmount("0.000000001", btc)).toBeNull();
+    expect(parseAmount("1.0", lbp)).toBeNull();
+    expect(formatAmount(1250, { ...btc, disabled: true })).toBe("₿0.00001250");
+  });
+
+  it("separates letter and symbol prefixes", () => {
+    expect(formatAmount(1250, lbp)).toBe("LBP 1,250");
+    expect(formatAmount(1250, { ...lbp, symbol: "ل.ل" })).toBe("ل.ل 1,250");
+    expect(formatAmount(1250, { ...lbp, symbol: "¤1" })).toBe("¤1 1,250");
+    expect(formatAmount(1250, { ...lbp, symbol: "€" })).toBe("€1,250");
+    expect(formatAmount(1250, { ...lbp, symbol: "🪙" })).toBe("🪙1,250");
+  });
+});
+
 describe("parseAmount", () => {
   it("parses USD to cents", () => {
     expect(parseAmount("12.5", "USD")).toBe(1250);

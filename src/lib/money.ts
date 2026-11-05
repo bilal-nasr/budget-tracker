@@ -1,11 +1,11 @@
 import { normalizeNumericDigits } from "@/lib/numeric-text";
-import { CURRENCY_DECIMALS, MAX_MINOR, MAX_RATE, currencyPrefix, isCurrency, type Currency } from "./currency";
+import { DEFAULT_CURRENCIES, MAX_MINOR, MAX_RATE, isCurrency, requireCurrency, type Currency, type CurrencyDefinition } from "./currency";
 
 export {
   CURRENCIES, CURRENCY_DECIMALS, MAX_MINOR, MAX_RATE, currencyPrefix,
   emptyCurrencyTotals, isCurrency, supportsUsdLbpRate,
 } from "./currency";
-export type { Currency } from "./currency";
+export type { Currency, CurrencyDefinition } from "./currency";
 
 /**
  * Integer minor units: USD cents, LBP whole lira, SYP whole pounds.
@@ -42,15 +42,22 @@ function normalizeDigits(input: string): string {
     .replace(/[٬,\s]/g, "");
 }
 
+function resolveDefinition(currency: CurrencyDefinition | Currency): CurrencyDefinition {
+  return typeof currency === "string" ? requireCurrency(currency, DEFAULT_CURRENCIES) : currency;
+}
+
 /** Parses a user-typed amount ("12.5", "١٢٫٥٠", "1,200") into minor units. Null if invalid. */
-export function parseAmount(input: string, currency: Currency): number | null {
-  if (!isCurrency(currency)) return null;
+export function parseAmount(input: string, definition: CurrencyDefinition): number | null;
+/** @deprecated Pass a runtime currency definition. */
+export function parseAmount(input: string, currency: Currency): number | null;
+export function parseAmount(input: string, currency: CurrencyDefinition | Currency): number | null {
+  if (typeof currency === "string" && !isCurrency(currency)) return null;
   const text = normalizeDigits(input.trim());
-  const decimals = CURRENCY_DECIMALS[currency];
-  const pattern = decimals === 0 ? /^\d{1,16}$/ : /^\d{1,16}(\.\d{1,2})?$/;
+  const decimals = resolveDefinition(currency).decimalPlaces;
+  const pattern = decimals === 0 ? /^\d{1,16}$/ : new RegExp(`^\\d{1,16}(\\.\\d{1,${decimals}})?$`);
   if (!pattern.test(text)) return null;
   const [whole, fraction = ""] = text.split(".");
-  const minor = BigInt(whole) * BigInt(10 ** decimals) + BigInt(fraction.padEnd(decimals, "0") || 0);
+  const minor = BigInt(whole) * (BigInt(10) ** BigInt(decimals)) + BigInt(fraction.padEnd(decimals, "0") || 0);
   return minor <= BigInt(MAX_MINOR) ? Number(minor) : null;
 }
 
@@ -61,16 +68,28 @@ const numberFormatters: Partial<Record<Digits, Intl.NumberFormat>> = {};
 /** Formats minor units for display. Wrap the result in <bdi dir="ltr"> in the UI. */
 export function formatAmount(
   minor: number,
+  definition: CurrencyDefinition,
+  options?: { digits?: Digits; sign?: boolean },
+): string;
+/** @deprecated Pass a runtime currency definition. */
+export function formatAmount(
+  minor: number,
   currency: Currency,
+  options?: { digits?: Digits; sign?: boolean },
+): string;
+export function formatAmount(
+  minor: number,
+  currency: CurrencyDefinition | Currency,
   options: { digits?: Digits; sign?: boolean } = {},
 ): string {
-  const prefix = currencyPrefix(currency);
+  const definition = resolveDefinition(currency);
+  const prefix = definition.symbol;
   const checked = readMinor(minor);
-  const decimals = CURRENCY_DECIMALS[currency];
+  const decimals = definition.decimalPlaces;
   const digits = options.digits === "arabic" ? "arabic" : "latin";
   const locale = digits === "arabic" ? "ar-u-nu-arab" : "en-US";
   const absolute = BigInt(Math.abs(checked));
-  const scale = BigInt(10 ** decimals);
+  const scale = BigInt(10) ** BigInt(decimals);
   const formatter = numberFormatters[digits] ??= new Intl.NumberFormat(locale);
   const whole = formatter.format(absolute / scale);
   const fraction = String(absolute % scale).padStart(decimals, "0");
@@ -79,16 +98,18 @@ export function formatAmount(
     : fraction;
   const body = decimals === 0 ? whole : `${whole}${options.digits === "arabic" ? "٫" : "."}${localizedFraction}`;
   const sign = checked < 0 ? "−" : options.sign && checked > 0 ? "+" : "";
-  return `${sign}${prefix}${currency === "USD" ? "" : " "}${body}`;
+  return `${sign}${prefix}${/[\p{L}\p{N}]/u.test(prefix) ? " " : ""}${body}`;
 }
 
 /** Minor units back to the editable text a person would type ("54.2", "400000"). */
-export function toInputText(minor: number, currency: Currency): string {
-  if (!isCurrency(currency)) throw new RangeError("Unsupported currency");
-  const decimals = CURRENCY_DECIMALS[currency];
+export function toInputText(minor: number, definition: CurrencyDefinition): string;
+/** @deprecated Pass a runtime currency definition. */
+export function toInputText(minor: number, currency: Currency): string;
+export function toInputText(minor: number, currency: CurrencyDefinition | Currency): string {
+  const decimals = resolveDefinition(currency).decimalPlaces;
   const abs = BigInt(Math.abs(readMinor(minor)));
   if (decimals === 0) return String(abs);
-  const scale = BigInt(10 ** decimals);
+  const scale = BigInt(10) ** BigInt(decimals);
   const whole = abs / scale;
   const fraction = String(abs % scale).padStart(decimals, "0").replace(/0+$/, "");
   return fraction ? `${whole}.${fraction}` : String(whole);

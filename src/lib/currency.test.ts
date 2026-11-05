@@ -9,7 +9,34 @@ import {
   isCurrency,
   supportsUsdLbpRate,
   type Currency,
+  DEFAULT_CURRENCIES,
+  enabledCurrencies,
+  indexCurrencies,
+  requireCurrency,
 } from "./currency";
+
+describe("runtime currency catalog", () => {
+  const btc = { code: "BTC", symbol: "₿", decimalPlaces: 8, disabled: false, firstUsed: false };
+  const disabled = { code: "OLD", symbol: "OLD", decimalPlaces: 3, disabled: true, firstUsed: true };
+
+  it("resolves runtime and historical definitions without falling back", () => {
+    const definitions = indexCurrencies([btc, disabled]);
+    expect(definitions.get("BTC")).toEqual(btc);
+    expect(requireCurrency("BTC", [btc, disabled])).toEqual(btc);
+    expect(requireCurrency("OLD", [btc, disabled])).toEqual(disabled);
+    expect(() => requireCurrency("USD", [btc, disabled])).toThrow();
+    expect(() => indexCurrencies([btc, btc])).toThrow();
+  });
+
+  it("offers only enabled definitions while retaining seeded precision", () => {
+    expect(enabledCurrencies([disabled, btc])).toEqual([btc]);
+    expect(DEFAULT_CURRENCIES).toEqual([
+      { code: "USD", symbol: "$", decimalPlaces: 2, disabled: false, firstUsed: false },
+      { code: "LBP", symbol: "LBP", decimalPlaces: 0, disabled: false, firstUsed: false },
+      { code: "SYP", symbol: "SYP", decimalPlaces: 0, disabled: false, firstUsed: false },
+    ]);
+  });
+});
 
 describe("currency registry", () => {
   it("keeps stable currency order and explicit ledger precision", () => {
