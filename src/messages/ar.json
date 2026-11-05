@@ -163,7 +163,12 @@
     "themeDark": "داكن",
     "signOut": "تسجيل الخروج",
     "saveFailed": "تعذّر الحفظ. حاول مرة أخرى.",
-    "categories": "الفئات"
+    "categories": "الفئات",
+    "exportTitle": "التصدير إلى Excel",
+    "exportDescription": "نزّل مصنفاً جاهزاً للمحاسب يتضمن تسوية أرصدة المحافظ والملخصات المالية وكل الجداول المساندة.",
+    "exportButton": "تنزيل مصنف Excel",
+    "exportPreparing": "جارٍ إعداد مصنف Excel…",
+    "exportFailed": "تعذّر إنشاء المصنف. حاول مرة أخرى."
   },
   "SignIn": {
     "forgot": "نسيت كلمة المرور؟",

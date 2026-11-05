@@ -163,7 +163,12 @@
     "themeDark": "Dark",
     "signOut": "Sign out",
     "saveFailed": "Could not save. Try again.",
-    "categories": "Categories"
+    "categories": "Categories",
+    "exportTitle": "Export to Excel",
+    "exportDescription": "Download an accountant-ready workbook with reconciled wallet balances, financial summaries and complete supporting schedules.",
+    "exportButton": "Download Excel workbook",
+    "exportPreparing": "Preparing Excel workbook…",
+    "exportFailed": "Could not create the workbook. Try again."
   },
   "SignIn": {
     "forgot": "Forgot password?",

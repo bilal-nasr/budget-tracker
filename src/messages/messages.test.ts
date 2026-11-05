@@ -14,4 +14,8 @@ describe("message catalogs", () => {
   it("have identical keys in English and Arabic", () => {
     expect(keys(ar).sort()).toEqual(keys(en).sort());
   });
+
+  it("keeps the English and Arabic Settings message trees in sync", () => {
+    expect(keys(ar.Settings).sort()).toEqual(keys(en.Settings).sort());
+  });
 });
