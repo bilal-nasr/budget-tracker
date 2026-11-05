@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { dueThisCycle, withProgress, installmentInputSchema, installmentPaymentSchema } from "./schema";
 
 const base = {
-  id: "i", name: "Laptop", currency: "USD" as const, walletId: "w", categoryId: "c",
+  id: "i", name: "Laptop", currency: "USD" as const, balanceId: "w", categoryId: "c",
   totalMinor: 120000, paidBeforeMinor: 0, monthlyMinor: 10000, dueDay: null,
 };
-const pay = (amountMinor: number, occurredOn: string, salaryCycleId = "salary") => ({ transactionId: occurredOn, amountMinor, occurredOn, walletId: "w", salaryCycleId, createdAt: `${occurredOn}T12:00:00Z`, revision: 1 });
+const pay = (amountMinor: number, occurredOn: string, salaryCycleId = "salary") => ({ transactionId: occurredOn, amountMinor, occurredOn, balanceId: "w", salaryCycleId, createdAt: `${occurredOn}T12:00:00Z`, revision: 1 });
 
 describe("installment progress", () => {
   it("public schema uses receipt progress even when a payment's accounting month differs", () => {
@@ -39,6 +39,6 @@ describe("dueThisCycle", () => {
   it("requires an explicit stable payment request and keeps template principal validation", () => {
     expect(installmentPaymentSchema.safeParse({ installmentId: "00000000-0000-4000-8000-000000000001" }).success).toBe(false);
     expect(installmentInputSchema.safeParse({ ...base, totalMinor: 100, paidBeforeMinor: 101,
-      walletId: "00000000-0000-4000-8000-000000000001", categoryId: "00000000-0000-4000-8000-000000000002" }).success).toBe(false);
+      balanceId: "00000000-0000-4000-8000-000000000001", categoryId: "00000000-0000-4000-8000-000000000002" }).success).toBe(false);
   });
 });

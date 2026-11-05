@@ -15,7 +15,7 @@ const args = ["exec", "-i", "-e", "PGPASSWORD=", "-e", "PGOPTIONS=", "-e", "PGPA
   "-d", database, "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"];
 const owner = randomUUID();
 const active = new Set();
-const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true);`;
+const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 
 function session() {
   const child = spawn("docker", args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
@@ -107,7 +107,7 @@ try {
   for (const operation of ["edit", "delete"]) {
     const code = operation === "edit" ? "EDITCOIN" : "DELETECOIN";
     await owned(`select public.create_currency('${code}','T',4);`);
-    await race(`first currency use versus ${operation}`, `insert into public.fixed_expenses(name,amount_minor,balance_id,category_id) select 'First use',1,b.id,c.id from public.wallet_balances b cross join public.categories c where b.wallet_id='${a.id}' and b.currency='${code}' and c.kind='expense' and c.parent_id is null order by c.position limit 1;`,
+    await race(`first currency use versus ${operation}`, `select set_config('request.headers',jsonb_build_object('x-budget-units',jsonb_build_object('${code}',4)::text)::text,true); insert into public.fixed_expenses(name,amount_minor,balance_id,category_id) select 'First use',1,b.id,c.id from public.wallet_balances b cross join public.categories c where b.wallet_id='${a.id}' and b.currency='${code}' and c.kind='expense' and c.parent_id is null order by c.position limit 1;`,
       `perform 1 from public.currencies where user_id='${owner}' and code='${code}' for update nowait`,
       operation === "edit" ? `select public.update_currency('${code}','${code}','T',5);` : `select public.delete_currency('${code}');`, /currency.used/);
   }
@@ -116,9 +116,9 @@ try {
   const income = await scalar("select id from public.categories where kind='income' and parent_id is null order by position limit 1;");
   await race("disable versus new money", "select public.set_currency_disabled('EDITCOIN',true);",
     `perform 1 from public.currencies where user_id='${owner}' and code='EDITCOIN' for update nowait`,
-    `insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id) values('income','2026-11-05','${disabled}',1,'EDITCOIN','${income}');`, /currency.disabled/);
+    `select set_config('request.headers',jsonb_build_object('x-budget-units','{"EDITCOIN":4}')::text,true); insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id) values('income' ,'2026-11-05','${disabled}',1,'EDITCOIN','${income}');`, /currency.disabled/);
   const lbp = await scalar(`select id from public.wallet_balances where wallet_id='${b.id}' and currency='LBP';`);
-  await race("transfer versus disable", `select public.record_balance_transfer('2026-11-05','${a.balance}','${lbp}',1,1000);`,
+  await race("transfer versus disable", `select public.record_balance_transfer(gen_random_uuid(),'2026-11-05','${a.balance}','${lbp}',1,1000);`,
     `perform 1 from public.wallet_balances where id='${lbp}' for update nowait`,
     `select public.set_currency_disabled('LBP',true);`, /currency.nonzero/);
   assert.equal(await scalar(`select balance_minor from public.wallet_balance_totals where balance_id='${lbp}';`), "1000");

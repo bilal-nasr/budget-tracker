@@ -1,4 +1,5 @@
 import "server-only";
+import { expectedUnitsSchema, type ExpectedUnits } from "@/lib/currency-intent";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./server";
 import { supabaseConfigured } from "./proxy";
@@ -23,16 +24,17 @@ type Ctx =
   | { error: ActionError; supabase?: undefined; userId?: undefined }
   | { error?: undefined; supabase: SupabaseClient; userId: string };
 
-export async function actionClient(): Promise<Ctx> {
+export async function actionClient(expectedUnits?: ExpectedUnits): Promise<Ctx> {
   if (!supabaseConfigured()) return { error: "notConfigured" };
   const userId = await getUserId();
   if (!userId) return { error: "failed" };
-  return { supabase: await createClient(), userId };
+  return { supabase: await createClient(expectedUnits ? { "x-budget-units": JSON.stringify(expectedUnitsSchema.parse(expectedUnits)) } : undefined), userId };
 }
 
 type DatabaseError = { code?: string; message?: string } | null | undefined;
 
 const databaseErrors: Readonly<Record<string, ActionError>> = {
+  "currency.intentConflict": "conflict",
   "currency.lifecycleRequired": "conflict",
   "currency.incompleteCoverage": "conflict",
   "balance.globalCurrency": "conflict",

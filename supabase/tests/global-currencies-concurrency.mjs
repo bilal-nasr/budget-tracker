@@ -15,7 +15,7 @@ const args = ["exec", "-i", "-e", "PGPASSWORD=", "-e", "PGOPTIONS=", "-e", "PGPA
   "-d", database, "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"];
 const owner = randomUUID();
 const active = new Set();
-const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true);`;
+const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 
 function session() {
   const child = spawn("docker", args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
@@ -116,7 +116,7 @@ try {
   const income=await scalar("select id from public.categories where kind='income' and parent_id is null order by position limit 1;");
   await owned("select public.create_currency('FIRST','F',2);");
   const first=await scalar(`select id from public.wallet_balances where wallet_id='${a.id}' and currency='FIRST';`);
-  const incomeSQL=(balance,code)=>`insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id) values('income','2026-11-05','${balance}',1,'${code}','${income}');`;
+  const incomeSQL=(balance,code)=>`select set_config('request.headers',jsonb_build_object('x-budget-units',jsonb_build_object('${code}',2)::text)::text,true); insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id) values('income','2026-11-05','${balance}',1,'${code}','${income}');`;
   await race('first use versus currency delete',incomeSQL(first,'FIRST'),ownerProbe,"select public.delete_currency('FIRST');",/currency.used/);
   await owned("select public.create_currency('UNUSED','U',2);");
   const unused=await scalar(`select id from public.wallet_balances where wallet_id='${a.id}' and currency='UNUSED';`);

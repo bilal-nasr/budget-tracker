@@ -1,5 +1,6 @@
 "use server";
 
+import type { ExpectedUnits } from "@/lib/currency-intent";
 import { revalidatePath } from "next/cache";
 import { actionClient, type ActionError, type ActionResult } from "@/lib/supabase/action";
 import {
@@ -10,7 +11,7 @@ import {
 const mutationRows = cycleMutationSchema.array().length(1);
 
 function ruleError(error: { code?: string; message?: string }): ActionError {
-  if (error.code === "BT003") return "conflict";
+  if (error.message === "currency.intentConflict" || error.code === "BT003") return "conflict";
   if (error.code !== "P0001") return "failed";
   switch (error.message) {
     case "already paid this cycle": return "alreadyPaidThisCycle";
@@ -40,9 +41,10 @@ async function mutate(
   rpc: "receive_salary" | "record_installment_payment",
   requestId: string,
   args: Record<string, string | number | null>,
+  expectedUnits?: ExpectedUnits,
 ): Promise<ActionResult<CycleMutation>> {
   try {
-    const ctx = await actionClient();
+    const ctx = await actionClient(expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
     const { data, error } = await ctx.supabase.rpc(rpc, args);
     if (error) return { ok: false, error: ruleError(error) };
@@ -64,7 +66,7 @@ export async function receiveSalaryForCycle(input: ReceiveSalaryInput): Promise<
   return mutate("receive_salary", parsed.data.requestId, {
     p_request_id: parsed.data.requestId,
     p_expected_cycle_id: parsed.data.expectedCycleId,
-  });
+  }, parsed.data.expectedUnits);
 }
 
 /** One atomic source-aware expense; there is no application read-then-insert. */
@@ -73,8 +75,8 @@ export async function payInstallmentForCycle(input: CyclePaymentInput): Promise<
   if (!parsed.success) return { ok: false, error: "invalid" };
   const p = parsed.data;
   return mutate("record_installment_payment", p.requestId, {
-    p_request_id: p.requestId, p_installment_id: p.installmentId, p_wallet_id: p.walletId,
+    p_request_id: p.requestId, p_installment_id: p.installmentId, p_balance_id: p.balanceId,
     p_amount_minor: p.amountMinor, p_occurred_on: p.occurredOn,
     p_salary_cycle_id: p.salaryCycleId, p_override_of_transaction_id: p.overrideOfTransactionId,
-  });
+  }, p.expectedUnits);
 }

@@ -8,7 +8,7 @@ import { cancelLoan, createLoan, deleteLoan, deleteLoanPayment, recordLoanPaymen
 
 const id = "aaaaaaaa-0000-4000-8000-000000000001";
 const input = { requestId: id, name: "Loan", direction: "borrowed" as const, principalMinor: 10000, feeBps: 500,
-  walletId: id, feeCategoryId: id, openedOn: "2026-01-01", creationMode: "new" as const, principalPaidBeforeMinor: 0, feePaidBeforeMinor: 0 };
+  balanceId: id, feeCategoryId: id, openedOn: "2026-01-01", creationMode: "new" as const, principalPaidBeforeMinor: 0, feePaidBeforeMinor: 0 };
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.ctx.mockResolvedValue({ userId: id, supabase: { rpc: mocks.rpc } });
@@ -47,7 +47,7 @@ describe("loan action boundary", () => {
   });
   it("maps stable DB errors without exposing raw database detail", async () => {
     mocks.rpc.mockResolvedValue({ error: { message: "loan.exceedsRemaining", details: "private" } });
-    expect(await recordLoanPayment({ requestId: id, loanId: id, walletId: id, amountMinor: 1, occurredOn: "2026-01-01" })).toEqual({ ok: false, error: "exceedsRemaining" });
+    expect(await recordLoanPayment({ requestId: id, loanId: id, balanceId: id, amountMinor: 1, occurredOn: "2026-01-01" })).toEqual({ ok: false, error: "exceedsRemaining" });
     expect(mocks.invalidate).not.toHaveBeenCalled();
     mocks.rpc.mockResolvedValue({ error: { message: "sensitive unknown error" } });
     expect(await cancelLoan(id)).toEqual({ ok: false, error: "failed" });
@@ -61,13 +61,13 @@ describe("loan action boundary", () => {
     expect(await voidLoanPayment("bad", 1)).toEqual({ ok: false, error: "invalid" });
     expect(await voidLoanPayment(id, 0)).toEqual({ ok: false, error: "invalid" });
     await voidLoanPayment(id, 1); await restoreLoanPayment(id, 2); await cancelLoan(id);
-    await setLoanArchived(id, true); await updateLoan(id, { name: "Friend", walletId: id, feeCategoryId: id });
+    await setLoanArchived(id, true); await updateLoan(id, { name: "Friend", balanceId: id, feeCategoryId: id });
     expect(mocks.rpc.mock.calls.map(([name]) => name)).toEqual(["void_loan_payment", "restore_loan_payment", "cancel_loan", "set_loan_archived", "update_loan"]);
     expect(mocks.rpc.mock.calls[0][1]).toEqual({ p_transaction_id: id, p_expected_revision: 1 });
     expect(mocks.rpc.mock.calls[1][1]).toEqual({ p_transaction_id: id, p_expected_revision: 2 });
   });
   it("handles an unknown payment transport outcome without changing the request identity", async () => {
-    const payment = { requestId: id, loanId: id, walletId: id, amountMinor: 100, occurredOn: "2026-01-01" };
+    const payment = { requestId: id, loanId: id, balanceId: id, amountMinor: 100, occurredOn: "2026-01-01" };
     mocks.rpc.mockRejectedValue(new Error("connection lost"));
     expect(await recordLoanPayment(payment)).toEqual({ ok: false, error: "failed" });
     expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("record_loan_payment", { p_input: payment });

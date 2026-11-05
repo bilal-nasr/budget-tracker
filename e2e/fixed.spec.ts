@@ -88,7 +88,7 @@ test("fixed card shows total, per-wallet needs and salary after fixed", async ({
   await expect(card.getByText("Total fixed").locator("..")).toContainText("$575.00");
   const perWallet = card.getByRole("list", { name: "Per wallet" });
   await expect(perWallet.getByRole("listitem").filter({ has: page.getByText("Bank", { exact: true }) })).toContainText("$530.00");
-  await expect(perWallet.getByRole("listitem").filter({ has: page.getByText("Cash", { exact: true }) })).toContainText("$45.00");
+  await expect(perWallet.getByRole("listitem").filter({ has: page.getByText("Pocket", { exact: true }) })).toContainText("$45.00");
   await expect(card.getByText("Salary after fixed").locator("..")).toContainText("$1,225.00");
   await expectNoHorizontalOverflow(page);
 });

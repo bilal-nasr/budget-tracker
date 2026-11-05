@@ -1,16 +1,18 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import type { Category } from "@/features/categories/schema";
-import type { Wallet, WalletBalance, WalletContainer } from "@/features/wallets/schema";
-import { DEFAULT_CURRENCIES, indexCurrencies, type CurrencyDefinition } from "@/lib/currency";
-import { isCurrency } from "@/lib/money";
+import type { WalletBalance, WalletContainer } from "@/features/wallets/schema";
+import { indexCurrencies, type CurrencyDefinition } from "@/lib/currency";
+import { applyWalletOrder, reconcileWalletOrder } from "@/features/wallets/reorder";
 
 type AppData = {
-  /** @deprecated Use walletContainers and exact balance IDs. */
-  legacyWallets: Wallet[];
   /** Ordinary active wallets with enabled balances in catalog order. */
   walletContainers: WalletContainer[];
+  /** Shared temporary order; fresh server data remains authoritative. */
+  setWalletOrder: (ids: string[] | null) => void;
+  /** Identity of the authoritative input, independent of temporary reorder previews. */
+  walletOrderSource: object | undefined;
   /** Recovery-only wallets, excluded from ordinary actions. */
   needsAttentionWallets: WalletContainer[];
   currencies: CurrencyDefinition[];
@@ -18,14 +20,12 @@ type AppData = {
   /** Complete historical catalogue. Use categoryOptions/activeCategories for new entries. */
   categories: Category[];
   timezone: string;
-  salary: { amountMinor: number; walletId: string } | null;
+  salary: { amountMinor: number; balanceId: string } | null;
   usdLbpRate: number | null;
   /** Complete canonical history, including disabled balances and tombstones. */
   walletById: (id: string) => WalletContainer | undefined;
   balanceById: (id: string) => WalletBalance | undefined;
   currencyByCode: (code: string) => CurrencyDefinition | undefined;
-  /** @deprecated Task 9 migrates remaining money screens to walletById/balanceById. */
-  legacyWalletById: (id: string) => Wallet | undefined;
   categoryById: (id: string) => Category | undefined;
 };
 
@@ -33,7 +33,6 @@ const Context = createContext<AppData | null>(null);
 
 /** Wallets and categories, loaded once per request by the app layout. */
 export function AppDataProvider({
-  wallets: legacyInput,
   walletContainers: containerInput,
   currencies: currencyInput,
   categories,
@@ -42,44 +41,29 @@ export function AppDataProvider({
   usdLbpRate,
   children,
 }: {
-  /** @deprecated Test/compatibility input; production passes walletContainers. */
-  wallets?: Wallet[];
-  walletContainers?: WalletContainer[];
-  currencies?: CurrencyDefinition[];
+  walletContainers: WalletContainer[];
+  currencies: CurrencyDefinition[];
   categories: Category[];
   timezone: string;
-  salary: { amountMinor: number; walletId: string } | null;
+  salary: { amountMinor: number; balanceId: string } | null;
   usdLbpRate: number | null;
   children: React.ReactNode;
 }) {
+  const source = containerInput;
+  const [order, setOrder] = useState<{ source: typeof source; ids: string[] | null }>({ source, ids: null });
+  const orderIds = order.source === source ? order.ids : null;
   const value = useMemo<AppData>(() => {
-    // Built-in defaults belong only to the transitional legacy input adapter.
     if (containerInput && !currencyInput) throw new Error("App currency data unavailable");
-    const currencies = currencyInput ?? DEFAULT_CURRENCIES.map((currency) => ({ ...currency }));
+    const currencies = currencyInput;
     let currencyIndex: ReadonlyMap<string, CurrencyDefinition>;
     try {
       currencyIndex = indexCurrencies(currencies);
     } catch {
       throw new Error("App currency data unavailable");
     }
-    const walletContainers = containerInput ?? (legacyInput ?? []).map((wallet): WalletContainer => ({
-      id: wallet.id,
-      name: wallet.name,
-      kind: wallet.kind,
-      position: wallet.position,
-      deleted: wallet.archived,
-      needsAttention: false,
-      defaultBalanceId: wallet.id,
-      balances: [{
-        id: wallet.id,
-        walletId: wallet.id,
-        currency: wallet.currency,
-        openingBalanceMinor: wallet.openingBalanceMinor,
-        balanceMinor: wallet.balanceMinor,
-        position: 0,
-        detached: false,
-      }],
-    }));
+    const walletContainers = [...containerInput].sort((left, right) => left.position - right.position);
+    const ordinaryWallets = walletContainers.filter((wallet) => !wallet.deleted && !wallet.needsAttention);
+    const orderedOrdinary = reconcileWalletOrder(ordinaryWallets, orderIds);
     const walletIndex = new Map<string, WalletContainer>();
     const balanceIndex = new Map<string, WalletBalance>();
     const enabledCurrencies = currencies.filter((currency) => !currency.disabled);
@@ -104,21 +88,6 @@ export function AppDataProvider({
           || enabledCurrencies.some((currency) => !balanceCurrencies.has(currency.code))) throw new Error("App wallet data unavailable");
       }
     }
-    const legacyWallets = walletContainers.flatMap((wallet): Wallet[] => {
-      const balance = wallet.defaultBalanceId === null ? undefined : balanceIndex.get(wallet.defaultBalanceId);
-      if (!balance || !isCurrency(balance.currency)) return [];
-      return [{
-        id: wallet.id,
-        name: wallet.name,
-        kind: wallet.kind,
-        currency: balance.currency,
-        openingBalanceMinor: balance.openingBalanceMinor,
-        balanceMinor: balance.balanceMinor,
-        position: wallet.position,
-        archived: wallet.deleted || wallet.needsAttention,
-      }];
-    });
-    const legacyIndex = new Map(legacyWallets.map((wallet) => [wallet.id, wallet]));
     const c = new Map(categories.map((x) => [x.id, x]));
     const projectEnabledBalances = (wallet: WalletContainer): WalletContainer => ({
       ...wallet,
@@ -126,8 +95,11 @@ export function AppDataProvider({
         .sort((left, right) => currencyOrder.get(left.currency)! - currencyOrder.get(right.currency)!),
     });
     return {
-      legacyWallets,
-      walletContainers: walletContainers.filter((wallet) => !wallet.deleted && !wallet.needsAttention).map(projectEnabledBalances),
+      walletContainers: orderedOrdinary.map(projectEnabledBalances),
+      walletOrderSource: source,
+      setWalletOrder: (ids) => {
+        if (ids === null || applyWalletOrder(ordinaryWallets, ids)) setOrder({ source, ids });
+      },
       needsAttentionWallets: walletContainers.filter((wallet) => !wallet.deleted && wallet.needsAttention).map(projectEnabledBalances),
       currencies,
       enabledCurrencies,
@@ -138,10 +110,9 @@ export function AppDataProvider({
       walletById: (id) => walletIndex.get(id),
       balanceById: (id) => balanceIndex.get(id),
       currencyByCode: (code) => currencyIndex.get(code),
-      legacyWalletById: (id) => legacyIndex.get(id),
       categoryById: (id) => c.get(id),
     };
-  }, [legacyInput, containerInput, currencyInput, categories, timezone, salary, usdLbpRate]);
+  }, [containerInput, currencyInput, categories, timezone, salary, usdLbpRate, source, orderIds]);
   return <Context value={value}>{children}</Context>;
 }
 

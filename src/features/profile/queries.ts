@@ -13,7 +13,8 @@ type ProfileRow = {
   timezone: string;
   onboarded_at: string | null;
   salary_amount_minor?: number | string | null;
-  salary_wallet_id?: string | null;
+  /** Exact durable balance selected for the saved salary configuration. */
+  salary_balance_id?: string | null;
   usd_lbp_rate?: number | null;
 };
 
@@ -27,8 +28,8 @@ export const getProfile = cache(async (): Promise<Profile> => {
 
   // Newer columns come from later migrations; fall back to older column sets if one is not applied yet.
   const columnSets = [
-    "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_wallet_id, usd_lbp_rate",
-    "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_wallet_id",
+    "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_balance_id, usd_lbp_rate",
+    "locale, digits, theme, timezone, onboarded_at, salary_amount_minor, salary_balance_id",
     "locale, digits, theme, timezone, onboarded_at",
   ];
   let data: ProfileRow | null = null;
@@ -49,8 +50,8 @@ export const getProfile = cache(async (): Promise<Profile> => {
     onboarded: data.onboarded_at !== null,
     usdLbpRate: data.usd_lbp_rate ?? null,
     salary:
-      data.salary_amount_minor != null && data.salary_wallet_id != null
-        ? { amountMinor: Number(data.salary_amount_minor), walletId: data.salary_wallet_id }
+      data.salary_amount_minor != null && data.salary_balance_id != null
+        ? { amountMinor: Number(data.salary_amount_minor), balanceId: data.salary_balance_id }
         : null,
   });
   return parsed.success ? parsed.data : DEFAULT_PROFILE;

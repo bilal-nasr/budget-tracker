@@ -12,9 +12,9 @@ describe("pending payments", () => {
       expect(pendingPaymentSchema.safeParse({ ...job, ...patch }).success).toBe(false);
   });
   it("validates partial receipt identity, amount, wallet, category and date", () => {
-    const receipt = { requestId: id, paymentId: id, walletId: id, categoryId: id, amountMinor: 2500, occurredOn: "2026-11-04" };
+    const receipt = { requestId: id, paymentId: id, balanceId: id, categoryId: id, amountMinor: 2500, occurredOn: "2026-11-04" };
     expect(receiptSchema.safeParse(receipt).success).toBe(true);
-    for (const patch of [{ amountMinor: 0 }, { walletId: "foreign" }, { categoryId: "" }, { occurredOn: "2026-13-01" }])
+    for (const patch of [{ amountMinor: 0 }, { balanceId: "foreign" }, { categoryId: "" }, { occurredOn: "2026-13-01" }])
       expect(receiptSchema.safeParse({ ...receipt, ...patch }).success).toBe(false);
   });
 });

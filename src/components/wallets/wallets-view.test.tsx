@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "@/messages/en.json";
 import ar from "@/messages/ar.json";
@@ -9,6 +9,8 @@ import type { CurrencyDefinition } from "@/lib/currency";
 import type { WalletContainer } from "@/features/wallets/schema";
 import { WalletsView } from "./wallets-view";
 const openWallet = vi.fn();
+const reorderWallets = vi.fn().mockResolvedValue({ ok: true });
+vi.mock("@/features/wallets/actions", () => ({ reorderWallets: (...args: unknown[]) => reorderWallets(...args) }));
 vi.mock("@/components/shell/composer", () => ({ useComposer: () => ({ openWallet }) }));
 vi.mock("@/i18n/navigation", () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -41,9 +43,23 @@ it.each(["en", "ar"])("%s: one global selector retains all ordinary wallets with
   expect(ordinary.textContent).toContain("USD");
   expect(screen.queryByText(en.Wallets.total)).toBeNull();
   expect(screen.queryByText("Deleted")).toBeNull();
-  fireEvent.click(within(ordinary).getAllByRole("button")[0]);
+  fireEvent.click(within(ordinary).getByRole("button", { name: (locale === "en" ? en : ar).Wallets.editNamed.replace("{name}", "Pocket") }));
   expect(openWallet).toHaveBeenCalledWith(expect.objectContaining({ id: "Pocket", defaultBalanceId: "Pocket-USD" }));
   expect(ordinary.querySelector('.amount')?.getAttribute("dir")).toBe("ltr");
+});
+it("retains the same saved global order across currency selection and exact defaults", async () => {
+  render(view());
+  const handle = screen.getByRole("button", { name: "Reorder Pocket" });
+  fireEvent.keyDown(handle, { key: " " });
+  fireEvent.keyDown(handle, { key: "ArrowDown" });
+  fireEvent.keyDown(handle, { key: " " });
+  await waitFor(() => expect(reorderWallets).toHaveBeenCalledWith(["Bank", "Pocket"]));
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "TOKEN" } });
+  const ordinary = screen.getByRole("list", { name: "Wallets" });
+  expect(within(ordinary).getAllByRole("listitem").map((item) => item.querySelector("bdi")?.textContent)).toEqual(["Bank", "Pocket"]);
+  expect(ordinary.textContent).toContain("◈1.23456790");
+  fireEvent.click(within(ordinary).getByRole("button", { name: "Edit Bank" }));
+  expect(openWallet).toHaveBeenCalledWith(expect.objectContaining({ id: "Bank", defaultBalanceId: "Bank-TOKEN" }));
 });
 it("keeps Needs-attention wallets in a separate labeled section", () => {
   render(view());

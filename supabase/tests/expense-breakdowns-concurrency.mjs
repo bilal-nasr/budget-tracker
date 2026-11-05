@@ -52,7 +52,7 @@ const owner = randomUUID();
 const wallet = randomUUID();
 const parent = randomUUID();
 const claims = JSON.stringify({ sub: owner, role: "authenticated" });
-const asOwner = `set local role authenticated; select set_config('request.jwt.claims','${claims}',true);`;
+const asOwner = `set local role authenticated; select set_config('request.jwt.claims','${claims}',true); select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 const safeError = (value) => connection ? String(value).replaceAll(connection, "<local test database>") : String(value);
 const active = new Set();
 

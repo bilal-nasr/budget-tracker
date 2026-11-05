@@ -10,14 +10,14 @@ import type { ReceiveSalaryInput, CycleMutation } from "@/features/installments/
 export async function saveSalary(input: SalaryInput): Promise<ActionResult> {
   const parsed = salaryInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const ctx = await actionClient();
+  const ctx = await actionClient(parsed.data.expectedUnits);
   if (ctx.error) return { ok: false, error: ctx.error };
 
   const { error } = await ctx.supabase
     .from("profiles")
-    .update({ salary_amount_minor: parsed.data.amountMinor, salary_wallet_id: parsed.data.walletId })
+    .update({ salary_amount_minor: parsed.data.amountMinor, salary_balance_id: parsed.data.balanceId })
     .eq("user_id", ctx.userId);
-  if (error) return { ok: false, error: "failed" };
+  if (error) return { ok: false, error: error.message === "currency.intentConflict" ? "conflict" : "failed" };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -27,9 +27,9 @@ export async function clearSalary(): Promise<ActionResult> {
   if (ctx.error) return { ok: false, error: ctx.error };
   const { error } = await ctx.supabase
     .from("profiles")
-    .update({ salary_amount_minor: null, salary_wallet_id: null })
+    .update({ salary_amount_minor: null, salary_balance_id: null })
     .eq("user_id", ctx.userId);
-  if (error) return { ok: false, error: "failed" };
+  if (error) return { ok: false, error: error.message === "currency.intentConflict" ? "conflict" : "failed" };
   revalidatePath("/", "layout");
   return { ok: true };
 }

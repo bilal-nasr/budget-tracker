@@ -14,7 +14,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: (ta
 } }) }));
 import { getPendingPayments, getPendingReceipts } from "./queries";
 const job = { id: "job", client: "Client", project: "Website", currency: "USD", total_minor: "10000", received_minor: "2500", remaining_minor: "7500", due_on: null, revision: 1, has_receipt_history: true };
-const receipt = { id: "receipt", pending_payment_id: "job", amount_minor: "2500", occurred_on: "2026-01-01", wallet_id: "wallet" };
+const receipt = { id: "receipt", pending_payment_id: "job", amount_minor: "2500", occurred_on: "2026-01-01", balance_id: "wallet" };
 beforeEach(() => { state.configured = true; state.error = false; state.jobs = [{ ...job }]; state.receipts = [{ ...receipt }]; state.ranges = []; state.tables = []; state.filters = []; });
 describe("pending payment reads", () => {
   it("reads exact money and preserves history eligibility after live receipts are deleted", async () => {
@@ -40,18 +40,24 @@ describe("pending payment reads", () => {
     expect(state.tables.every((table) => table === "transactions")).toBe(true);
     expect(state.filters).toContainEqual(["pending_payment_id", "job"]);
     expect(receipts).toHaveLength(1001);
-    expect(receipts[0]).toEqual({ id: "receipt-0", amountMinor: 2500, occurredOn: "2026-01-01", walletId: "wallet" });
+    expect(receipts[0]).toEqual({ id: "receipt-0", amountMinor: 2500, occurredOn: "2026-01-01", balanceId: "wallet" });
   });
-  it("fails visibly on query errors, unknown currencies and unsafe amounts", async () => {
+  it("fails visibly on query errors, malformed currency codes and unsafe amounts", async () => {
     state.error = true;
     await expect(getPendingPayments()).rejects.toThrow();
     await expect(getPendingReceipts("job")).rejects.toThrow();
     state.error = false;
-    state.jobs = [{ ...job, currency: "EUR" }];
+    state.jobs = [{ ...job, currency: "invalid-code" }];
     await expect(getPendingPayments()).rejects.toThrow();
     state.jobs = [{ ...job, total_minor: "1000000000000001" }];
     await expect(getPendingPayments()).rejects.toThrow();
     state.receipts = [{ ...receipt, amount_minor: "1000000000000001" }];
     await expect(getPendingReceipts("job")).rejects.toThrow();
   });
+});
+
+it("retains custom-currency historical jobs and exact receipt balances",async()=>{
+ state.jobs=[{...job,currency:"TOKEN8",total_minor:"123456789"}];state.receipts=[{...receipt,balance_id:"exact-custom-balance",amount_minor:"123456789"}];
+ expect((await getPendingPayments())[0]).toMatchObject({currency:"TOKEN8",totalMinor:123456789});
+ expect((await getPendingReceipts("job"))[0]).toMatchObject({balanceId:"exact-custom-balance",amountMinor:123456789});
 });

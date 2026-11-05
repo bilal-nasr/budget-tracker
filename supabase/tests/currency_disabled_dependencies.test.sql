@@ -1,6 +1,8 @@
 -- Rollback-only regression coverage for reactivating resolved dependencies after
 -- global currency disable. Each bypass uses a separate currency/fixture.
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 create extension if not exists pgtap with schema extensions;
 set local search_path=public,extensions;
 select no_plan();
@@ -13,6 +15,7 @@ create temp table dependency_categories as
  select id,row_number() over(order by position,id) n from public.categories
  where kind='expense' and parent_id is null;
 select public.create_currency(code,symbol,2) from (values('INST','I'),('BDATE','D'),('BCAT','C'),('BDEL','X')) c(code,symbol);
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"INST":2,"BDATE":2,"BCAT":2,"BDEL":2}')::text,true);
 create temp table dependency_wallet as select public.create_wallet('Resolved installment','cash','INST',0) id;
 insert into public.installments(id,name,total_minor,paid_before_minor,currency,balance_id,category_id)
  select 'cdb10000-0000-4000-8000-000000000001','Completed before tracking',100,100,'INST',

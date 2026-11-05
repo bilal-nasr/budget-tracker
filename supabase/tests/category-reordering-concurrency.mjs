@@ -23,7 +23,7 @@ const args = ["exec", "-i", "-e", "PGPASSWORD=", "-e", "PGOPTIONS=", "-e", "PGPA
   "-d", database, "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"];
 const runFile = promisify(execFile);
 const owner = randomUUID();
-const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true);`;
+const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 const active = new Set();
 
 async function sql(statement) {

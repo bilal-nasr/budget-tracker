@@ -2,6 +2,8 @@ import ExcelJS from "exceljs";
 import { describe, expect, it, vi } from "vitest";
 import { emptyTransactionMetadata } from "@/features/transactions/schema";
 import type { ExportData } from "./model";
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
+import { singleBalanceWallets } from "./test-fixtures";
 vi.mock("server-only", () => ({}));
 import { getExportLabels } from "./labels";
 import { buildExportWorkbook, writeExportWorkbook } from "./workbook";
@@ -9,13 +11,13 @@ import { buildExportWorkbook, writeExportWorkbook } from "./workbook";
 const ENGLISH_SHEETS = [
   "Cover", "Financial Summary", "Reconciliation", "Monthly Activity", "Wallet Ledger", "Budget vs Actual",
   "Transactions", "Expense Items", "Wallets", "Categories", "Salary", "Fixed Expenses", "Installments",
-  "Installment Payments", "Loans", "Loan Payments", "Receivables", "Receipts", "Checks & Definitions",
+  "Installment Payments", "Loans", "Loan Payments", "Receivables", "Receipts", "Checks & Definitions", "Currency Catalog", "Balances", "Source & Exact Facts",
 ];
 
 const ARABIC_SHEETS = [
   "الغلاف", "الملخص المالي", "التسوية", "النشاط الشهري", "دفتر المحافظ", "الميزانية والفعلية",
   "المعاملات", "تفاصيل المصروفات", "المحافظ", "الفئات", "الراتب", "المصاريف الثابتة", "الأقساط",
-  "دفعات الأقساط", "القروض", "دفعات القروض", "المبالغ المستحقة", "التحصيلات", "الفحوص والتعريفات",
+  "دفعات الأقساط", "القروض", "دفعات القروض", "المبالغ المستحقة", "التحصيلات", "الفحوص والتعريفات", "دليل العملات", "الأرصدة", "المصادر والقيم الدقيقة",
 ];
 
 function fixture(locale: "en" | "ar" = "en"): ExportData {
@@ -25,14 +27,15 @@ function fixture(locale: "en" | "ar" = "en"): ExportData {
     exportedAt: new Date("2026-11-05T08:00:00Z"),
     cutoffDate: "2026-11-05",
     profile: { locale, digits: "latin", theme: "light", timezone: "Asia/Beirut", onboarded: true, usdLbpRate: null,
-      salary: { amountMinor: 200_000, walletId: "wallet" } },
-    wallets: [{ id: "wallet", name: "Main wallet", kind: "bank", currency: "USD", openingBalanceMinor: 10_000,
-      balanceMinor: 11_000, position: 1, archived: false }],
+      salary: { amountMinor: 200_000, balanceId: "wallet" } },
+    currencies: SEED_CURRENCY_DEFINITIONS,
+    wallets: singleBalanceWallets([{ id: "wallet", name: "Main wallet", kind: "bank", currency: "USD", openingBalanceMinor: 10_000,
+      balanceMinor: 11_000, position: 1, archived: false }]),
     categories: [{ id: "category", kind: "income", nameEn: "Consulting", nameAr: "استشارات", tile: 1,
       color: "teal", position: 1, parentId: null, archivedAt: null }],
     transactions: [{
       ...emptyTransactionMetadata(), id: "transaction", kind: "income", occurredOn: "2026-11-01", amountMinor: 1_000,
-      currency: "USD", walletId: "wallet", categoryId: "category", toWalletId: null, toAmountMinor: null,
+      currency: "USD", balanceId: "wallet", categoryId: "category", toBalanceId: null, toAmountMinor: null,
       note: "November work", createdAt: "2026-11-01T10:00:00Z", pendingPaymentId: "pending",
     }],
     budgetRevisions: [],
@@ -42,7 +45,7 @@ function fixture(locale: "en" | "ar" = "en"): ExportData {
     pendingPayments: [{ id: "pending", client: "Client", project: "Project", currency: "USD", totalMinor: 2_000,
       receivedMinor: 1_000, remainingMinor: 1_000, dueOn: "2026-11-30", revision: 1, hasReceiptHistory: true }],
     pendingReceipts: [{ id: "transaction", paymentId: "pending", amountMinor: 1_000, occurredOn: "2026-11-01",
-      walletId: "wallet", categoryId: "category" }],
+      balanceId: "wallet", categoryId: "category" }],
   };
 }
 
@@ -72,9 +75,9 @@ describe("accountant workbook structure", () => {
     expect(workbook.getWorksheet("دفتر المحافظ")?.getRow(4).values).toContain(getExportLabels("ar").columns.walletName);
   });
 
-  it("keeps all nineteen sheets with headers when every source schedule is empty", () => {
+  it("keeps all twenty-two sheets with headers when every source schedule is empty", () => {
     const workbook = buildExportWorkbook(emptyFixture());
-    expect(workbook.worksheets).toHaveLength(19);
+    expect(workbook.worksheets).toHaveLength(22);
     for (const sheet of workbook.worksheets.slice(2)) {
       expect(sheet.getRow(4).cellCount).toBeGreaterThan(0);
     }
@@ -92,17 +95,17 @@ describe("accountant workbook structure", () => {
 
   it("stores a cross-currency transfer destination currency and formats its amount independently", () => {
     const source = fixture();
-    const data: ExportData = { ...source, wallets: [
-      { ...source.wallets[0], currency: "LBP", openingBalanceMinor: 0, balanceMinor: -100_000 },
+    const data: ExportData = { ...source, wallets: singleBalanceWallets([
+      { id: "wallet", name: "LBP wallet", kind: "bank", currency: "LBP", openingBalanceMinor: 0, balanceMinor: -100_000, position: 1, archived: false },
       { id: "usd-wallet", name: "USD wallet", kind: "bank", currency: "USD", openingBalanceMinor: 0,
         balanceMinor: 1_234, position: 2, archived: false },
-    ], transactions: [{
+    ]), profile: { ...source.profile, salary: null }, pendingReceipts: [], transactions: [{
       ...source.transactions[0], kind: "transfer", categoryId: null, currency: "LBP", amountMinor: 100_000,
-      toWalletId: "usd-wallet", toAmountMinor: 1_234,
+      toBalanceId: "usd-wallet", toAmountMinor: 1_234,
     }] };
     const labels = getExportLabels("en");
     const sheet = buildExportWorkbook(data).getWorksheet("Transactions")!;
-    const destinationWalletId = columnAt(sheet, `${labels.columns.transferIn} ${labels.columns.walletId}`);
+    const destinationWalletId = columnAt(sheet, `${labels.columns.transferIn} ${labels.columns.balanceId}`);
     const destinationCurrency = columnAt(sheet, `${labels.columns.transferIn} ${labels.columns.currency}`);
     const destinationAmount = columnAt(sheet, `${labels.columns.transferIn} ${labels.columns.amount}`);
     expect(sheet.getCell(5, destinationWalletId).value).toBe("usd-wallet");
@@ -196,7 +199,7 @@ describe("accountant workbook controls", () => {
     expect(transactions.getTable("TransactionsTable").getColumn(0).filterButton).toBe(true);
     const reconciliation = workbook.getWorksheet("Reconciliation")!;
     expect((reconciliation as unknown as { conditionalFormattings: unknown[] }).conditionalFormattings).toHaveLength(1);
-    expect(reconciliation.getRow(4).getCell(1).fill).toMatchObject({ type: "pattern", fgColor: { argb: "FF1F4E78" } });
+    expect(reconciliation.getRow(4).getCell(1).fill).toMatchObject({ type: "pattern", fgColor: { argb: "FF28574F" } });
   });
 
   it("writes a readable xlsx buffer that ExcelJS can load again", async () => {

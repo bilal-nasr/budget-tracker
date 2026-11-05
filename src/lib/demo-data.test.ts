@@ -1,3 +1,4 @@
+import { requireCurrency, SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { demoPage } from "./demo-data";
@@ -24,12 +25,12 @@ describe("synthetic transaction composition", () => {
     const supermarket = rows.find((row) => row.note === "Supermarket" && row.occurredOn === todayIn("Asia/Beirut"));
     expect(supermarket).toBeDefined();
     expect(supermarket!.currency).toBe("USD");
-    expect(supermarket!.items.map((item) => toInputText(item.amountMinor, supermarket!.currency))).toEqual(["20", "30"]);
+    expect(supermarket!.items.map((item) => toInputText(item.amountMinor, requireCurrency(supermarket!.currency, SEED_CURRENCY_DEFINITIONS)))).toEqual(["20", "30"]);
     expect(supermarket!.amountMinor).toBe(5420);
     const syp = rows.find((row) => row.note === "Synthetic SYP groceries");
     expect(syp).toBeDefined();
     expect(syp!.currency).toBe("SYP");
-    expect(toInputText(syp!.amountMinor, syp!.currency)).toBe("1250");
+    expect(toInputText(syp!.amountMinor, requireCurrency(syp!.currency, SEED_CURRENCY_DEFINITIONS))).toBe("1250");
     expect(syp!.items).toEqual([]);
   });
 });

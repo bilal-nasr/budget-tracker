@@ -1,5 +1,6 @@
+import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { z } from "zod";
-import { MAX_MINOR, type Currency } from "@/lib/money";
+import { MAX_MINOR } from "@/lib/money";
 import { calculateLoanFee, calculateLoanPaymentPlan } from "./calculations";
 
 export function isLoanDate(value: string): boolean {
@@ -18,9 +19,10 @@ const pairedPreferences = (v: { monthlyPaymentMinor?: number | null; paymentCoun
   (v.monthlyPaymentMinor === null && v.paymentCount === null) ||
   (v.monthlyPaymentMinor != null && v.paymentCount != null);
 export const loanCreateSchema = z.strictObject({
+  expectedUnits: expectedUnitsSchema.optional(),
   requestId: z.uuid(), name: z.string().trim().min(1).max(60), direction: z.enum(["borrowed", "lent"]),
   principalMinor: minor.min(1), feeBps: z.number().int().min(0).max(10000),
-  walletId: z.uuid(), feeCategoryId: z.uuid(), openedOn: date, creationMode: z.enum(["new", "existing"]),
+  balanceId: z.uuid(), feeCategoryId: z.uuid(), openedOn: date, creationMode: z.enum(["new", "existing"]),
   principalPaidBeforeMinor: minor, feePaidBeforeMinor: minor,
   ...repaymentPreferences,
 }).superRefine((v, ctx) => {
@@ -30,20 +32,22 @@ export const loanCreateSchema = z.strictObject({
   if (v.creationMode === "new" && (v.principalPaidBeforeMinor !== 0 || v.feePaidBeforeMinor !== 0)) ctx.addIssue({ code: "custom", message: "new loans cannot have opening payments" });
   if (!pairedPreferences(v) || (v.monthlyPaymentMinor != null && v.paymentCount != null && fee && !calculateLoanPaymentPlan(fee.totalDueMinor, v.monthlyPaymentMinor, v.paymentCount))) ctx.addIssue({ code: "custom", path: ["paymentCount"], message: "invalid repayment plan" });
 });
-export const loanEditSchema = z.strictObject({ name: z.string().trim().min(1).max(60), walletId: z.uuid(), feeCategoryId: z.uuid(), ...repaymentPreferences })
+export const loanEditSchema = z.strictObject({
+  expectedUnits: expectedUnitsSchema.optional(), name: z.string().trim().min(1).max(60), balanceId: z.uuid(), feeCategoryId: z.uuid(), ...repaymentPreferences })
   .refine(pairedPreferences, { path: ["paymentCount"], message: "provide or clear both plan fields" });
-export const loanPaymentSchema = z.strictObject({ requestId: z.uuid(), loanId: z.uuid(), walletId: z.uuid(), amountMinor: minor.min(1), occurredOn: date });
+export const loanPaymentSchema = z.strictObject({
+  expectedUnits: expectedUnitsSchema.optional(), requestId: z.uuid(), loanId: z.uuid(), balanceId: z.uuid(), amountMinor: minor.min(1), occurredOn: date });
 export type LoanCreateInput = z.infer<typeof loanCreateSchema>;
 export type LoanEditInput = z.infer<typeof loanEditSchema>;
 export type LoanPaymentInput = z.infer<typeof loanPaymentSchema>;
 export type LoanDirection = LoanCreateInput["direction"];
 export type LoanEvent = {
   transactionId: string; revision: number; loanId: string; event: "disbursement" | "repayment"; flow: "in" | "out";
-  sequence: number; walletId: string; occurredOn: string; amountMinor: number; principalMinor: number; feeMinor: number;
+  sequence: number; balanceId: string; occurredOn: string; amountMinor: number; principalMinor: number; feeMinor: number;
   categoryId: string | null; deletedAt: string | null;
 };
 export type Loan = {
-  id: string; name: string; direction: LoanDirection; currency: Currency; walletId: string; feeCategoryId: string;
+  id: string; name: string; direction: LoanDirection; currency: string; balanceId: string; feeCategoryId: string;
   openedOn: string; creationMode: "new" | "existing"; principalMinor: number; feeBps: number; feeMinor: number;
   totalDueMinor: number; principalPaidBeforeMinor: number; feePaidBeforeMinor: number; principalPaidMinor: number;
   feePaidMinor: number; principalRemainingMinor: number; feeRemainingMinor: number; remainingMinor: number;

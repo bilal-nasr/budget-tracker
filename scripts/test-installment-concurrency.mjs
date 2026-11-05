@@ -32,7 +32,7 @@ if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw n
 const owner = randomUUID();
 const wallet = randomUUID();
 const installment = randomUUID();
-const claims = `select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); set local role authenticated;`;
+const claims = `select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); set local role authenticated; select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 
 function session(sql, marker) {
   const common = ["-X", "-q", "-t", "-A", "--no-password", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", database];
@@ -123,7 +123,7 @@ try {
     with fixture(id,name,kind,currency) as (values ('${wallet}','Synthetic cycle bank','bank','USD')), containers as (
     insert into public.wallets(id,name,kind,default_balance_id) select id::uuid,name,kind::public.wallet_kind,id::uuid from fixture returning id,user_id
     ) insert into public.wallet_balances(id,user_id,wallet_id,currency,position)
-    select c.id,c.user_id,c.id,f.currency,0 from fixture f join containers c on c.id=f.id::uuid;
+    select case when catalog.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,catalog.code,(row_number() over(order by catalog.created_at,catalog.code)-1)::integer from fixture f join containers c on c.id=f.id::uuid join public.currencies catalog on catalog.user_id=c.user_id and catalog.disabled_at is null;
     insert into public.installments(id,name,total_minor,monthly_minor,balance_id,category_id)
       select '${installment}','Synthetic cycle debt',1000000,10000,'${wallet}',id from public.categories where kind='expense' and parent_id is null order by position limit 1;
     update public.profiles set salary_amount_minor=180000,salary_balance_id='${wallet}';

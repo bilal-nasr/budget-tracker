@@ -4,10 +4,12 @@ import { cache } from "react";
 import { getCurrencies } from "@/features/currencies/queries";
 import { DEMO_WALLET_CONTAINERS } from "@/lib/demo-data";
 import { indexCurrencies, requireCurrency, type CurrencyDefinition } from "@/lib/currency";
-import { isCurrency, readMinor } from "@/lib/money";
+import { readMinor } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
-import { walletContainerSchema, type Wallet, type WalletContainer } from "./schema";
+import { readAllByKey } from "@/lib/supabase/read-all";
+import { compareTimestamps } from "@/lib/timestamp";
+import { walletContainerSchema, type WalletContainer } from "./schema";
 
 export type WalletQueryOptions = {
   includeDeleted?: boolean;
@@ -46,33 +48,40 @@ const getWalletsCached = cache(async (
   const supabase = await createClient();
   const [currencies, wallets, balances, totals] = await Promise.all([
     getCurrencies(),
-    supabase.from("wallets")
+    readAllByKey(async (after, limit) => {
+      let query = supabase.from("wallets")
       .select("id, name, kind, default_balance_id, position, deleted_at, needs_attention, created_at")
-      .order("position")
-      .order("created_at")
-      .order("id"),
-    supabase.from("wallet_balances")
+      .order("id").limit(limit);
+      if (after !== null) query = query.gt("id", after);
+      return query;
+    }, (row) => row.id, "Wallet data unavailable"),
+    readAllByKey(async (after, limit) => {
+      let query = supabase.from("wallet_balances")
       .select("id, wallet_id, currency, opening_balance_minor, position, detached_at, created_at")
-      .order("position")
-      .order("created_at")
-      .order("id"),
-    supabase.from("wallet_balance_totals")
-      .select("balance_id, wallet_id, currency, balance_minor"),
+      .order("id").limit(limit);
+      if (after !== null) query = query.gt("id", after);
+      return query;
+    }, (row) => row.id, "Wallet balances unavailable"),
+    readAllByKey(async (after, limit) => {
+      let query = supabase.from("wallet_balance_totals")
+        .select("balance_id, wallet_id, currency, balance_minor").order("balance_id").limit(limit);
+      if (after !== null) query = query.gt("balance_id", after);
+      const result = await query;
+      if (result.error || !result.data) throw new Error("Wallet balances unavailable");
+      return result;
+    }, (row) => row.balance_id, "Wallet balance total unavailable"),
   ]);
-
-  if (wallets.error || !wallets.data) throw new Error("Wallet data unavailable");
-  if (balances.error || !balances.data || totals.error || !totals.data) throw new Error("Wallet balances unavailable");
-
-  const walletIds = new Set(wallets.data.map((wallet) => wallet.id));
+  wallets.sort((a, b) => a.position - b.position || compareTimestamps(a.created_at, b.created_at) || a.id.localeCompare(b.id));
+  const walletIds = new Set(wallets.map((wallet) => wallet.id));
   const totalByBalance = new Map<string, TotalRow>();
-  for (const total of totals.data as TotalRow[]) {
+  for (const total of totals as TotalRow[]) {
     if (totalByBalance.has(total.balance_id)) throw new Error("Wallet balance total unavailable");
     totalByBalance.set(total.balance_id, total);
   }
 
   const balancesByWallet = new Map<string, WalletContainer["balances"]>();
   const balanceIds = new Set<string>();
-  for (const row of balances.data as BalanceRow[]) {
+  for (const row of balances as BalanceRow[]) {
     if (!walletIds.has(row.wallet_id) || balanceIds.has(row.id)) throw new Error("Invalid wallet data");
     balanceIds.add(row.id);
     requireCurrency(row.currency, currencies);
@@ -95,7 +104,7 @@ const getWalletsCached = cache(async (
     throw new Error("Wallet balance total unavailable");
   }
 
-  const mapped = wallets.data.map((row) => {
+  const mapped = wallets.map((row) => {
     const walletBalances = balancesByWallet.get(row.id) ?? [];
     const parsed = walletContainerSchema.safeParse({
       id: row.id,
@@ -163,26 +172,4 @@ function projectWallets(
 /** Nested wallet containers. Monetary callers must retain the exact balance IDs. */
 export async function getWallets(options: WalletQueryOptions = {}): Promise<WalletContainer[]> {
   return getWalletsCached(options.includeDeleted === true, options.includeNeedsAttention === true, options.includeDisabledBalances === true);
-}
-
-/**
- * @deprecated Transitional default-balance-only adapter for the app layout and
- * budgets page. Task 4/9 migrate those consumers to `getWallets`.
- */
-export async function getLegacyWallets(): Promise<Wallet[]> {
-  return (await getWallets()).map((wallet) => {
-    const balance = wallet.balances.find((candidate) => candidate.id === wallet.defaultBalanceId);
-    if (!balance) throw new Error("Invalid wallet data");
-    if (!isCurrency(balance.currency)) throw new Error("Legacy wallet currency unavailable");
-    return {
-      id: wallet.id,
-      name: wallet.name,
-      kind: wallet.kind,
-      currency: balance.currency,
-      openingBalanceMinor: balance.openingBalanceMinor,
-      balanceMinor: balance.balanceMinor,
-      position: wallet.position,
-      archived: wallet.deleted || wallet.needsAttention,
-    };
-  });
 }

@@ -27,8 +27,8 @@ describe("buildMonthBudgets", () => {
     expect(syp.totalLimitMinor).toBe(5000);
     expect(syp.totalSpentMinor).toBe(1250);
     expect(syp.rows[0].leftMinor).toBe(3750);
-    expect(availableBudgetCurrencies([{ currency: "SYP", archived: true }], [syp])).toEqual(["SYP"]);
-    expect(availableBudgetCurrencies([{ currency: "SYP", archived: false }], [])).toEqual(["SYP"]);
+    expect(availableBudgetCurrencies([{ code: "SYP", disabled: true }], [syp])).toEqual(["SYP"]);
+    expect(availableBudgetCurrencies([{ code: "SYP", disabled: false }], [])).toEqual(["SYP"]);
   });
 
   it("computes left and progress, and flags over-budget rows", () => {

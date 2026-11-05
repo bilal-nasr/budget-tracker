@@ -1,3 +1,5 @@
+import { completeFixtureWallets } from "@/test/balance-fixtures";
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -6,7 +8,7 @@ import en from "@/messages/en.json";
 import ar from "@/messages/ar.json";
 import { AppDataProvider } from "@/components/providers/app-data";
 import { emptyTransactionMetadata, type Transaction } from "@/features/transactions/schema";
-import type { Wallet } from "@/features/wallets/schema";
+import type { BalanceFixture as Wallet } from "@/test/balance-fixtures";
 import type { Category } from "@/features/categories/schema";
 const mock = vi.hoisted(() => ({
   createTransaction: vi.fn(), createTransfer: vi.fn(), updateTransaction: vi.fn(), deleteTransaction: vi.fn(),
@@ -30,14 +32,14 @@ const wallets: Wallet[] = ["USD", "SYP", "LBP"].map((currency, n) => ({
 const categories: Category[] = [{ id: categoryId, kind: "expense", parentId: null, archivedAt: null,
   nameEn: "Other", nameAr: "أخرى", tile: 1, color: "teal", position: 1 }];
 const saved: Transaction = {
-  ...emptyTransactionMetadata(), id, kind: "expense", amountMinor: 5000, currency: "USD", walletId,
+  ...emptyTransactionMetadata(), id, kind: "expense", amountMinor: 5000, currency: "USD", balanceId: walletId,
   categoryId, note: "Sister", createdAt: "2026-11-04T12:00:00Z", occurredOn: "2026-11-04",
-  toWalletId: null, toAmountMinor: null, revision: 17,
+  toBalanceId: null, toAmountMinor: null, revision: 17,
   items: [{ id: "saved-line", description: "Phone credits", amountMinor: 2000, position: 0 }],
 };
 function wrap(children: React.ReactNode, locale: "en" | "ar" = "en") {
   return render(<NextIntlClientProvider locale={locale} messages={locale === "en" ? en : ar}>
-    <AppDataProvider wallets={wallets} categories={categories} timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
+    <AppDataProvider walletContainers={completeFixtureWallets(wallets)} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={categories} timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
       {children}
     </AppDataProvider>
   </NextIntlClientProvider>);
@@ -71,7 +73,7 @@ describe.each(["en", "ar"] as const)("%s optional expense composition", (locale)
     expect(screen.getByText("$30.00")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: messages.Add.save }));
     await waitFor(() => expect(mock.createTransaction).toHaveBeenCalledWith(expect.objectContaining({
-      note: "Sister", amountMinor: 5000, categoryId, items: [{ description: "Phone credits", amountMinor: 2000 }],
+      expectedUnits:{USD:2}, note: "Sister", amountMinor: 5000, categoryId, items: [{ description: "Phone credits", amountMinor: 2000 }],
     }), id));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain(messages.Add.errorPreview));
     await waitFor(() => expect(screen.getByLabelText(messages.Add.name).matches(":disabled")).toBe(false));
@@ -100,7 +102,7 @@ it("retries an unknown create outcome with the same UUID/payload and guards crea
   // A catalogue refresh may archive the category after the first save committed.
   // Read-only same-ID reconciliation must still be reachable with the snapshot.
   view.rerender(<NextIntlClientProvider locale="en" messages={en}>
-    <AppDataProvider wallets={wallets} categories={[]} timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
+    <AppDataProvider walletContainers={completeFixtureWallets(wallets)} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={[]} timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
       <TransactionSheet state={state} onClose={mock.close} />
     </AppDataProvider>
   </NextIntlClientProvider>);
@@ -118,7 +120,8 @@ it("keeps itemized expense currency and kind from changing silently", () => {
   fireEvent.click(screen.getByRole("radio", { name: en.Add.income }));
   expect(screen.getByRole("alert").textContent).toContain(en.Breakdown.removeBeforeKindChange);
   fireEvent.click(screen.getByRole("button", { name: /Cash USD/ }));
-  expect((screen.getByRole("radio", { name: /Syrian cash/ }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByRole("combobox", { name: en.Add.wallet }), { target: { value: wallets.find((wallet) => wallet.currency === "SYP")!.id } });
+  expect(screen.getByRole("alert").textContent).toContain(en.Breakdown.removeBeforeCurrencyChange);
 });
 
 it("keeps exact unknown-outcome retry reachable when the final active wallet is archived", async () => {
@@ -132,7 +135,7 @@ it("keeps exact unknown-outcome retry reachable when the final active wallet is 
   fireEvent.click(screen.getByRole("button", { name: en.Add.save }));
   await screen.findByText(en.Breakdown.unknownOutcome);
   view.rerender(<NextIntlClientProvider locale="en" messages={en}>
-    <AppDataProvider wallets={wallets.map((wallet) => ({ ...wallet, archived: true }))} categories={[]}
+    <AppDataProvider walletContainers={completeFixtureWallets(wallets.map((wallet) => ({ ...wallet, archived: true })))} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={[]}
       timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
       <TransactionSheet state={state} onClose={mock.close} />
     </AppDataProvider>
@@ -176,7 +179,7 @@ describe("revision-aware expense details", () => {
     fireEvent.click(screen.getByRole("button", { name: en.Detail.delete }));
     await screen.findByText(en.Breakdown.conflict);
     view.rerender(<NextIntlClientProvider locale="en" messages={en}>
-      <AppDataProvider wallets={wallets} categories={categories} timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
+      <AppDataProvider walletContainers={completeFixtureWallets(wallets)} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={categories} timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
         <DetailSheet transaction={{ ...saved, ...snapshot, note: "Freshly selected snapshot" }}
           onClose={mock.close} onEdit={vi.fn()} onDuplicate={vi.fn()} />
       </AppDataProvider>
@@ -276,8 +279,8 @@ describe("cashier aggregate integration", () => {
   const cashSaved: Transaction = { ...saved, amountMinor: 1250,
     items: [{ ...saved.items[0], amountMinor: 1000 }],
     settlement: { tenderMinor: 2000, tenderCurrency: "USD", changes: [
-      { walletId, amountMinor: 500, currency: "USD" },
-      { walletId: wallets[1].id, amountMinor: 32500, currency: "SYP",
+      { balanceId: walletId, amountMinor: 500, currency: "USD" },
+      { balanceId: wallets[1].id, amountMinor: 32500, currency: "SYP",
         rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } },
     ] },
   };
@@ -306,13 +309,13 @@ describe("cashier aggregate integration", () => {
     for (const digit of "340000") fireEvent.click(screen.getByRole("button", { name: digit }));
     fireEvent.change(screen.getByLabelText(en.Cashier.tender), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: en.Cashier.addChange }));
-    fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.currency }), { target: { value: "LBP" } });
+    fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.wallet }), { target: { value: wallets[2].id } });
     fireEvent.change(screen.getByLabelText(en.Cashier.change), { target: { value: "110000" } });
     fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.wallet }), { target: { value: wallets[2].id } });
     fireEvent.click(screen.getByRole("button", { name: en.Add.save }));
     await waitFor(() => expect(mock.createTransaction).toHaveBeenCalledWith(expect.objectContaining({
-      amountMinor: 340000, costCurrency: "LBP",
-      settlement: { tenderMinor: 500, changes: [{ walletId: wallets[2].id, amountMinor: 110000 }] },
+      expectedUnits: {USD:2,LBP:0}, amountMinor: 340000, costCurrency: "LBP",
+      settlement: { tenderMinor: 500, changes: [{ balanceId: wallets[2].id, amountMinor: 110000 }] },
     }), id));
     expect(screen.queryByLabelText(en.Cashier.rate)).toBeNull();
   });
@@ -325,10 +328,10 @@ describe("cashier aggregate integration", () => {
     expect(screen.queryByLabelText(m.Cashier.rate)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: m.Add.saveChanges }));
     await waitFor(() => expect(mock.updateTransaction).toHaveBeenCalledWith(id, expect.objectContaining({
-      amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
+      expectedUnits:{USD:2,SYP:0}, amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
       settlement: { tenderMinor: 2000, changes: [
-        { walletId, amountMinor: 500 },
-        { walletId: wallets[1].id, amountMinor: 32500,
+        { balanceId: walletId, amountMinor: 500 },
+        { balanceId: wallets[1].id, amountMinor: 32500,
           rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } },
       ] },
     }), 17));
@@ -349,7 +352,7 @@ describe("cashier aggregate integration", () => {
       currency: "LBP",
       items: [],
       settlement: { tenderMinor: 500, tenderCurrency: "USD", changes: [
-        { walletId: wallets[2].id, amountMinor: 110000, currency: "LBP" },
+        { balanceId: wallets[2].id, amountMinor: 110000, currency: "LBP" },
       ] },
     };
     mount({ mode: "edit", initial: crossSaved });
@@ -368,7 +371,7 @@ describe("cashier aggregate integration", () => {
       currency: "LBP",
       items: [],
       settlement: { tenderMinor: 500, tenderCurrency: "USD", changes: [
-        { walletId: wallets[2].id, amountMinor: 110000, currency: "LBP" },
+        { balanceId: wallets[2].id, amountMinor: 110000, currency: "LBP" },
       ] },
     };
     mount({ mode: "edit", initial: crossSaved });

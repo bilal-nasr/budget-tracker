@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
-import { DEFAULT_CURRENCIES, type CurrencyDefinition } from "@/lib/currency";
+import { SEED_CURRENCY_DEFINITIONS, type CurrencyDefinition } from "@/lib/currency";
 import {
   attachedBalances, defaultBalance, nextDefaultBalance, totalsByCurrency,
-  walletContainerSchema, walletInputSchema, type Wallet, type WalletContainer,
+  walletContainerSchema, walletCreateInputSchema, type WalletContainer,
 } from "./schema";
 
-const currencies = DEFAULT_CURRENCIES.filter((definition) => definition.code !== "SYP");
+const currencies = SEED_CURRENCY_DEFINITIONS.filter((definition) => definition.code !== "SYP");
 const pocket: WalletContainer = {
   id: "pocket", name: "Pocket", kind: "cash", position: 0, deleted: false, needsAttention: false,
   defaultBalanceId: "usd-balance",
@@ -82,27 +82,10 @@ describe("wallet balance domain", () => {
   });
 });
 
-const wallet = (currency: Wallet["currency"], balanceMinor: number, archived = false): Wallet => ({
-  id: currency, name: currency, kind: "cash", currency, balanceMinor, openingBalanceMinor: 0, position: 0, archived,
-});
-
-describe("wallet currency schema and totals", () => {
-  it("accepts signed SYP whole pounds but rejects unknown currencies and fractional minor units", () => {
-    const input = { name: "Synthetic SYP", kind: "cash", currency: "SYP", openingBalanceMinor: -1250 };
-    expect(walletInputSchema.safeParse(input).success).toBe(true);
-    expect(walletInputSchema.safeParse({ ...input, currency: "EUR" }).success).toBe(false);
-    expect(walletInputSchema.safeParse({ ...input, openingBalanceMinor: 12.5 }).success).toBe(false);
-    expect(walletInputSchema.safeParse({ ...input, openingBalanceMinor: MAX_MINOR + 1 }).success).toBe(false);
-  });
-  it("keeps all three currencies separate, including debt, zero and archived wallets", () => {
-    expect(totalsByCurrency([
-      wallet("USD", 200), wallet("LBP", 900000), wallet("SYP", 1250),
-      wallet("SYP", -250), wallet("SYP", 99999, true),
-    ])).toEqual({ USD: 200, LBP: 900000, SYP: 1000 });
-    expect(totalsByCurrency([])).toEqual({ USD: 0, LBP: 0, SYP: 0 });
-  });
-  it("keeps exact cancellation when summing signed wallet balances", () => {
-    expect(totalsByCurrency([wallet("SYP", MAX_MINOR), wallet("SYP", MAX_MINOR), wallet("SYP", -MAX_MINOR)]).SYP)
-      .toBe(MAX_MINOR);
-  });
+it("accepts runtime currency syntax and signed exact opening amounts", () => {
+ const input = { name: "BTC reserve", kind: "cash", currency: "BTC", openingBalanceMinor: -1250 };
+ expect(walletCreateInputSchema.safeParse(input).success).toBe(true);
+ expect(walletCreateInputSchema.safeParse({ ...input, currency: "bad code" }).success).toBe(false);
+ expect(walletCreateInputSchema.safeParse({ ...input, openingBalanceMinor: 12.5 }).success).toBe(false);
+ expect(walletCreateInputSchema.safeParse({ ...input, openingBalanceMinor: MAX_MINOR + 1 }).success).toBe(false);
 });

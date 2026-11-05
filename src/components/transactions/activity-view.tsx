@@ -14,7 +14,6 @@ import { usePathname, useRouter } from "@/i18n/navigation";
 import { loadTransactions } from "@/features/transactions/actions";
 import { addDays, groupByDay, todayIn } from "@/features/transactions/group";
 import type { Cursor, Filters, Page } from "@/features/transactions/schema";
-import { CURRENCIES } from "@/lib/money";
 
 // The filter sheet (and the drawer it needs) loads on first open, then stays
 // mounted for its exit animation.
@@ -43,7 +42,8 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
   const t = useTranslations("Activity");
   const router = useRouter();
   const pathname = usePathname();
-  const { legacyWallets: wallets } = useAppData();
+  const { walletContainers } = useAppData();
+  const wallets = walletContainers.flatMap((wallet) => wallet.balances.map((balance) => ({ id: balance.id, name: wallet.name, currency: balance.currency, archived: wallet.deleted })));
   const { openAdd } = useComposer();
   const [rows, setRows] = useState(initial.rows);
   const [next, setNext] = useState<Cursor | null>(initial.next);
@@ -101,7 +101,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
   }, [next, loading]);
 
   const kind = filters.kind ?? "all";
-  const extraCount = [filters.walletId, filters.categoryId, filters.from, filters.to].filter(Boolean).length;
+  const extraCount = [filters.balanceId, filters.categoryId, filters.from, filters.to].filter(Boolean).length;
   const filtered = Boolean(filters.q || filters.kind || extraCount);
 
   return (
@@ -204,7 +204,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
 const ActivityGroups = memo(function ActivityGroups({ rows, hasMore }: { rows: Page["rows"]; hasMore: boolean }) {
   const t = useTranslations("Activity");
   const locale = useLocale();
-  const { timezone } = useAppData();
+  const { timezone, currencies } = useAppData();
   const { openDetail } = useComposer();
   const today = todayIn(timezone);
   const groups = useMemo(() => groupByDay(rows), [rows]);
@@ -217,7 +217,7 @@ const ActivityGroups = memo(function ActivityGroups({ rows, hasMore }: { rows: P
             <h2 className="text-[14px] font-semibold text-foreground">{dayTitle(group.date, today, locale, t)}</h2>
             {partial ? null : (
               <p className="flex flex-wrap justify-end gap-x-3 gap-y-1">
-                {CURRENCIES
+                {currencies.map((currency) => currency.code)
                   .filter((c) => group.rows.some((r) => r.currency === c))
                   .map((c) => (
                     <Amount key={c} minor={group.totals[c]} currency={c} sign />

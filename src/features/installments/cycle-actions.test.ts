@@ -7,9 +7,9 @@ import { payInstallmentForCycle, receiveSalaryForCycle } from "./cycle-actions";
 
 const requestId = "a1000000-0000-4000-8000-000000000001";
 const installmentId = "a2000000-0000-4000-8000-000000000001";
-const walletId = "a3000000-0000-4000-8000-000000000001";
+const balanceId = "a3000000-0000-4000-8000-000000000001";
 const receiptId = "a4000000-0000-4000-8000-000000000001";
-const payment = { requestId, installmentId, walletId, amountMinor: 4000, occurredOn: "2026-10-31", salaryCycleId: receiptId, overrideOfTransactionId: null };
+const payment = { requestId, installmentId, balanceId, amountMinor: 4000, occurredOn: "2026-10-31", salaryCycleId: receiptId, overrideOfTransactionId: null };
 const salary = { requestId, expectedCycleId: receiptId };
 
 beforeEach(() => {
@@ -46,7 +46,7 @@ describe("source-specific cycle actions", () => {
     const extra = { ...payment, overrideOfTransactionId: "a5000000-0000-4000-8000-000000000001" };
     expect(await payInstallmentForCycle(extra)).toEqual({ ok: true, id: requestId, revision: 1 });
     expect(mocks.rpc).toHaveBeenCalledWith("record_installment_payment", {
-      p_request_id: requestId, p_installment_id: installmentId, p_wallet_id: walletId, p_amount_minor: 4000,
+      p_request_id: requestId, p_installment_id: installmentId, p_balance_id: balanceId, p_amount_minor: 4000,
       p_occurred_on: "2026-10-31", p_salary_cycle_id: receiptId, p_override_of_transaction_id: extra.overrideOfTransactionId,
     });
     expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");

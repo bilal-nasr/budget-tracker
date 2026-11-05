@@ -7,7 +7,7 @@ import { Amount } from "@/components/money/amount";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { categoryName } from "@/features/categories/catalogue";
 import { signedMinor } from "@/features/transactions/amounts";
-import type { Transaction } from "@/features/transactions/schema";
+import { classifyBalanceTransfer, type Transaction } from "@/features/transactions/schema";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,14 +26,17 @@ export function TransactionRow({
   const ts = useTranslations("Cashier");
   const tl = useTranslations("Loans");
   const locale = useLocale();
-  const { categoryById, legacyWalletById } = useAppData();
-  const wallet = legacyWalletById(transaction.walletId);
-  const toWallet = transaction.toWalletId ? legacyWalletById(transaction.toWalletId) : undefined;
+  const { categoryById, balanceById, walletById } = useAppData();
+  const sourceBalance = balanceById(transaction.balanceId);
+  const wallet = sourceBalance ? { ...sourceBalance, name: walletById(sourceBalance.walletId)?.name ?? transaction.walletNameSnapshot } : undefined;
+  const destinationBalance = transaction.toBalanceId ? balanceById(transaction.toBalanceId) : undefined;
+  const toWallet = destinationBalance ? { ...destinationBalance, name: walletById(destinationBalance.walletId)?.name ?? transaction.toWalletNameSnapshot } : undefined;
   const category = transaction.categoryId ? categoryById(transaction.categoryId) : undefined;
   const transfer = transaction.kind === "transfer";
-  const exchange = transfer && toWallet !== undefined && wallet !== undefined && toWallet.currency !== wallet.currency;
+  const crossCurrency = transfer && toWallet !== undefined && toWallet.currency !== transaction.currency;
+  const exchange = transfer && sourceBalance && destinationBalance ? sourceBalance.id !== destinationBalance.id && classifyBalanceTransfer(sourceBalance, destinationBalance) === "exchange" : false;
   const loan = transaction.kind === "loan";
-  const name = loan ? tl(transaction.loanEvent === "disbursement" ? "disbursement" : "repayment") : transfer ? t("move") : category ? categoryName(category, locale) : "";
+  const name = loan ? tl(transaction.loanEvent === "disbursement" ? "disbursement" : "repayment") : transfer ? t(exchange ? "exchange" : "move") : category ? categoryName(category, locale) : "";
   const title = transaction.note || name;
   const income = transaction.kind === "income" || (loan && transaction.loanFlow === "in");
 
@@ -71,20 +74,20 @@ export function TransactionRow({
             )}
           </span>
           {transaction.settlement && transaction.settlement.changes.length > 0 ? <span className="block truncate text-[13px] text-muted-foreground">
-            {ts("changeTo")} · {transaction.settlement.changes.map((change, index) => <span key={`${change.walletId}-${index}`}>
-              {index > 0 ? " / " : null}<bdi>{legacyWalletById(change.walletId)?.name ?? change.currency}</bdi>
+            {ts("changeTo")} · {transaction.settlement.changes.map((change, index) => <span key={`${change.balanceId}-${index}`}>
+              {index > 0 ? " / " : null}<bdi>{(() => { const balance = balanceById(change.balanceId); return (balance ? walletById(balance.walletId)?.name : undefined) ?? change.currency; })()}</bdi>
             </span>)}
           </span> : null}
         </span>
         <span className="flex shrink-0 flex-col items-end">
           <Amount
             // A same-currency move is neutral (not spending); an exchange shows what left as negative.
-            minor={transfer && !exchange ? transaction.amountMinor : signedMinor(transaction)}
+            minor={transfer && !crossCurrency ? transaction.amountMinor : signedMinor(transaction)}
             currency={transaction.currency}
             sign={!transfer}
             className={cn("font-semibold", income && "text-positive")}
           />
-          {exchange && toWallet && transaction.toAmountMinor !== null ? (
+          {crossCurrency && toWallet && transaction.toAmountMinor !== null ? (
             <Amount
               minor={transaction.toAmountMinor}
               currency={toWallet.currency}

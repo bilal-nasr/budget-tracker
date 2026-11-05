@@ -1,5 +1,7 @@
 -- A lost create reply must never adopt a later edit/restore generation.
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 -- Only historical migration-state setup uses this administrator-owned helper.
 -- Monetary tests still execute through authenticated production entry points.
 -- Administrator-only seeding of the historical migration management state.

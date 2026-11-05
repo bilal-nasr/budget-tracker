@@ -1,6 +1,8 @@
 -- Rollback-only catalog, exact-balance, lifecycle, ownership and ledger contracts.
 -- Populated forward-migration preservation is rehearsed by multi-wallet-migration.mjs.
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select no_plan();
@@ -53,10 +55,10 @@ insert into wallet_contract_ids values ('lbp',(select id from public.wallet_bala
 insert into wallet_contract_ids values ('bank',public.create_wallet('Bank','bank','USD',0));
 insert into wallet_contract_ids select 'bank-usd',default_balance_id from public.wallets where id=(select id from wallet_contract_ids where label='bank');
 select is((select balance_minor from public.wallet_balance_totals where balance_id=(select id from wallet_contract_ids where label='usd')),100::numeric,'opening amount is retained exactly');
-select throws_ok($$select public.record_balance_transfer('2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='usd'),1,1)$$,'22023','balance.same','same exact balance is rejected');
-select lives_ok($$select public.record_balance_transfer('2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='lbp'),10,9000)$$,'same-wallet Exchange uses independent currency legs');
-select throws_ok($$select public.record_balance_transfer('2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='bank-usd'),10,11)$$,'22023','balance.amountMismatch','same-currency Move requires equal amounts');
-select lives_ok($$select public.record_balance_transfer('2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='bank-usd'),10,10)$$,'different-wallet Move preserves exact currency');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='usd'),1,1)$$,'22023','balance.same','same exact balance is rejected');
+select lives_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='lbp'),10,9000)$$,'same-wallet Exchange uses independent currency legs');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='bank-usd'),10,11)$$,'22023','balance.amountMismatch','same-currency Move requires equal amounts');
+select lives_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-05',(select id from wallet_contract_ids where label='usd'),(select id from wallet_contract_ids where label='bank-usd'),10,10)$$,'different-wallet Move preserves exact currency');
 select throws_ok($$select public.detach_wallet_balance((select id from wallet_contract_ids where label='lbp'))$$,'42501',null,'per-wallet detach cannot be executed');
 select throws_ok($$select public.delete_wallet((select id from wallet_contract_ids where label='bank'))$$,'P0001','wallet.nonzero','nonzero wallet cannot tombstone without settlement');
 select throws_ok($$select public.set_wallet_default((select id from wallet_contract_ids where label='pocket'),(select id from wallet_contract_ids where label='bank-usd'))$$,'P0001','wallet.invalidDefault','default cannot refer to another wallet');
@@ -66,17 +68,18 @@ insert into wallet_contract_ids select 'zero-syp',default_balance_id from public
 insert into wallet_contract_ids values ('zero-usd',(select id from public.wallet_balances where wallet_id=(select id from wallet_contract_ids where label='zero') and currency='USD'));
 select lives_ok($$select public.set_currency_disabled('SYP',true)$$,'zero defaults switch before global disable');
 select is((select default_balance_id from public.wallets where id=(select id from wallet_contract_ids where label='zero')),(select id from wallet_contract_ids where label='zero-usd'),'disable selects next eligible addition');
-select throws_ok($$select public.record_balance_transfer('2026-11-05',(select id from wallet_contract_ids where label='zero-syp'),(select id from wallet_contract_ids where label='lbp'),1,1)$$,'P0001','currency.disabled','disabled balances reject new monetary writes');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-05',(select id from wallet_contract_ids where label='zero-syp'),(select id from wallet_contract_ids where label='lbp'),1,1)$$,'P0001','currency.disabled','disabled balances reject new monetary writes');
 select throws_ok($$select public.detach_wallet_balance((select id from wallet_contract_ids where label='zero-syp'))$$,'42501',null,'disabled rows are retained without per-wallet detach');
 select lives_ok($$select public.delete_wallet((select id from wallet_contract_ids where label='zero'))$$,'zero wallet tombstones');
 select ok((select deleted_at is not null from public.wallets where id=(select id from wallet_contract_ids where label='zero')),'tombstoned wallet identity remains readable');
 select is((select count(*) from public.wallet_balances b left join public.wallets w on (w.id,w.user_id)=(b.wallet_id,b.user_id) where w.id is null),0::bigint,'every balance retains its owned container');
 insert into wallet_contract_ids values ('debt',public.create_wallet('Debt','card','USD',-25));
 insert into wallet_contract_ids select 'debt-usd',default_balance_id from public.wallets where id=(select id from wallet_contract_ids where label='debt');
-select lives_ok($$select public.settle_and_delete_wallet('cb900000-0000-4000-8000-000000000001',(select id from wallet_contract_ids where label='debt'),jsonb_build_array(jsonb_build_object('balanceId',(select id from wallet_contract_ids where label='debt-usd'),'counterpartBalanceId',(select id from wallet_contract_ids where label='usd'))))$$,'negative deletion settlement transfers money INTO the indebted wallet');
+create temp table debt_confirmation as select jsonb_agg(jsonb_build_object('balanceId',b.id,'counterpartBalanceId',case when t.balance_minor<>0 then (select id from wallet_contract_ids where label='usd') else null end,'expectedAmountMinor',t.balance_minor,'expectedUnit',jsonb_build_object('code',c.code,'decimalPlaces',c.decimal_places)) order by b.id) payload from public.wallet_balances b join public.wallet_balance_totals t on t.balance_id=b.id join public.currencies c on(c.user_id,c.code)=(b.user_id,b.currency) where b.wallet_id=(select id from wallet_contract_ids where label='debt');
+select lives_ok($$select public.settle_and_delete_wallet('cb900000-0000-4000-8000-000000000001',(select id from wallet_contract_ids where label='debt'),(select payload from debt_confirmation))$$,'negative deletion settlement transfers money INTO the indebted wallet');
 select is((select balance_minor from public.wallet_balance_totals where balance_id=(select id from wallet_contract_ids where label='debt-usd')),0::numeric,'negative balance settles exactly to zero');
 select is((select balance_minor from public.wallet_balance_totals where balance_id=(select id from wallet_contract_ids where label='usd')),55::numeric,'counterpart pays the full 25 minor-unit debt');
-select lives_ok($$select public.settle_and_delete_wallet('cb900000-0000-4000-8000-000000000001',(select id from wallet_contract_ids where label='debt'),jsonb_build_array(jsonb_build_object('balanceId',(select id from wallet_contract_ids where label='debt-usd'),'counterpartBalanceId',(select id from wallet_contract_ids where label='usd'))))$$,'settlement request replay does not transfer twice');
+select lives_ok($$select public.settle_and_delete_wallet('cb900000-0000-4000-8000-000000000001',(select id from wallet_contract_ids where label='debt'),(select payload from debt_confirmation))$$,'settlement request replay does not transfer twice');
 select throws_ok($$update public.transactions set deleted_at=now() where to_balance_id=(select id from wallet_contract_ids where label='debt-usd')$$,'P0001','wallet.deleted','tombstoned monetary history cannot be deleted');
 select lives_ok($$update public.transactions set note='Historical correction' where to_balance_id=(select id from wallet_contract_ids where label='debt-usd')$$,'tombstoned metadata remains editable');
 select throws_ok($$select public.update_currency('USD','USD','$',3)$$,'P0001','currency.used','first-use precision is permanently locked');
@@ -87,6 +90,7 @@ select is((select to_wallet_name_snapshot from public.transactions where to_bala
 update public.wallets set name='Purse' where id=(select id from wallet_contract_ids where label='pocket');
 select is((select wallet_name_snapshot from public.transactions where to_balance_id=(select id from wallet_contract_ids where label='debt-usd')),'Pocket','renaming a live container does not rewrite recorded names');
 select public.create_currency('HIST','H',3);
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0,"HIST":3}')::text,true);
 insert into wallet_contract_ids values('hist',public.create_wallet('History','cash','HIST',0));
 insert into wallet_contract_ids select 'hist-balance',default_balance_id from public.wallets where id=(select id from wallet_contract_ids where label='hist');
 select (select id from public.wallet_balances where wallet_id=(select id from wallet_contract_ids where label='hist') and currency='LBP');
@@ -118,7 +122,8 @@ insert into wallet_contract_ids values('large',public.create_wallet('Large','cas
 insert into wallet_contract_ids select 'large-balance',default_balance_id from public.wallets where id=(select id from wallet_contract_ids where label='large');
 insert into public.transactions(kind,occurred_on,balance_id,currency,amount_minor,category_id)
 select 'income','2026-11-05',(select id from wallet_contract_ids where label='large-balance'),'USD',1000000000000000,id from public.categories where kind='income' and parent_id is null order by position limit 1;
-select lives_ok($$select public.settle_and_delete_wallet('cb900000-0000-4000-8000-000000000002',(select id from wallet_contract_ids where label='large'),jsonb_build_array(jsonb_build_object('balanceId',(select id from wallet_contract_ids where label='large-balance'),'counterpartBalanceId',(select id from wallet_contract_ids where label='usd'))))$$,'full settlement supports a total larger than the per-transaction amount bound');
+create temp table large_confirmation as select jsonb_agg(jsonb_build_object('balanceId',b.id,'counterpartBalanceId',case when t.balance_minor<>0 then (select id from wallet_contract_ids where label='usd') else null end,'expectedAmountMinor',t.balance_minor,'expectedUnit',jsonb_build_object('code',c.code,'decimalPlaces',c.decimal_places)) order by b.id) payload from public.wallet_balances b join public.wallet_balance_totals t on t.balance_id=b.id join public.currencies c on(c.user_id,c.code)=(b.user_id,b.currency) where b.wallet_id=(select id from wallet_contract_ids where label='large');
+select lives_ok($$select public.settle_and_delete_wallet('cb900000-0000-4000-8000-000000000002',(select id from wallet_contract_ids where label='large'),(select payload from large_confirmation))$$,'full settlement supports a total larger than the per-transaction amount bound');
 select is((select balance_minor from public.wallet_balance_totals where balance_id=(select id from wallet_contract_ids where label='large-balance')),0::numeric,'large balance is fully settled without rescaling');
 insert into public.budgets(category_id,currency,starts_month,limit_minor)
 select id,'HIST','2026-01-01',100 from public.categories where kind='expense' and parent_id is null order by position limit 1;

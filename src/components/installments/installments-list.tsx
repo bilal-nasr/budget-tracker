@@ -1,4 +1,5 @@
 "use client";
+import { useRuntimeBalances } from "@/components/add/runtime-balances";
 
 import { useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
@@ -14,9 +15,10 @@ import { cn } from "@/lib/utils";
 
 function Row({ item }: { item: Installment }) {
   const t = useTranslations("Installments");
+  const { definition } = useRuntimeBalances();
   const { openInstallment, openInstallmentPay } = useComposer();
   const { digits } = useDisplayPrefs();
-  const money = (value: number) => `⁦${formatAmount(value, item.currency, { digits })}⁩`;
+  const money = (value: number) => `⁦${formatAmount(value, definition(item.currency), { digits })}⁩`;
   const paidOff = item.remainingMinor <= 0;
   return (
     <li className="flex flex-col gap-2 border-t border-border px-1 py-3 first:border-t-0">

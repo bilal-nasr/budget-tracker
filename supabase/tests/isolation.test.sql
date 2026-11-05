@@ -1,5 +1,7 @@
 -- Two accounts must never see or touch each other's data. Run with: pnpm db:test
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 create extension if not exists pgtap with schema extensions;
 select plan(11);
 

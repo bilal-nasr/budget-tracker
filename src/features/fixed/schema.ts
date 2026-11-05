@@ -1,11 +1,13 @@
+import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { z } from "zod";
 import { MAX_MINOR } from "@/lib/money";
 import { expenseItemInputSchema, MAX_EXPENSE_ITEMS, summarizeBreakdown, type ExpenseItemInput } from "@/features/transactions/breakdown";
 
 export const fixedInputSchema = z.object({
+  expectedUnits: expectedUnitsSchema.optional(),
   name: z.string().trim().min(1).max(60),
   amountMinor: z.number().int().min(1).max(MAX_MINOR),
-  walletId: z.uuid(),
+  balanceId: z.uuid(),
   categoryId: z.uuid(),
   dueDay: z.number().int().min(1).max(31).nullable(),
   items: z.array(expenseItemInputSchema).max(MAX_EXPENSE_ITEMS).default([]),
@@ -18,7 +20,7 @@ export type FixedExpense = {
   id: string;
   name: string;
   amountMinor: number;
-  walletId: string;
+  balanceId: string;
   categoryId: string;
   dueDay: number | null;
   /** Date (YYYY-MM-DD) it was recorded as paid this month, or null. */

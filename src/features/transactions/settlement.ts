@@ -1,17 +1,17 @@
 import { z } from "zod";
-import { CURRENCY_DECIMALS, MAX_MINOR, MAX_RATE, type Currency } from "@/lib/money";
+import { MAX_MINOR, MAX_RATE, type CurrencyDefinition } from "@/lib/money";
 import { normalizeNumericDigits } from "@/lib/numeric-text";
 
-const isCurrency = (value: unknown): value is Currency =>
-  typeof value === "string" && Object.hasOwn(CURRENCY_DECIMALS, value);
-const currencySchema = z.custom<Currency>(isCurrency);
+const isCurrency = (value: unknown): value is string =>
+  typeof value === "string" && /^[A-Z][A-Z0-9]{0,11}$/.test(value);
+const currencySchema = z.custom<string>(isCurrency);
 const minorSchema = z.number().int().min(1).max(MAX_MINOR);
 
 /** Canonical direct quotes only. SYP is unavailable until the shared registry includes it. */
-export function settlementRatePair(from: Currency, to: Currency): { base: Currency; quote: Currency } | null {
+export function settlementRatePair(from: string, to: string): { base: string; quote: string } | null {
   if (!isCurrency(from) || !isCurrency(to) || from === to) return null;
   const order = ["USD", "LBP", "SYP"];
-  if (!order.includes(from) || !order.includes(to)) return null;
+  if (!order.includes(from) || !order.includes(to)) return from < to ? { base: from, quote: to } : { base: to, quote: from };
   return order.indexOf(from) < order.indexOf(to) ? { base: from, quote: to } : { base: to, quote: from };
 }
 
@@ -31,7 +31,7 @@ export const settlementRateSchema = z.object({
 });
 export type SettlementRate = z.infer<typeof settlementRateSchema>;
 export const cashChangeInputSchema = z.object({
-  walletId: z.uuid(),
+  balanceId: z.uuid(),
   amountMinor: minorSchema,
   rate: settlementRateSchema.optional(),
 }).strict();
@@ -43,7 +43,7 @@ export const cashSettlementInputSchema = z.object({
 export type CashSettlementInput = z.infer<typeof cashSettlementInputSchema>;
 
 /** Exact decimal quote parsing; no Number division or profile-rate mutation. */
-export function parseSettlementRate(text: string, from: Currency, to: Currency): SettlementRate | null {
+export function parseSettlementRate(text: string, from: string, to: string): SettlementRate | null {
   const pair = settlementRatePair(from, to);
   if (!pair) return null;
   const normalized = normalizeNumericDigits(text.trim())
@@ -68,15 +68,18 @@ export function settlementRateText(rate: SettlementRate): string {
   return `${scaled / 1_000_000n}${fraction ? `.${fraction}` : ""}`;
 }
 
-export function convertSettlementMinor(minor: number, from: Currency, to: Currency, rate: SettlementRate): number | null {
+export function convertSettlementMinor(minor: number, from: string, to: string, rate: SettlementRate, definitions: readonly CurrencyDefinition[]): number | null {
   if (!Number.isSafeInteger(minor) || minor < 0 || minor > MAX_MINOR || !isCurrency(from) || !isCurrency(to)) return null;
   const parsed = settlementRateSchema.safeParse(rate);
   if (!parsed.success) return null;
   const pair = settlementRatePair(from, to);
   if (!pair || pair.base !== rate.base || pair.quote !== rate.quote) return null;
   const n = BigInt(rate.quoteMajorNumerator); const d = BigInt(rate.quoteMajorDenominator);
-  const baseScale = 10n ** BigInt(CURRENCY_DECIMALS[rate.base]);
-  const quoteScale = 10n ** BigInt(CURRENCY_DECIMALS[rate.quote]);
+  const baseDecimals = definitions.find((currency) => currency.code === rate.base)?.decimalPlaces;
+  const quoteDecimals = definitions.find((currency) => currency.code === rate.quote)?.decimalPlaces;
+  if (baseDecimals === undefined || quoteDecimals === undefined || !Number.isInteger(baseDecimals) || !Number.isInteger(quoteDecimals) || baseDecimals < 0 || baseDecimals > 8 || quoteDecimals < 0 || quoteDecimals > 8) return null;
+  const baseScale = 10n ** BigInt(baseDecimals);
+  const quoteScale = 10n ** BigInt(quoteDecimals);
   const [num, den] = from === rate.base
     ? [BigInt(minor) * n * quoteScale, d * baseScale]
     : [BigInt(minor) * d * baseScale, n * quoteScale];
@@ -86,7 +89,7 @@ export function convertSettlementMinor(minor: number, from: Currency, to: Curren
 
 export type SettlementError = "amount" | "rate" | "unsupportedPair" | "mismatch";
 export function validateSettlement(input: {
-  costMinor: number; costCurrency: Currency; payCurrency: Currency; changeCurrencies: Currency[]; settlement: CashSettlementInput;
+  costMinor: number; costCurrency: string; payCurrency: string; changeCurrencies: string[]; settlement: CashSettlementInput;
 }): { ok: true } | { ok: false; reason: SettlementError } {
   const { costMinor, costCurrency, payCurrency, changeCurrencies } = input;
   const parsed = cashSettlementInputSchema.safeParse(input.settlement);

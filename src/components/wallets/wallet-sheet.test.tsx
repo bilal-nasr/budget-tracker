@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "@/messages/en.json";
+vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { AppDataProvider } from "@/components/providers/app-data";
 import type { CurrencyDefinition } from "@/lib/currency";
 import type { WalletContainer } from "@/features/wallets/schema";
@@ -29,7 +30,7 @@ it("creates via the global action with first catalog default and exact optional 
   fireEvent.click(screen.getByRole("radio", { name: en.Wallets.owe }));
   fireEvent.click(screen.getByRole("button", { name: en.Wallets.create }));
   await waitFor(() => expect(done).toHaveBeenCalledOnce());
-  expect(actions.createWallet).toHaveBeenCalledWith({ name: "Travel", kind: "cash", currency: "TOKEN", openingBalanceMinor: -123456789 });
+  expect(actions.createWallet).toHaveBeenCalledWith({ expectedUnits: { TOKEN: 8 }, name: "Travel", kind: "cash", currency: "TOKEN", openingBalanceMinor: -123456789 });
   expect(screen.queryByText(en.Wallets.sourceTitle)).toBeNull();
 });
 it("edits metadata and the exact enabled default without opening-balance or per-wallet currency controls", async () => {
@@ -60,7 +61,7 @@ it("accepts an explicit runtime catalog for onboarding outside the app provider"
   fireEvent.change(screen.getByRole("combobox"), { target: { value: "EUR" } });
   fireEvent.change(screen.getByLabelText(en.Wallets.name), { target: { value: "First" } });
   fireEvent.click(screen.getByRole("button", { name: en.Wallets.create }));
-  await waitFor(() => expect(actions.createWallet).toHaveBeenCalledWith({ name: "First", kind: "cash", currency: "EUR", openingBalanceMinor: 0 }));
+  await waitFor(() => expect(actions.createWallet).toHaveBeenCalledWith({ expectedUnits: { EUR: 2 }, name: "First", kind: "cash", currency: "EUR", openingBalanceMinor: 0 }));
 });
 
 it.each(["disabled", "precision"])("clears the opening amount after a %s currency refresh", async (change) => {
@@ -73,7 +74,7 @@ it.each(["disabled", "precision"])("clears the opening amount after a %s currenc
   expect((screen.getByLabelText(en.Wallets.amount) as HTMLInputElement).value).toBe("");
   fireEvent.click(screen.getByRole("button", { name: en.Wallets.create }));
   await waitFor(() => expect(done).toHaveBeenCalledOnce());
-  expect(actions.createWallet).toHaveBeenCalledWith({ name: "First", kind: "cash", currency: change === "disabled" ? "EUR" : "TOKEN", openingBalanceMinor: 0 });
+  expect(actions.createWallet).toHaveBeenCalledWith({ expectedUnits: change === "disabled" ? { EUR: 2 } : { TOKEN: 2 }, name: "First", kind: "cash", currency: change === "disabled" ? "EUR" : "TOKEN", openingBalanceMinor: 0 });
 });
 
 it.each(["disabled", "precision"])("does not restore an opening draft after a %s catalog round trip", async (change) => {
@@ -89,5 +90,5 @@ it.each(["disabled", "precision"])("does not restore an opening draft after a %s
   expect((screen.getByLabelText(en.Wallets.amount) as HTMLInputElement).value).toBe("");
   fireEvent.click(screen.getByRole("button", { name: en.Wallets.create }));
   await waitFor(() => expect(done).toHaveBeenCalledOnce());
-  expect(actions.createWallet).toHaveBeenCalledWith({ name: "First", kind: "cash", currency: "TOKEN", openingBalanceMinor: 0 });
+  expect(actions.createWallet).toHaveBeenCalledWith({ expectedUnits: { TOKEN: 8 }, name: "First", kind: "cash", currency: "TOKEN", openingBalanceMinor: 0 });
 });

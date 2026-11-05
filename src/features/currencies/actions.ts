@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actionClient, databaseActionError, type ActionResult } from "@/lib/supabase/action";
+import { readAllByKey } from "@/lib/supabase/read-all";
 import { readMinor } from "@/lib/money";
 import { currencyCodeSchema, currencyInputSchema, type CurrencyInput } from "./schema";
 
@@ -94,31 +95,31 @@ export async function deleteCurrency(code: string): Promise<ActionResult> {
   }
 }
 
-type ReadResult = { data: unknown[] | null; error: unknown };
-
 /** Read-only preview of every condition that would reject the disable transaction. */
 async function inspectCurrencyDisableUnsafe(code: string): Promise<CurrencyDisableBlocker[]> {
   const parsed = currencyCodeSchema.safeParse(code);
   const ctx = await safeActionClient();
   if (!parsed.success || ctx.error) throw new Error("Currency inspection unavailable");
 
-  const results = await Promise.all([
-    ctx.supabase.from("currencies").select("code, disabled_at"),
-    ctx.supabase.from("wallets").select("id, name, default_balance_id, deleted_at, needs_attention"),
-    ctx.supabase.from("wallet_balances").select("id, wallet_id, currency, detached_at"),
-    ctx.supabase.from("wallet_balance_totals").select("balance_id, wallet_id, currency, balance_minor"),
-    ctx.supabase.from("profiles").select("salary_balance_id"),
-    ctx.supabase.from("fixed_expenses").select("id, name, balance_id"),
-    ctx.supabase.from("installments").select("id, name, balance_id"),
-    ctx.supabase.from("installment_progress").select("installment_id, remaining_minor"),
-    ctx.supabase.from("loan_progress").select("id, name, balance_id, currency, remaining_minor, deleted_at"),
-    ctx.supabase.from("pending_payment_progress").select("id, project, client, currency, remaining_minor, deleted_at"),
-    ctx.supabase.from("budgets").select("id, category_id, currency, starts_month, limit_minor"),
-  ]) as ReadResult[];
-  if (results.some((result) => result.error || !result.data)) throw new Error("Currency inspection unavailable");
-
-  const [currencyRows, walletRows, balanceRows, totalRows, profileRows, fixedRows, installmentRows, progressRows, loanRows, pendingRows, budgetRows]
-    = results.map((result) => result.data!) as Array<Record<string, unknown>[]>;
+  const read = (table: string, columns: string, key = "id") => readAllByKey<Record<string, unknown>>(async (after, limit) => {
+    let query = ctx.supabase.from(table).select(columns).eq("user_id", ctx.userId).order(key).limit(limit);
+    if (after !== null) query = query.gt(key, after);
+    const result = await query;
+    return { ...result, data: result.data as unknown as Record<string, unknown>[] | null };
+  }, (row) => String(row[key]), "Currency inspection unavailable");
+  const [currencyRows, walletRows, balanceRows, totalRows, profileRows, fixedRows, installmentRows, progressRows, loanRows, pendingRows, budgetRows] = await Promise.all([
+    read("currencies", "code, disabled_at", "code"),
+    read("wallets", "id, name, default_balance_id, deleted_at, needs_attention"),
+    read("wallet_balances", "id, wallet_id, currency, detached_at"),
+    read("wallet_balance_totals", "balance_id, wallet_id, currency, balance_minor", "balance_id"),
+    read("profiles", "user_id, salary_balance_id", "user_id"),
+    read("fixed_expenses", "id, name, balance_id"),
+    read("installments", "id, name, balance_id"),
+    read("installment_progress", "installment_id, remaining_minor", "installment_id"),
+    read("loan_progress", "id, name, balance_id, currency, remaining_minor, deleted_at"),
+    read("pending_payment_progress", "id, project, client, currency, remaining_minor, deleted_at"),
+    read("budgets", "id, category_id, currency, starts_month, limit_minor"),
+  ]);
   const target = parsed.data;
   if (!currencyRows.some((row) => row.code === target)) throw new Error("Currency inspection unavailable");
 
@@ -138,6 +139,20 @@ async function inspectCurrencyDisableUnsafe(code: string): Promise<CurrencyDisab
   }
   if (totals.size !== balances.size || [...totals.keys()].some((id) => !balances.has(id))) {
     throw new Error("Currency inspection unavailable");
+  }
+  const knownCodes = new Set(currencyRows.map((row) => row.code));
+  for (const balance of balanceRows) {
+    if (!wallets.has(String(balance.wallet_id)) || !knownCodes.has(balance.currency)) throw new Error("Currency inspection unavailable");
+  }
+  for (const profile of profileRows) {
+    if (profile.salary_balance_id != null && !balances.has(String(profile.salary_balance_id))) throw new Error("Currency inspection unavailable");
+  }
+  for (const row of [...fixedRows, ...installmentRows, ...loanRows]) {
+    const balance = balances.get(String(row.balance_id));
+    if (!balance || (row.currency !== undefined && row.currency !== balance.currency)) throw new Error("Currency inspection unavailable");
+  }
+  for (const row of [...pendingRows, ...budgetRows]) {
+    if (!knownCodes.has(row.currency)) throw new Error("Currency inspection unavailable");
   }
   const enabled = new Set(currencyRows.filter((row) => row.disabled_at === null).map((row) => String(row.code)));
   const targetBalances = balanceRows.filter((row) => row.currency === target);
@@ -171,9 +186,16 @@ async function inspectCurrencyDisableUnsafe(code: string): Promise<CurrencyDisab
   for (const fixed of fixedRows) {
     if (targetBalanceIds.has(String(fixed.balance_id))) blockers.push({ kind: "fixedExpense", id: String(fixed.id), name: String(fixed.name), balanceId: String(fixed.balance_id) });
   }
-  const remaining = new Map(progressRows.map((row) => [String(row.installment_id), readMinor(row.remaining_minor as number | string)]));
+  const remaining = new Map<string, number>();
+  for (const row of progressRows) {
+    const id = String(row.installment_id);
+    if (remaining.has(id) || row.remaining_minor == null) throw new Error("Currency inspection unavailable");
+    remaining.set(id, readMinor(row.remaining_minor as number | string));
+  }
+  if (remaining.size !== installmentRows.length) throw new Error("Currency inspection unavailable");
   for (const installment of installmentRows) {
-    if (targetBalanceIds.has(String(installment.balance_id)) && (remaining.get(String(installment.id)) ?? 0) > 0) {
+    if (!remaining.has(String(installment.id))) throw new Error("Currency inspection unavailable");
+    if (targetBalanceIds.has(String(installment.balance_id)) && remaining.get(String(installment.id))! > 0) {
       blockers.push({ kind: "installment", id: String(installment.id), name: String(installment.name), balanceId: String(installment.balance_id) });
     }
   }

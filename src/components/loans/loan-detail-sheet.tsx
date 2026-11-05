@@ -2,7 +2,7 @@
 import { useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Amount } from "@/components/money/amount";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { ConfirmSheet } from "@/components/ui/confirm-sheet";
@@ -17,7 +17,7 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
   const t = useTranslations("Loans");
   const ta = useTranslations("Activity");
   const locale = useLocale();
-  const { legacyWalletById } = useAppData();
+  const { balanceChoiceById } = useRuntimeBalances();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ kind: "cancel" | "deleteLoan" } | { kind: "void" | "deletePayment"; transactionId: string; revision: number } | null>(null);
@@ -69,7 +69,7 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
           {history.page?.rows.length === 0 ? <p className="text-sm text-muted-foreground">{t("noHistory")}</p> : <ol className="divide-y divide-border">
             {history.page?.rows.map((event) => <li key={event.transactionId} className="flex flex-col gap-1 py-3 text-sm">
               <div className="flex flex-wrap justify-between gap-2"><span>{date(event.occurredOn)} · {t(event.event)}</span><Amount minor={event.flow === "in" ? event.amountMinor : -event.amountMinor} currency={item.currency} sign /></div>
-              <p className="text-muted-foreground"><bdi>{legacyWalletById(event.walletId)?.name}</bdi>{event.deletedAt ? <> · {t("voided")}</> : null}</p>
+              <p className="text-muted-foreground"><bdi>{balanceChoiceById(event.balanceId)?.name}</bdi>{event.deletedAt ? <> · {t("voided")}</> : null}</p>
               {event.event === "repayment" ? <p className="flex flex-wrap gap-x-3 text-muted-foreground"><span>{t("principalPart")} {money(event.principalMinor)}</span><span>{t("feePart")} {money(event.feeMinor)}</span></p> : null}
               {event.deletedAt && event.event === "repayment" && !item.deletedAt && (!latest || latest.sequence < event.sequence) ? <Button variant="outline" disabled={pending} onClick={() => run(() => restoreLoanPayment(event.transactionId, event.revision))}>{t("restore")}</Button> : null}
               {event.event === "repayment" ? <Button variant="outline" disabled={pending} onClick={() => { setError(null); setConfirm({ kind: "deletePayment", transactionId: event.transactionId, revision: event.revision }); }}>{t("deletePayment")}</Button> : null}

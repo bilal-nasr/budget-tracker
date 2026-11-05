@@ -1,6 +1,6 @@
 "use client";
 
-import { formatAmount, isCurrency, type CurrencyDefinition, type Digits } from "@/lib/money";
+import { formatAmount, type CurrencyDefinition, type Digits } from "@/lib/money";
 import { useAppDataOptional } from "@/components/providers/app-data";
 import { cn } from "@/lib/utils";
 import { useDisplayPrefs } from "@/components/providers/display-prefs";
@@ -27,7 +27,6 @@ export function Amount({
   const options = { digits: digits ?? prefs.digits, sign };
   let formatted: string;
   if (definition) formatted = formatAmount(minor, definition, options);
-  else if (typeof currency === "string" && isCurrency(currency)) formatted = formatAmount(minor, currency, options);
   else throw new Error("App currency data unavailable");
   return (
     <bdi dir="ltr" className={cn("amount", className)}>

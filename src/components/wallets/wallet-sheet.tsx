@@ -1,4 +1,6 @@
 "use client";
+import { useRouter } from "@/i18n/navigation";
+import { currencyIntent } from "@/lib/currency-intent";
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
@@ -12,6 +14,7 @@ import type { WalletContainer, WalletKind } from "@/features/wallets/schema";
 import { parseAmount } from "@/lib/money";
 import type { CurrencyDefinition } from "@/lib/currency";
 import { CurrencySelector } from "./currency-selector";
+import { WalletDeleteSheet } from "./wallet-delete-sheet";
 
 export type WalletSheetState = { wallet: WalletContainer | null };
 
@@ -23,6 +26,7 @@ export function WalletForm({ wallet, onDone, submitLabel, currencies: catalog, o
   currencies?: readonly CurrencyDefinition[];
   onAddMoney?: (wallet: WalletContainer) => void;
 }) {
+  const router = useRouter();
   const t = useTranslations("Wallets");
   const app = useAppDataOptional();
   const currencies = (catalog ?? app?.enabledCurrencies ?? []).filter((item) => !item.disabled);
@@ -52,12 +56,13 @@ export function WalletForm({ wallet, onDone, submitLabel, currencies: catalog, o
       try {
         let result: { ok: boolean; error?: string };
         if (!wallet) {
-          result = await createWallet({ name: name.trim(), kind, currency: currency.code, openingBalanceMinor: owe ? -parsedAmount : parsedAmount });
+          result = await createWallet({ expectedUnits: currencyIntent(currency), name: name.trim(), kind, currency: currency.code, openingBalanceMinor: owe ? -parsedAmount : parsedAmount });
         } else {
           result = name.trim() === wallet.name && kind === wallet.kind ? { ok: true } : await updateWallet(wallet.id, { name: name.trim(), kind });
           if (result.ok && selectedBalance && selectedBalance.id !== wallet.defaultBalanceId) result = await setDefaultWalletBalance(wallet.id, selectedBalance.id);
         }
-        if (!result.ok) { setError(result.error === "notConfigured" ? t("errorPreview") : t("errorFailed")); return; }
+        if (!result.ok) {
+        if (result.error === "conflict") { setAmountDraft(null); router.refresh(); } setError(result.error === "notConfigured" ? t("errorPreview") : t("errorFailed")); return; }
         onDone();
       } catch { setError(t("errorFailed")); }
     });
@@ -91,7 +96,10 @@ export function WalletSheet({ state, onClose, onAddMoney }: {
   const t = useTranslations("Wallets");
   const app = useAppDataOptional();
   const wallet = state?.wallet ? app?.walletById(state.wallet.id) ?? state.wallet : null;
+  const [deleting, setDeleting] = useState<string | null>(null);
+  if (wallet && !wallet.deleted && deleting === wallet.id && app) return <WalletDeleteSheet key={wallet.id} wallet={wallet} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); onClose(); }} />;
   return <SheetShell open={state !== null} onOpenChange={(open) => { if (!open) onClose(); }} title={wallet ? t("editTitle") : t("newTitle")}>
     {state ? <WalletForm key={wallet?.id ?? "new"} wallet={wallet} onDone={onClose} onAddMoney={onAddMoney} /> : null}
+    {wallet && !wallet.deleted && app ? <Button variant="destructive" className="mt-4 w-full" onClick={() => setDeleting(wallet.id)}>{t("deleteWallet")}</Button> : null}
   </SheetShell>;
 }

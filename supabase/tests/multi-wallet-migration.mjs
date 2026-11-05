@@ -20,7 +20,7 @@ try {
  grant execute on function auth.uid() to anon,authenticated,service_role;
  alter default privileges in schema public grant all on tables to authenticated,service_role;
  alter default privileges in schema public grant all on sequences to authenticated,service_role;`);
- for(const file of readdirSync(folder).filter(f=>f.endsWith('.sql')&&f<'20261123000000').sort()) sql(readFileSync(new URL(file,folder),'utf8'));
+ for(const file of readdirSync(folder).filter(f=>f.endsWith('.sql')&&f<'20261123000000').sort()) sql(readFileSync(new URL(file,folder),'utf8').replace(/\r?\n/g,'\r\n'));
  sql(`insert into auth.users(id,email) values('ce000000-0000-4000-8000-000000000001','rehearsal@example.test'),('ce000000-0000-4000-8000-000000000002','rehearsal-b@example.test');
  select set_config('request.jwt.claims','{"sub":"ce000000-0000-4000-8000-000000000001","role":"authenticated"}',false);set role authenticated;
  insert into public.wallets(id,name,kind,currency,opening_balance_minor,position) values
@@ -97,6 +97,7 @@ try {
  select * from finish();rollback;`);
  console.log(globalResult);assert.doesNotMatch(globalResult,/(?:^|\n)not ok |Looks like you failed/);console.log('PASS populated global migration preservation: 16 assertions.');
  sql("delete from auth.users where id in('ce000000-0000-4000-8000-000000000001','ce000000-0000-4000-8000-000000000002');");
+ for(const file of readdirSync(folder).filter(f=>f.endsWith('.sql')&&f>'20261124000000_global_currencies_all_wallets.sql').sort()) sql(readFileSync(new URL(file,folder),'utf8').replace(/\r?\n/g,'\r\n'));
  let assertions=0;
  for(const file of readdirSync(new URL('./',import.meta.url)).filter(f=>f.endsWith('.test.sql')).sort()) {
   const output=sql('set search_path=public,extensions;'+readFileSync(new URL(file,import.meta.url),'utf8'));

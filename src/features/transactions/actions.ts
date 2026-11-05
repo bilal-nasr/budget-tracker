@@ -21,6 +21,23 @@ import {
 
 const idSchema = z.uuid();
 
+/** Restricted historical correction: never accepts a ledger amount or balance reference. */
+export async function correctTransactionNote(id: string, expectedRevision: number, input: { note: string }): Promise<ActionResult<TransactionMutation>> {
+  const parsed = z.strictObject({ note: z.string().trim().max(140) }).safeParse(input);
+  if (!idSchema.safeParse(id).success || !z.number().int().min(1).max(2_147_483_647).safeParse(expectedRevision).success || !parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const { data, error } = await ctx.supabase.from("transactions").update({ note: parsed.data.note || null })
+      .eq("id", id).eq("user_id", ctx.userId).eq("revision", expectedRevision).is("deleted_at", null).select("id, revision").maybeSingle();
+    if (error) return { ok: false, error: transactionMutationError(error) };
+    if (!data) return { ok: false, error: "conflict" };
+    if (data.id !== id || !Number.isInteger(data.revision) || data.revision <= expectedRevision) return { ok: false, error: "failed" };
+    revalidatePath("/", "layout");
+    return { ok: true, id: data.id, revision: data.revision };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
 export async function createTransaction(
   input: TransactionInput,
   draftId: string,
@@ -29,23 +46,24 @@ export async function createTransaction(
 }
 
 /**
- * Moves money between two of the owner's wallets. The database checks both
- * wallets are theirs and active, and that same-currency amounts are equal.
+ * Moves or exchanges between exact balances. The locked database boundary
+ * checks ownership, enabled currency, live wallets and equal same-currency amounts.
  */
 export async function createTransfer(input: TransferInput): Promise<ActionResult<TransactionMutation>> {
   const parsed = transferInputSchema.safeParse(input);
-  if (!parsed.success || parsed.data.fromWalletId === parsed.data.toWalletId) {
+  if (!parsed.success) {
     return { ok: false, error: "invalid" };
   }
-  const ctx = await actionClient();
+  const ctx = await actionClient(parsed.data.expectedUnits);
   if (ctx.error) return { ok: false, error: ctx.error };
 
-  const { data, error } = await ctx.supabase.rpc("record_transfer", {
+  const { data, error } = await ctx.supabase.rpc("record_balance_transfer", {
+    p_request_id: parsed.data.requestId,
     p_occurred_on: parsed.data.occurredOn,
-    p_from_wallet_id: parsed.data.fromWalletId,
-    p_to_wallet_id: parsed.data.toWalletId,
-    p_from_amount_minor: parsed.data.fromAmountMinor,
-    p_to_amount_minor: parsed.data.toAmountMinor,
+    p_from_balance_id: parsed.data.sourceBalanceId,
+    p_to_balance_id: parsed.data.destinationBalanceId,
+    p_from_amount_minor: parsed.data.sentMinor,
+    p_to_amount_minor: parsed.data.receivedMinor,
     p_note: parsed.data.note || null,
     p_usd_lbp_rate: parsed.data.rate ?? null,
   });

@@ -1,4 +1,6 @@
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
+import { runtimeAppFixture } from "@/test/runtime-app-fixture";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -12,7 +14,7 @@ vi.mock("@/features/transactions/actions", () => ({ deleteTransaction: mocks.rem
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
 vi.mock("@/components/providers/display-prefs", () => ({ useDisplayPrefs: () => ({ digits: "latin" }) }));
-vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppData: () => mocks.appData() }));
+vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppDataOptional: () => ({ currencyByCode: (code: string) => SEED_CURRENCY_DEFINITIONS.find((definition) => definition.code === code) }), useAppData: () => runtimeAppFixture(mocks.appData()) }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ open, title, children }: { open: boolean; title: string; children: ReactNode }) => open ? <div role="dialog" aria-label={title}>{children}</div> : null }));
 vi.mock("@/components/ui/confirm-sheet", () => ({ ConfirmSheet: ({ open, title, children, onConfirm, onOpenChange }: {
   open: boolean; title: string; children: ReactNode; onConfirm: () => void; onOpenChange: (open: boolean) => void;
@@ -20,17 +22,17 @@ vi.mock("@/components/ui/confirm-sheet", () => ({ ConfirmSheet: ({ open, title, 
 import { InstallmentPaySheet } from "./installment-pay-sheet";
 
 const itemId = "a1000000-0000-4000-8000-000000000001";
-const walletId = "a2000000-0000-4000-8000-000000000001";
+const balanceId = "a2000000-0000-4000-8000-000000000001";
 const cycleId = "a3000000-0000-4000-8000-000000000001";
 const requestId = "a4000000-0000-4000-8000-000000000001";
 const previousId = "a5000000-0000-4000-8000-000000000001";
-const base = { id: itemId, name: "Laptop", currency: "USD" as const, walletId, categoryId: itemId,
+const base = { id: itemId, name: "Laptop", currency: "USD" as const, balanceId, categoryId: itemId,
   totalMinor: 120000, paidBeforeMinor: 20000, monthlyMinor: 10000, dueDay: 15 };
-const partial = withProgress(base, [{ transactionId: previousId, walletId, amountMinor: 4000, occurredOn: "2026-10-01",
+const partial = withProgress(base, [{ transactionId: previousId, balanceId: balanceId, amountMinor: 4000, occurredOn: "2026-10-01",
   createdAt: "2026-11-04T12:00:00Z", salaryCycleId: cycleId, revision: 1 }], cycleId);
-const bank = { id: walletId, name: "Bank", currency: "USD", archived: false };
+const bank = { id: balanceId, name: "Bank", currency: "USD", archived: false };
 beforeEach(() => { vi.clearAllMocks(); mocks.pay.mockResolvedValue({ ok: false, error: "notConfigured" }); mocks.remove.mockResolvedValue({ ok: true, id: requestId, revision: 4 });
-  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",legacyWallets:[bank]});
+  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",fixtureBalances:[bank]});
 });
 afterEach(cleanup);
 const view = (intent: "normal" | "again" = "again") => <NextIntlClientProvider locale="en" messages={messages}>
@@ -48,7 +50,7 @@ it("requires deliberate confirmation for another payment, and cancel writes noth
   fireEvent.click(screen.getByRole("button", { name: "Record payment" }));
   fireEvent.click(screen.getByRole("button", { name: "Confirm extra payment" }));
   await waitFor(() => expect(mocks.pay).toHaveBeenCalledOnce());
-  expect(mocks.pay.mock.calls[0][0]).toMatchObject({ requestId, installmentId: itemId, walletId, amountMinor: 6000,
+  expect(mocks.pay.mock.calls[0][0]).toMatchObject({ expectedUnits:{USD:2}, requestId, installmentId: itemId, balanceId: balanceId, amountMinor: 6000,
     salaryCycleId: cycleId, overrideOfTransactionId: previousId });
 });
 
@@ -79,7 +81,7 @@ it.each(["archived","removed","other currency"])("keeps the frozen payment retry
   fireEvent.click(screen.getByRole("button",{name:"Record payment"}));
   await waitFor(()=>expect(screen.getByRole("button",{name:"Retry same payment"})).toBeTruthy());
   const first=mocks.pay.mock.calls[0][0];
-  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",legacyWallets:change==="removed"?[]:
+  mocks.appData.mockReturnValue({timezone:"Asia/Beirut",fixtureBalances:change==="removed"?[]:
     [{...bank,archived:change==="archived",currency:change==="other currency"?"LBP":"USD"}]});
   rendered.rerender(view("normal"));
   expect(screen.queryByText(messages.Installments.noWalletForCurrency)).toBeNull();

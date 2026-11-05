@@ -1,5 +1,7 @@
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { runtimeAppFixture } from "@/test/runtime-app-fixture";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
@@ -13,22 +15,22 @@ const model = vi.hoisted(() => ({ wallets: [
 ] }));
 vi.mock("@/features/loans/actions", () => ({ recordLoanPayment: action, voidLoanPayment: vi.fn() }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ children, footer, onOpenChange }: { children: ReactNode; footer: ReactNode; onOpenChange: (open: boolean) => void }) => <section><button onClick={() => onOpenChange(false)}>Dismiss</button>{children}{footer}</section> }));
-vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppData: () => ({ timezone: "Asia/Beirut", legacyWallets: model.wallets }) }));
+vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppDataOptional: () => ({ currencyByCode: (code: string) => SEED_CURRENCY_DEFINITIONS.find((definition) => definition.code === code) }), useAppData: () => runtimeAppFixture({ timezone: "Asia/Beirut", fixtureBalances: model.wallets }) }));
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { LoanPaymentSheet } from "./loan-payment-sheet";
 const item: Loan = {
-  id: "aaaaaaaa-0000-4000-8000-000000000003", name: "Synthetic", direction: "borrowed", currency: "USD", walletId: "aaaaaaaa-0000-4000-8000-000000000001",
+  id: "aaaaaaaa-0000-4000-8000-000000000003", name: "Synthetic", direction: "borrowed", currency: "USD", balanceId: "aaaaaaaa-0000-4000-8000-000000000001",
   feeCategoryId: "aaaaaaaa-0000-4000-8000-000000000004", openedOn: "2026-01-01", creationMode: "existing", principalMinor: 10000, feeBps: 500, feeMinor: 500,
   totalDueMinor: 10500, principalPaidBeforeMinor: 0, feePaidBeforeMinor: 0, principalPaidMinor: 0, feePaidMinor: 0,
   principalRemainingMinor: 10000, feeRemainingMinor: 500, remainingMinor: 10500, monthlyPaymentMinor: null, paymentCount: null, finalPaymentMinor: null, archivedAt: null, deletedAt: null, events: [],
 };
-beforeEach(() => { model.wallets = [{ id: item.walletId, name: "USD wallet", currency: "USD", archived: false }, { id: "aaaaaaaa-0000-4000-8000-000000000002", name: "LBP wallet", currency: "LBP", archived: false }]; });
+beforeEach(() => { model.wallets = [{ id: item.balanceId, name: "USD wallet", currency: "USD", archived: false }, { id: "aaaaaaaa-0000-4000-8000-000000000002", name: "LBP wallet", currency: "LBP", archived: false }]; });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 it.each(["en", "ar"] as const)("%s: suggests the monthly payment and allows a smaller manual amount", async (locale) => {
   const messages = locale === "ar" ? ar : en;
   action.mockResolvedValue({ ok: false, error: "notConfigured" });
   const loan = { ...item, monthlyPaymentMinor: 3000, paymentCount: 3, finalPaymentMinor: 4500 };
-  render(<NextIntlClientProvider locale={locale} messages={{ Loans: messages.Loans }}><LoanPaymentSheet item={loan} onClose={vi.fn()} /></NextIntlClientProvider>);
+  render(<NextIntlClientProvider locale={locale} messages={messages}><LoanPaymentSheet item={loan} onClose={vi.fn()} /></NextIntlClientProvider>);
   const input = screen.getByLabelText(messages.Loans.amount) as HTMLInputElement;
   expect(input.value).toBe("30");
   expect(screen.getByText(messages.Loans.suggestMonthly)).toBeTruthy();
@@ -36,14 +38,15 @@ it.each(["en", "ar"] as const)("%s: suggests the monthly payment and allows a sm
   fireEvent.click(screen.getByRole("button", { name: messages.Loans.recordPayment }));
   await waitFor(() => expect(action).toHaveBeenCalledOnce());
   expect(action.mock.calls[0][0].amountMinor).toBe(1000);
+  expect(action.mock.calls[0][0].expectedUnits).toEqual({USD:2});
 });
 it("suggests the actual final remainder after extra payments, never the larger planned amount", () => {
-  render(<NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanPaymentSheet item={{ ...item, monthlyPaymentMinor: 3000, paymentCount: 3, finalPaymentMinor: 4500, principalRemainingMinor: 1000, feeRemainingMinor: 500, remainingMinor: 1500 }} onClose={vi.fn()} /></NextIntlClientProvider>);
+  render(<NextIntlClientProvider locale="en" messages={en}><LoanPaymentSheet item={{ ...item, monthlyPaymentMinor: 3000, paymentCount: 3, finalPaymentMinor: 4500, principalRemainingMinor: 1000, feeRemainingMinor: 500, remainingMinor: 1500 }} onClose={vi.fn()} /></NextIntlClientProvider>);
   expect((screen.getByLabelText(en.Loans.amount) as HTMLInputElement).value).toBe("15");
   expect(screen.getByText(en.Loans.suggestFinal)).toBeTruthy();
 });
 it("shows only same-currency wallets and rejects overpaying before a write", () => {
-  render(<NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanPaymentSheet item={item} onClose={vi.fn()} /></NextIntlClientProvider>);
+  render(<NextIntlClientProvider locale="en" messages={en}><LoanPaymentSheet item={item} onClose={vi.fn()} /></NextIntlClientProvider>);
   expect(screen.queryByText("LBP wallet")).toBeNull();
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "105.01" } });
   expect(screen.getByRole("button", { name: "Record payment" }).hasAttribute("disabled")).toBe(true);
@@ -65,7 +68,7 @@ it.each(["failed", "throw"])("retains the exact %s attempt and keeps Retry reach
   else action.mockResolvedValueOnce({ ok: false, error: "failed" });
   action.mockResolvedValueOnce({ ok: true, id: "aaaaaaaa-0000-4000-8000-000000000010", revision: 1 });
   const close = vi.fn();
-  const renderSheet = (loan: Loan) => <NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanPaymentSheet item={loan} onClose={close} /></NextIntlClientProvider>;
+  const renderSheet = (loan: Loan) => <NextIntlClientProvider locale="en" messages={en}><LoanPaymentSheet item={loan} onClose={close} /></NextIntlClientProvider>;
   const view = render(renderSheet(item));
   fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "50" } });
   fireEvent.click(screen.getByRole("button", { name: en.Loans.recordPayment }));
@@ -86,7 +89,7 @@ it("blocks dismissal and duplicate submission while a response is pending", asyn
   let complete!: (value: { ok: false; error: string }) => void;
   action.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
   const close = vi.fn();
-  render(<NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanPaymentSheet item={item} onClose={close} /></NextIntlClientProvider>);
+  render(<NextIntlClientProvider locale="en" messages={en}><LoanPaymentSheet item={item} onClose={close} /></NextIntlClientProvider>);
   const save = screen.getByRole("button", { name: en.Loans.recordPayment });
   fireEvent.click(save);
   fireEvent.submit(screen.getByLabelText("Amount").closest("form")!);

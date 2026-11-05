@@ -340,6 +340,13 @@
     "needWallet": "Add a wallet first, then you can log money in and out.",
     "addWalletFirst": "Add a wallet",
     "text": "Text",
+    "exchanged": "Money exchanged",
+    "exchangeNeedTwo": "Enable another currency to exchange money within this wallet.",
+    "exchange": "Exchange",
+    "exchangeSave": "Exchange money",
+    "fromCurrency": "From currency",
+    "toCurrency": "To currency",
+    "walletCurrency": "Wallet currency",
     "move": "Move",
     "from": "From",
     "to": "To",
@@ -380,10 +387,16 @@
     "undo": "Undo",
     "errorPreview": "This is a preview without a database, so nothing can be changed.",
     "errorFailed": "Could not delete. Try again.",
+    "exchange": "Exchange",
+    "exchangeLine": "Currency exchanged within one wallet",
     "move": "Move",
     "moveLine": "Money moved between wallets",
     "from": "From",
-    "to": "To"
+    "to": "To",
+    "historyLocked": "This historical entry is read-only for money. You can correct its note.",
+    "historyNote": "Historical note",
+    "saveHistoryNote": "Save note correction",
+    "historyConflict": "This entry changed. Close and reopen it before correcting the note."
   },
   "Wallets": {
     "emptyTitle": "No wallets yet",
@@ -417,7 +430,7 @@
     "archivedHelp": "Tap a wallet to restore it.",
     "restore": "Restore wallet",
     "emptyArchived": "You have no active wallets. Add a new one, or restore an archived wallet below.",
-    "deleteWallet": "Delete wallet",
+    "deleteWallet": "Delete wallet permanently",
     "deleteConfirm": "Delete this wallet permanently? This cannot be undone. Wallets that have transactions cannot be deleted.",
     "errorHasTransactions": "This wallet has transactions, so it cannot be deleted. Keep it archived instead.",
     "errorInUse": "A fixed expense, installment or loan still uses this wallet. Reassign it before deleting the wallet.",
@@ -437,7 +450,16 @@
     "globalCreateHelp": "Every enabled currency is added automatically. The starting balance applies only to your chosen default.",
     "needsAttention": "Needs attention",
     "needsAttentionHelp": "These wallets need review and are unavailable for new money entries.",
-    "balanceUnavailable": "Balance unavailable"
+    "balanceUnavailable": "Balance unavailable",
+    "editNamed": "Edit {name}",
+    "reorderNamed": "Reorder {name}",
+    "sortHelp": "Drag a handle to reorder all wallets. With a keyboard, press Space or Enter to pick up, use Up and Down to move, then press Space or Enter to save. Press Escape to cancel. This order applies to every currency.",
+    "sortPicked": "Picked up {name}, position {position} of {count}.",
+    "sortMoved": "Moved {name} to position {position} of {count}.",
+    "sortDropped": "Dropped {name}, position {position} of {count}.",
+    "sortCancelled": "Cancelled reordering {name}.",
+    "reordered": "Wallet order saved.",
+    "errorReorderConflict": "The wallet list changed. Refresh and try again."
   },
   "Activity": {
     "search": "Search notes",
@@ -748,7 +770,8 @@
     "USD": "US dollar",
     "LBP": "Lebanese pound",
     "SYP": "Syrian pound (new)",
-    "reenterAmount": "Enter the amount in {currency}."
+    "reenterAmount": "Enter the amount in {currency}.",
+    "draftUnavailable": "This currency is unavailable. Select a currency again to re-enter the amount."
   },
   "Breakdown": {
     "title": "Breakdown",
@@ -828,7 +851,6 @@
     "invalidPlan": "Enter a monthly amount and 1–1,200 payments that leave a positive final balance.",
     "suggestMonthly": "Monthly amount suggested. You can change it for this payment.",
     "suggestFinal": "Final balance suggested. You can change it for this payment.",
-
     "title": "Loans",
     "add": "Add loan",
     "borrowed": "I borrowed",
@@ -918,5 +940,32 @@
     "errorUncertain": "This entry may have been saved. Keep this form open and retry the exact request before adding another.",
     "retrySame": "Retry same request",
     "reviewLatest": "Review latest loan"
+  },
+  "WalletDeletion": {
+    "title": "Delete {name}?",
+    "help": "Settle every nonzero balance before permanently deleting this wallet. Positive balances move out; negative balances receive money. All transfers and deletion succeed together. History stays available.",
+    "recovery": "This wallet needs attention. Settle its balances and resolve dependencies here to delete it.",
+    "zero": "Every balance is zero. No settlement transfer is needed.",
+    "outgoing": "Move the full balance to another wallet.",
+    "incoming": "Receive the amount owed from another wallet.",
+    "destination": "Send {currency} to",
+    "source": "Receive {currency} from",
+    "choose": "Choose a wallet",
+    "confirm": "Settle and delete permanently",
+    "retry": "Retry the same deletion",
+    "reload": "Reload balances and dependencies",
+    "cancel": "Keep wallet",
+    "blocked": "Resolve these dependencies first",
+    "salary": "Change the salary wallet in Settings.",
+    "fixedExpense": "Change or remove fixed expense: {name}",
+    "installment": "Complete or change installment: {name}",
+    "loan": "Close or change outstanding loan: {name}",
+    "noCounterpart": "Create another active wallet for {currency} before deleting.",
+    "unavailableCurrency": "The {currency} balance needs recovery before deletion.",
+    "checking": "Checking balances and dependencies…",
+    "inspectionFailed": "Balances and dependencies could not be checked. Reload to try again.",
+    "preview": "Preview only. Connect your account to check dependencies and delete this wallet.",
+    "changed": "Wallet balances or dependencies changed. Reload and review before deleting.",
+    "failed": "Deletion could not be confirmed. Retry the same request, or reload to review current balances."
   }
 }

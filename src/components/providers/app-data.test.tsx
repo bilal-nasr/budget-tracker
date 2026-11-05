@@ -37,7 +37,6 @@ function Probe() {
     wallet: wallet?.name,
     balance: balance?.currency,
     disabled: disabled?.disabled,
-    legacy: data.legacyWalletById("wallet-pocket")?.currency ?? null,
   })}</output>;
 }
 
@@ -61,7 +60,6 @@ it("indexes the complete catalog and exact nested balance identities without hid
     wallet: "Pocket",
     balance: "JPY",
     disabled: true,
-    legacy: null,
   });
 });
 
@@ -99,8 +97,6 @@ function TombstoneProbe() {
   const data = useAppData();
   return <output>{JSON.stringify({
     canonical: data.walletById("empty-deleted"),
-    legacy: data.legacyWalletById("empty-deleted") ?? null,
-    legacyCount: data.legacyWallets.length,
   })}</output>;
 }
 
@@ -112,7 +108,7 @@ const emptyDeleted: WalletContainer = {
 it("retains an empty deleted tombstone without inventing a legacy default wallet", () => {
   render(provider(<TombstoneProbe />, { walletContainers: [...wallets, emptyDeleted] }));
   expect(JSON.parse(screen.getByRole("status").textContent ?? "{}")).toEqual({
-    canonical: emptyDeleted, legacy: null, legacyCount: 0,
+    canonical: emptyDeleted,
   });
 });
 
@@ -173,13 +169,6 @@ it("requires a runtime catalog for canonical wallets rather than inventing built
   expect(() => render(provider(<Probe />, { currencies: undefined, walletContainers: [wallet] }))).toThrow("App currency data unavailable");
 });
 
-it("keeps default-only compatibility explicitly behind the legacy wallet input", () => {
-  render(provider(<Probe />, {
-    currencies: undefined, walletContainers: undefined,
-    wallets: [{ id: "wallet-pocket", name: "Pocket", kind: "cash", currency: "USD", openingBalanceMinor: 0, balanceMinor: 1250, archived: false, position: 0 }],
-  }));
-  expect(JSON.parse(screen.getByRole("status").textContent ?? "{}").legacy).toBe("USD");
-});
 
 it("exposes enabled Needs-attention balances separately from ordinary and deleted wallets", () => {
   function AttentionProbe() {

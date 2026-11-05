@@ -134,19 +134,29 @@ for (const locale of ["en", "ar"] as const) {
     await expectNoHorizontalOverflow(page);
   });
 
-  test(`${locale}: wallet and cross-currency funding amounts preserve native deletion inside the Drawer`, async ({ page }) => {
+  test(`${locale}: wallet opening and explicit cross-currency Move amounts preserve native deletion inside the Drawer`, async ({ page }) => {
     await page.goto(`/${locale}/wallets`);
     await page.getByRole("button", { name: copy.Wallets.add, exact: true }).click();
     const dialog = page.getByRole("dialog");
     const amount = dialog.getByLabel(copy.Wallets.amount, { exact: true });
     await expectNumericPolicy(amount);
     await expectClearAndRetype(amount);
-    await dialog.getByText(copy.Wallets.sourceWallet, { exact: true }).click();
-    await dialog.getByRole("radiogroup", { name: copy.Wallets.sourcePick })
-      .getByRole("radio", { name: /LBP/ }).click();
-    const taken = dialog.getByLabel(copy.Wallets.takenFrom.replace("{currency}", "LBP"), { exact: true });
-    await expectNumericPolicy(taken);
-    await expectClearAndRetype(taken);
+    await dialog.getByRole("combobox", { name: copy.Wallets.defaultCurrency }).selectOption("LBP");
+    await expect(amount).toHaveAttribute("inputmode", "numeric");
+    await expectClearAndRetype(amount);
+    await page.goto(`/${locale}`);
+    await page.getByRole("button", { name: copy.Nav.add, exact: true }).filter({ visible: true }).click();
+    const move = page.getByRole("dialog");
+    await move.locator("label").filter({ hasText: new RegExp(`^${copy.Add.move}$`) }).click();
+    await move.getByRole("combobox", { name: copy.Add.from, exact: true }).selectOption({ label: "Pocket" });
+    await move.getByRole("combobox", { name: copy.Add.fromCurrency, exact: true }).selectOption({ label: "USD" });
+    await move.getByRole("combobox", { name: copy.Add.to, exact: true }).selectOption({ label: "Bank" });
+    await move.getByRole("combobox", { name: copy.Add.toCurrency, exact: true }).selectOption({ label: "LBP" });
+    await move.getByRole("button", { name: "1", exact: true }).click();
+    await move.getByRole("button", { name: copy.Add.editReceived, exact: true }).click();
+    const received = move.getByLabel(copy.Add.received.replace("{currency}", "LBP"), { exact: true });
+    await expectNumericPolicy(received);
+    await expectClearAndRetype(received);
     await expectNoHorizontalOverflow(page);
   });
 
@@ -213,8 +223,8 @@ for (const locale of ["en", "ar"] as const) {
     const dialog = page.getByRole("dialog");
     await dialog.getByText(copy.Add.move, { exact: true }).click();
     await dialog.getByRole("button", { name: "5", exact: true }).click();
-    await dialog.getByRole("combobox", { name: new RegExp(`^${copy.Add.to}`) }).click();
-    await page.getByRole("option", { name: /LBP/ }).click();
+    await dialog.getByRole("combobox", { name: copy.Add.to, exact: true }).selectOption({ label: "Bank" });
+    await dialog.getByRole("combobox", { name: copy.Add.toCurrency, exact: true }).selectOption({ label: "LBP" });
     const rate = dialog.getByLabel(copy.Add.rate, { exact: true });
     const received = dialog.getByLabel(copy.Add.received.replace("{currency}", "LBP"), { exact: true });
     await expectNumericPolicy(rate);

@@ -1,5 +1,7 @@
 -- Disposable local database only. Run with supabase test db after all prior round-3 migrations.
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 

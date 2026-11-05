@@ -1,6 +1,8 @@
 -- Real PostgreSQL lifecycle contracts. A missing propagation, premature used
 -- marker, privilege bypass or wrong default transition must fail these tests.
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 create extension if not exists pgtap with schema extensions;
 set local search_path=public,extensions;
 select no_plan();
@@ -46,6 +48,7 @@ select lives_ok($$select public.delete_currency('RENAMED')$$,'unused deletion sw
 select is((select count(*) from public.wallet_balances where currency='RENAMED'),0::bigint,'unused balances removed atomically');
 select is((select b.currency from public.wallets w join public.wallet_balances b on b.id=w.default_balance_id where w.id=(select id from global_ids where label='a')),'LBP','deletion wraps to first enabled catalog entry');
 select lives_ok($$select public.create_currency('OPEN','O',2)$$,'opening test definition exists');
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"OPEN":2}')::text,true);
 select lives_ok($$insert into global_ids values('opening',public.create_wallet('Opening','cash','OPEN',-7))$$,'signed opening amount accepted');
 select is((select opening_balance_minor from public.wallet_balances where wallet_id=(select id from global_ids where label='opening') and currency='OPEN'),(-7)::bigint,'opening applies to selected default only');
 select is((select count(*) from public.wallet_balances where wallet_id=(select id from global_ids where label='opening') and currency<>'OPEN' and opening_balance_minor<>0),0::bigint,'all other openings remain zero');
@@ -55,6 +58,7 @@ select throws_ok($$select public.update_currency('OPEN','OPEN','O',3)$$,'P0001',
 select lives_ok($$select public.update_currency('OPEN','OPEN','New',2)$$,'used symbol remains editable');
 select throws_ok($$select public.delete_currency('OPEN')$$,'P0001','currency.used','used definition cannot delete');
 select lives_ok($$select public.create_currency('REF','F',2)$$,'configuration test definition exists');
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"REF":2}')::text,true);
 select lives_ok($$update public.profiles set salary_balance_id=(select id from public.wallet_balances where wallet_id=(select id from global_ids where label='a') and currency='REF'),salary_amount_minor=5 where user_id=auth.uid()$$,'salary configuration may select automatic zero balance');
 select ok((select first_used_at is not null from public.currencies where code='REF'),'balance-only configuration reference marks currency used');
 select throws_ok($$select public.set_currency_disabled('REF',true)$$,'P0001','currency.inUse','future-writing salary blocks disable');
@@ -104,6 +108,7 @@ select throws_ok($$select pg_temp.break_tombstone_cleanup((select id from global
 select ok((select default_balance_id is not null from public.wallets where id=(select id from global_ids where label='existing-tomb')),'rejected incomplete cleanup preserves the tombstone default');
 select set_config('request.jwt.claims','{"sub":"cf000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select lives_ok($$select public.create_currency('ROUND','R',2)$$,'round-trip history definition exists');
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"ROUND":2}')::text,true);
 insert into public.transactions(kind,occurred_on,balance_id,currency,amount_minor,category_id)
  select k.kind::public.txn_kind,current_date,b.id,'ROUND',5,c.id
  from (values('income'),('expense'))k(kind) join public.categories c on c.kind::text=k.kind and c.parent_id is null

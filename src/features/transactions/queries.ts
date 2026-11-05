@@ -3,29 +3,35 @@ import { demoPage } from "@/lib/demo-data";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import type { Cursor, Filters, Page, Transaction } from "./schema";
-import { readMinor, type Currency } from "@/lib/money";
+import { readMinor } from "@/lib/money";
 import { SETTLEMENT_COLUMNS, readSettlementSnapshot, type SettlementRow } from "./settlement-serialization";
 import { activityOrClause } from "./activity-filter";
 
 export const PAGE_SIZE = 30;
 
 export const TRANSACTION_COLUMNS =
-  `id, kind, occurred_on, amount_minor, currency, cost_currency, wallet_id, category_id, to_wallet_id, to_amount_minor, note, created_at, revision, source, fixed_expense_id, installment_id, loan_id, loan_flow, loan_event, loan_principal_minor, loan_fee_minor, loan_event_seq, ${SETTLEMENT_COLUMNS}, expense_items!expense_items_transaction_owner_fkey(id,description,amount_minor,position)`;
+  `id, kind, occurred_on, amount_minor, currency, cost_currency, balance_id, category_id, to_balance_id, wallet_name_snapshot, to_wallet_name_snapshot, to_amount_minor, note, created_at, revision, source, fixed_expense_id, installment_id, loan_id, loan_flow, loan_event, loan_principal_minor, loan_fee_minor, loan_event_seq, ${SETTLEMENT_COLUMNS}, expense_items!expense_items_transaction_owner_fkey(id,description,amount_minor,position)`;
+
+// Keep this parent-only read: joining active wallets/currencies would drop
+// tombstoned source, destination or change history. The provider resolves every
+// retained balance UUID independently, including nondefault/disabled balances.
 
 export type TransactionRow = SettlementRow & {
   id: string;
   kind: Transaction["kind"];
   occurred_on: string;
   amount_minor: number | string;
-  currency: Currency;
-  cost_currency: Currency | null;
-  wallet_id: string;
+  currency: string;
+  cost_currency: string | null;
+  balance_id: string;
   category_id: string | null;
-  to_wallet_id: string | null;
+  to_balance_id: string | null;
   to_amount_minor: number | string | null;
   note: string | null;
   created_at: string;
   revision: number;
+  wallet_name_snapshot?: string | null;
+  to_wallet_name_snapshot?: string | null;
   source: Transaction["source"];
   fixed_expense_id: string | null;
   installment_id: string | null;
@@ -46,9 +52,11 @@ export const toTransaction = (r: TransactionRow): Transaction => {
     occurredOn: r.occurred_on,
     amountMinor: readMinor(r.amount_minor),
     currency: costCurrency,
-    walletId: r.wallet_id,
+    balanceId: r.balance_id,
+    walletNameSnapshot: r.wallet_name_snapshot ?? null,
+    toWalletNameSnapshot: r.to_wallet_name_snapshot ?? null,
     categoryId: r.category_id,
-    toWalletId: r.to_wallet_id,
+    toBalanceId: r.to_balance_id,
     toAmountMinor: r.to_amount_minor === null ? null : readMinor(r.to_amount_minor),
     note: r.note,
     createdAt: r.created_at,

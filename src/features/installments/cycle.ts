@@ -1,4 +1,4 @@
-import { MAX_MINOR, type Currency } from "@/lib/money";
+import { MAX_MINOR } from "@/lib/money";
 import type { Transaction } from "@/features/transactions/schema";
 
 export type SalaryReceipt = { id: string; occurredOn: string; createdAt: string };
@@ -6,8 +6,8 @@ export type SalaryReceipt = { id: string; occurredOn: string; createdAt: string 
 export type InstallmentBase = {
   id: string;
   name: string;
-  currency: Currency;
-  walletId: string;
+  currency: string;
+  balanceId: string;
   categoryId: string;
   totalMinor: number;
   paidBeforeMinor: number;
@@ -23,7 +23,7 @@ export type InstallmentPayment = {
   amountMinor: number;
   occurredOn: string;
   createdAt: string;
-  walletId: string;
+  balanceId: string;
   salaryCycleId: string | null;
   revision: number;
 };

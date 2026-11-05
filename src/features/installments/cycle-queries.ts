@@ -1,8 +1,9 @@
+import { currencyCodeSchema } from "@/features/currencies/schema";
 import "server-only";
 
 import { cache } from "react";
 import { z } from "zod";
-import { CURRENCIES, readMinor } from "@/lib/money";
+import { readMinor } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { demoInstallments, demoSalaryReceipt } from "@/lib/demo-data";
@@ -16,16 +17,16 @@ const positiveMinor = minor.pipe(z.number().int().min(1));
 const nonnegativeMinor = minor.pipe(z.number().int().min(0));
 const recordedTime = z.iso.datetime({ offset: true });
 const installmentRow = z.object({
-  id: z.uuid(), name: z.string().min(1).max(60), currency: z.enum(CURRENCIES),
-  wallet_id: z.uuid(), category_id: z.uuid(), total_minor: positiveMinor, paid_before_minor: nonnegativeMinor,
+  id: z.uuid(), name: z.string().min(1).max(60), currency: currencyCodeSchema,
+  balance_id: z.uuid(), category_id: z.uuid(), total_minor: positiveMinor, paid_before_minor: nonnegativeMinor,
   monthly_minor: positiveMinor.nullable(), due_day: z.number().int().min(1).max(31).nullable(),
 });
 const paymentRow = z.object({
-  id: z.uuid(), installment_id: z.uuid(), wallet_id: z.uuid(), amount_minor: positiveMinor,
+  id: z.uuid(), installment_id: z.uuid(), balance_id: z.uuid(), amount_minor: positiveMinor,
   occurred_on: z.iso.date(), created_at: recordedTime, salary_cycle_id: z.uuid().nullable(),
   revision: z.number().int().min(1).max(2_147_483_647),
-  kind: z.literal("expense"), currency: z.enum(CURRENCIES), cost_currency: z.null().default(null), category_id: z.uuid(), note: z.string().max(140).nullable(),
-  to_wallet_id: z.null(), to_amount_minor: z.null(), source: z.literal("installment"), fixed_expense_id: z.uuid().nullable(),
+  kind: z.literal("expense"), currency: currencyCodeSchema, cost_currency: z.null().default(null), category_id: z.uuid(), note: z.string().max(140).nullable(),
+  to_balance_id: z.null(), to_amount_minor: z.null(), source: z.literal("installment"), fixed_expense_id: z.uuid().nullable(),
   loan_id: z.null(), loan_flow: z.null(), deleted_at: z.null(),
   loan_event: z.null().default(null), loan_principal_minor: z.null().default(null),
   loan_fee_minor: z.null().default(null), loan_event_seq: z.null().default(null),
@@ -33,7 +34,7 @@ const paymentRow = z.object({
   // payments cannot be cash settlements, but do not strip these fields before
   // calling the shared mapper when its settlement DTO is extended.
   tender_minor: z.null(), cashier_changes: z.array(z.never()).max(0).default([]),
-  change_wallet_id: z.null(), change_minor: z.null(), change_currency: z.null(),
+  change_balance_id: z.null(), change_minor: z.null(), change_currency: z.null(),
   change_rate_base: z.null(), change_rate_quote: z.null(), change_rate_numerator: z.null(), change_rate_denominator: z.null(),
   expense_items: z.object({ id: z.uuid(), description: z.string().min(1).max(140), amount_minor: positiveMinor,
     position: z.number().int().min(0).max(49) }).array().max(50),
@@ -64,7 +65,7 @@ export function parseCycleSnapshot(payload: unknown): InstallmentCycleSnapshot {
       seenPayments.add(p.id);
       const payments = byInstallment.get(p.installment_id) ?? [];
       payments.push({ transactionId: p.id, amountMinor: p.amount_minor, occurredOn: p.occurred_on,
-        createdAt: p.created_at, walletId: p.wallet_id, salaryCycleId: p.salary_cycle_id, revision: p.revision,
+        createdAt: p.created_at, balanceId: p.balance_id, salaryCycleId: p.salary_cycle_id, revision: p.revision,
         transaction: toTransaction(p) });
       byInstallment.set(p.installment_id, payments);
     }
@@ -72,7 +73,7 @@ export function parseCycleSnapshot(payload: unknown): InstallmentCycleSnapshot {
       id: rows.receipt.id, occurredOn: rows.receipt.occurred_on, createdAt: rows.receipt.created_at,
     };
     const installments = rows.installments.map((i) => withProgress({
-      id: i.id, name: i.name, currency: i.currency, walletId: i.wallet_id, categoryId: i.category_id,
+      id: i.id, name: i.name, currency: i.currency, balanceId: i.balance_id, categoryId: i.category_id,
       totalMinor: i.total_minor, paidBeforeMinor: i.paid_before_minor, monthlyMinor: i.monthly_minor, dueDay: i.due_day,
     }, byInstallment.get(i.id) ?? [], receipt?.id ?? null));
     return { receipt, installments };
@@ -119,7 +120,7 @@ export function parseCycleSummary(payload: unknown): InstallmentCycleSnapshot {
         || (i.cycle_payment_count === 0) !== (i.paid_this_cycle_minor === 0)) throw unavailable();
       seen.add(i.id);
       const progress = {
-        id: i.id, name: i.name, currency: i.currency, walletId: i.wallet_id, categoryId: i.category_id,
+        id: i.id, name: i.name, currency: i.currency, balanceId: i.balance_id, categoryId: i.category_id,
         totalMinor: i.total_minor, paidBeforeMinor: i.paid_before_minor, monthlyMinor: i.monthly_minor, dueDay: i.due_day,
         paidMinor: i.paid_minor, remainingMinor: i.remaining_minor, salaryCycleId: receipt?.id ?? null,
         paidThisCycleMinor: i.paid_this_cycle_minor, cyclePaymentCount: i.cycle_payment_count,

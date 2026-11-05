@@ -1,3 +1,4 @@
+import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { z } from "zod";
 import { MAX_MINOR } from "@/lib/money";
 
@@ -7,15 +8,17 @@ const uuid = z.uuid().transform((value) => value.toLowerCase());
 
 /** Required UUIDs belong to one retained UI intent, never generated per retry. */
 export const receiveSalaryInputSchema = z.strictObject({
+  expectedUnits: expectedUnitsSchema.optional(),
   requestId: uuid,
   expectedCycleId: uuid.nullable(),
 });
 export type ReceiveSalaryInput = z.infer<typeof receiveSalaryInputSchema>;
 
 export const cyclePaymentInputSchema = z.strictObject({
+  expectedUnits: expectedUnitsSchema.optional(),
   requestId: uuid,
   installmentId: uuid,
-  walletId: uuid,
+  balanceId: uuid,
   amountMinor: z.number().int().min(1).max(MAX_MINOR),
   occurredOn: z.iso.date().refine((date) => date >= "2000-01-01"),
   salaryCycleId: uuid.nullable(),

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { withoutCurrencyIntent, type ExpectedUnits } from "@/lib/currency-intent";
 import { actionClient, type ActionError, type ActionResult } from "@/lib/supabase/action";
 import { getProfile } from "@/features/profile/queries";
 import { todayIn } from "@/features/transactions/group";
@@ -19,10 +20,11 @@ async function mutate(name: string, args: Record<string, unknown>, withId: "revi
 async function mutate(name: string, args: Record<string, unknown>, withId?: false): Promise<LoanActionResult>;
 async function mutate(name: string, args: Record<string, unknown>, withId: boolean | "revision" = false): Promise<LoanActionResult<{ id?: string; revision?: number }>> {
   try {
-  const ctx = await actionClient();
+  const input = args.p_input as { expectedUnits?: ExpectedUnits } | undefined;
+  const ctx = await actionClient(input?.expectedUnits);
   if (ctx.error) return { ok: false, error: ctx.error };
-  const { data, error } = await ctx.supabase.rpc(name, args);
-  if (error) return { ok: false, error: errorCode(error.message) };
+  const { data, error } = await ctx.supabase.rpc(name, input ? { ...args, p_input: withoutCurrencyIntent(input) } : args);
+  if (error) return { ok: false, error: error.message === "currency.intentConflict" ? "conflict" : errorCode(error.message) };
   if (withId) {
     const id = Array.isArray(data) ? data[0]?.id : undefined;
     if (!idSchema.safeParse(id).success) return { ok: false, error: "failed" };

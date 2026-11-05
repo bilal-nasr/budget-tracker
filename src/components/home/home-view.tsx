@@ -96,7 +96,7 @@ function HomeWallets() {
           return (
           <Link
             key={w.id}
-            href={{ pathname: "/activity", query: { walletId: w.id } }}
+            href={{ pathname: "/activity", query: { balanceId: balance?.id } }}
             className="min-h-[72px] min-w-[140px] snap-start rounded-xl border border-border bg-card px-3.5 py-3"
           >
             <span className="block truncate text-[13px] text-muted-foreground">

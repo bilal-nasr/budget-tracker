@@ -16,10 +16,14 @@ let reads: Record<string, { data: unknown[] | null; error: null | { message: str
 
 function query(table: string) {
   const value: Record<string, unknown> = {};
+  let key = "id"; let after: string | null = null; let limit = 1000;
   for (const method of ["select", "insert", "update", "delete", "eq", "order"]) value[method] = vi.fn().mockReturnValue(value);
+  value.order = vi.fn((column: string) => { key = column; return value; });
+  value.gt = vi.fn((_column: string, cursor: string) => { after = cursor; return value; });
+  value.limit = vi.fn((size: number) => { limit = size; return value; });
   value.single = vi.fn(() => Promise.resolve(writeResult));
   value.maybeSingle = vi.fn(() => Promise.resolve(writeResult));
-  value.then = (resolve: (result: unknown) => unknown) => Promise.resolve(reads[table]).then(resolve);
+  value.then = (resolve: (result: unknown) => unknown) => Promise.resolve({ ...reads[table], data: reads[table]?.data?.filter((row) => after === null || String((row as Record<string, unknown>)[key]) > after).sort((a, b) => String((a as Record<string, unknown>)[key]).localeCompare(String((b as Record<string, unknown>)[key]))).slice(0, limit) ?? null }).then(resolve);
   return value;
 }
 
@@ -163,8 +167,8 @@ describe("currency actions", () => {
       { kind: "installment", id: "installment", name: "Laptop", balanceId: "eur" },
       { kind: "loan", id: "loan", name: "Advance", balanceId: "eur" },
       { kind: "pendingPayment", id: "pending", label: "Acme · Site" },
-      { kind: "budget", id: "old", categoryId: "food", startsMonth: "2000-01-01" },
       { kind: "budget", id: "future", categoryId: "rent", startsMonth: "2099-01-01" },
+      { kind: "budget", id: "old", categoryId: "food", startsMonth: "2000-01-01" },
     ]);
   });
 
@@ -213,4 +217,46 @@ describe("currency actions", () => {
     await expect(createCurrency({ code: "EUR", symbol: "€", decimalPlaces: 2 }))
       .resolves.toEqual({ ok: false, error: "failed" });
   });
+});
+
+it("fails closed on missing or duplicate installment progress", async () => {
+  reads.wallet_balances.data = [{ id: "eur", wallet_id: "wallet", currency: "EUR", detached_at: null }];
+  reads.installments.data = [{ id: "late", name: "Laptop", balance_id: "eur" }];
+  await expect(inspectCurrencyDisable("EUR")).rejects.toThrow("Currency inspection unavailable");
+  reads.installment_progress.data = [{ installment_id: "late", remaining_minor: 0 }, { installment_id: "late", remaining_minor: 20 }];
+  await expect(inspectCurrencyDisable("EUR")).rejects.toThrow("Currency inspection unavailable");
+});
+
+it("traverses independent late pages for catalog, balances and every blocker family", async () => {
+  const padding = Array.from({ length: 1001 }, (_, n) => String(n).padStart(4, "0"));
+  reads.currencies.data = [...padding.map((n) => ({ code: `C${n}`, disabled_at: null })), { code: "ZZZ", disabled_at: null }];
+  reads.wallets.data = padding.map((n) => ({ id: n, name: n, default_balance_id: n, deleted_at: null, needs_attention: false }));
+  reads.wallet_balances.data = padding.map((n) => ({ id: n, wallet_id: n, currency: "C0000", detached_at: null }));
+  reads.wallet_balance_totals.data = padding.map((n) => ({ balance_id: n, wallet_id: n, currency: "C0000", balance_minor: 0 }));
+  reads.wallets.data.push({ id: "z", name: "Late wallet", default_balance_id: "z", deleted_at: null });
+  reads.wallet_balances.data.push({ id: "z", wallet_id: "z", currency: "ZZZ", detached_at: null });
+  reads.wallet_balance_totals.data.push({ balance_id: "z", wallet_id: "z", currency: "ZZZ", balance_minor: 1 });
+  reads.profiles.data = [{ salary_balance_id: "z" }];
+  reads.fixed_expenses.data = [...padding.map((id) => ({ id, name: id, balance_id: id })), { id: "z", name: "Late fixed", balance_id: "z" }];
+  reads.installments.data = [...padding.map((id) => ({ id, name: id, balance_id: id })), { id: "z", name: "Late installment", balance_id: "z" }];
+  reads.installment_progress.data = [...padding.map((installment_id) => ({ installment_id, remaining_minor: 0 })), { installment_id: "z", remaining_minor: 1 }];
+  reads.loan_progress.data = [...padding.map((id) => ({ id, name: id, balance_id: id, currency: "C0000", remaining_minor: 0, deleted_at: null })), { id: "z", name: "Late loan", balance_id: "z", currency: "ZZZ", remaining_minor: 1, deleted_at: null }];
+  reads.pending_payment_progress.data = [...padding.map((id) => ({ id, currency: "C0000", remaining_minor: 0, deleted_at: null })), { id: "z", client: "Late", project: "Project", currency: "ZZZ", remaining_minor: 1, deleted_at: null }];
+  reads.budgets.data = [...padding.map((id) => ({ id, currency: "C0000", category_id: id, starts_month: "2000-01-01", limit_minor: 0 })), { id: "z", category_id: "z", currency: "ZZZ", starts_month: "2099-01-01", limit_minor: 1 }];
+  const blockers = await inspectCurrencyDisable("ZZZ");
+  expect(blockers.map((entry) => entry.kind)).toEqual(["nonzeroBalance", "lastWalletBalance", "salary", "fixedExpense", "installment", "loan", "pendingPayment", "budget"]);
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  for (const result of mocks.from.mock.results) expect(result.value.eq).toHaveBeenCalledWith("user_id", owner);
+});
+
+it.each(["wallet", "catalog", "fixed", "salary", "loan", "pending", "progress"])("fails closed on an incomplete %s inspection join", async (join) => {
+ reads.wallet_balances.data=[{id:"eur",wallet_id:"wallet",currency:"EUR",detached_at:null}];
+ if(join==="wallet") reads.wallets.data=[];
+ if(join==="catalog") reads.wallet_balances.data=[{id:"eur",wallet_id:"wallet",currency:"MISSING",detached_at:null}];
+ if(join==="fixed") reads.fixed_expenses.data=[{id:"bad",balance_id:"missing"}];
+ if(join==="salary") reads.profiles.data=[{salary_balance_id:"missing"}];
+ if(join==="loan") reads.loan_progress.data=[{id:"bad",balance_id:"eur",currency:"USD",remaining_minor:1,deleted_at:null}];
+ if(join==="pending") reads.pending_payment_progress.data=[{id:"bad",currency:"MISSING",remaining_minor:1,deleted_at:null}];
+ if(join==="progress") reads.installment_progress.data=[{installment_id:"orphan",remaining_minor:1}];
+ await expect(inspectCurrencyDisable("EUR")).rejects.toThrow("Currency inspection unavailable");
 });

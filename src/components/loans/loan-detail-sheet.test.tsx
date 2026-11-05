@@ -1,5 +1,7 @@
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { runtimeAppFixture } from "@/test/runtime-app-fixture";
 import { afterEach, expect, it, vi } from "vitest";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
@@ -12,7 +14,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/features/loans/history-actions", () => ({ loadLoanHistory: state.load }));
 vi.mock("@/features/loans/actions", () => ({ cancelLoan: vi.fn(), restoreLoanPayment: vi.fn(), setLoanArchived: vi.fn(), voidLoanPayment: state.voidPayment, deleteLoan: state.deleteLoan, deleteLoanPayment: state.deletePayment }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ open, children, footer }: { open: boolean; children: ReactNode; footer?: ReactNode }) => open ? <section>{children}{footer}</section> : null }));
-vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppData: () => ({ legacyWalletById: () => ({ name: "Synthetic wallet" }) }) }));
+vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppDataOptional: () => ({ currencyByCode: (code: string) => SEED_CURRENCY_DEFINITIONS.find((definition) => definition.code === code) }), useAppData: () => runtimeAppFixture({ fixtureBalanceById: () => ({ name: "Synthetic wallet" }) }) }));
 import { LoanDetailSheet } from "./loan-detail-sheet";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -49,7 +51,7 @@ it.each(["en", "ar"] as const)("allows permanent deletion of a canceled unarchiv
 it("allows permanently deleting an older payment with its revision and keeps failures visible", async () => {
   const base = demoLoans()[0];
   const old = { transactionId: "old", revision: 4, loanId: base.id, event: "repayment" as const, flow: "out" as const,
-    sequence: 1, walletId: base.walletId, occurredOn: "2026-01-02", amountMinor: 100, principalMinor: 100, feeMinor: 0,
+    sequence: 1, balanceId: base.balanceId, occurredOn: "2026-01-02", amountMinor: 100, principalMinor: 100, feeMinor: 0,
     categoryId: base.feeCategoryId, deletedAt: null };
   const onClose = vi.fn();
   const item = { ...base, events: [old], historyComplete: true, livePaymentCount: 40,
@@ -67,7 +69,7 @@ it("allows permanently deleting an older payment with its revision and keeps fai
 it("keeps Cancel and older Restore unavailable when newer live payments are outside the loaded history page", async () => {
   const base = demoLoans()[0];
   const old = { transactionId: "old", revision: 4, loanId: base.id, event: "repayment" as const, flow: "out" as const,
-    sequence: 1, walletId: base.walletId, occurredOn: "2026-01-02", amountMinor: 100, principalMinor: 100, feeMinor: 0,
+    sequence: 1, balanceId: base.balanceId, occurredOn: "2026-01-02", amountMinor: 100, principalMinor: 100, feeMinor: 0,
     categoryId: base.feeCategoryId, deletedAt: "2026-01-03T00:00:00Z" };
   state.load.mockResolvedValue({ rows: [old], next: 1 });
   const item = { ...base, events: [], historyComplete: false, livePaymentCount: 40,

@@ -14,15 +14,23 @@ vi.mock("@/lib/supabase/proxy", () => ({ supabaseConfigured: mocks.configured })
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }));
 vi.mock("@/features/currencies/queries", () => ({ getCurrencies: mocks.getCurrencies }));
 
-import { getLegacyWallets, getWallets } from "./queries";
+import { getWallets } from "./queries";
 import { MoneyRangeError } from "@/lib/money";
+import { historicalExportBalances } from "@/features/export/model";
 
 type Result = { data: unknown[] | null; error: { message: string } | null };
 
 function query(result: () => Result) {
   const value: Record<string, unknown> = {};
+  let key = "id", after: string | null = null, limit = 1000;
   for (const method of ["select", "eq", "is", "order"]) value[method] = vi.fn().mockReturnValue(value);
-  value.then = (resolve: (result: Result) => unknown) => Promise.resolve(result()).then(resolve);
+  value.order = vi.fn((field: string) => { key = field; return value; });
+  value.gt = vi.fn((_field: string, cursor: string) => { after = cursor; return value; });
+  value.limit = vi.fn((size: number) => { limit = Math.min(size, 1000); return value; });
+  value.then = (resolve: (result: Result) => unknown) => {
+    const page = result();
+    return Promise.resolve({ ...page, data: page.data?.filter((row) => after === null || String((row as Record<string, unknown>)[key]) > after).sort((a, b) => String((a as Record<string, unknown>)[key]).localeCompare(String((b as Record<string, unknown>)[key]))).slice(0, limit) ?? null }).then(resolve);
+  };
   return value;
 }
 
@@ -177,6 +185,27 @@ describe.each(["database", "demo"])("getWallets %s", (mode) => {
 });
 
 describe("database integrity", () => {
+  it("orders equal-position wallets chronologically through PostgreSQL microseconds before fallback IDs", async () => {
+    results.wallets.data = wallets.map((wallet, index) => ({ ...wallet, position: 0, created_at: ["2026-11-05T12:00:00.000002+00:00", "2026-11-05T12:00:00.000001+00:00", "2026-11-05T12:00:00+00:00"][index] }));
+    expect((await getWallets({ includeDeleted: true, includeNeedsAttention: true })).map((wallet) => wallet.id)).toEqual(["wallet-deleted", "wallet-attention", "wallet-active"]);
+  });
+  it("uses wallet IDs only when creation instants are exactly equal", async () => {
+    results.wallets.data = wallets.map((wallet, index) => ({ ...wallet, position: 0, created_at: ["2026-11-05T12:00:00.1+00:00", "2026-11-05T14:00:00.100000+02:00", "2026-11-05T12:00:00.100+00:00"][index] }));
+    expect((await getWallets({ includeDeleted: true, includeNeedsAttention: true })).map((wallet) => wallet.id)).toEqual(["wallet-active", "wallet-attention", "wallet-deleted"]);
+  });
+  it("exports all retained identities and exact totals beyond 1000 wallets and 2000 balance rows", async () => {
+    const catalog = [{ code: "USD", symbol: "$", decimalPlaces: 2, disabled: false, firstUsed: true }, { code: "LBP", symbol: "LBP", decimalPlaces: 0, disabled: true, firstUsed: true }];
+    mocks.getCurrencies.mockResolvedValue(catalog);
+    results.wallets.data = Array.from({ length: 1205 }, (_, n) => ({ ...wallets[2], id: `wallet-${String(n).padStart(5, "0")}`, position: n, default_balance_id: `balance-${String(n).padStart(5, "0")}-USD` }));
+    results.wallet_balances.data = results.wallets.data.flatMap((row) => ["USD", "LBP"].map((currency, position) => ({ id: `balance-${String((row as Record<string, unknown>).position).padStart(5, "0")}-${currency}`, wallet_id: (row as Record<string, unknown>).id, currency, position, opening_balance_minor: currency === "USD" ? "123" : "-5", detached_at: currency === "USD" ? null : "2026-01-01", created_at: "2026-01-01" })));
+    results.wallet_balance_totals.data = results.wallet_balances.data.map((row) => ({ balance_id: (row as Record<string, unknown>).id, wallet_id: (row as Record<string, unknown>).wallet_id, currency: (row as Record<string, unknown>).currency, balance_minor: "0" }));
+    const retained = historicalExportBalances(await getWallets({ includeDeleted: true, includeNeedsAttention: true, includeDisabledBalances: true }), catalog);
+    expect(retained).toHaveLength(2410);
+    expect(retained).toContainEqual(expect.objectContaining({ id: "balance-01204-LBP", walletId: "wallet-01204", openingBalanceMinor: -5, balanceMinor: 0, deleted: true }));
+    expect(retained).toContainEqual(expect.objectContaining({ id: "balance-01204-USD", walletId: "wallet-01204", openingBalanceMinor: 123, balanceMinor: 0, deleted: true }));
+    results.wallet_balance_totals.data.pop();
+    await expect(getWallets({ includeDeleted: true })).rejects.toThrow("Wallet balance total unavailable");
+  });
   it.each(["missing", "duplicate", "cross-wallet", "wrong currency", "extra"])("rejects %s totals", async (change) => {
     if (change === "missing") totals.splice(1, 1);
     if (change === "duplicate") totals.push({ ...totals[0] });
@@ -197,8 +226,8 @@ describe("database integrity", () => {
 
 describe("real demo fixture", () => {
   it("stores every enabled currency in each non-deleted wallet with stable distinct IDs", async () => {
-    const { DEMO_WALLET_CONTAINERS, DEMO_CURRENCIES } = await vi.importActual<typeof import("@/lib/demo-data")>("@/lib/demo-data");
-    const enabled = DEMO_CURRENCIES.filter((currency) => !currency.disabled).map((currency) => currency.code);
+    const { DEMO_WALLET_CONTAINERS, DEMO_CURRENCY_DEFINITIONS } = await vi.importActual<typeof import("@/lib/demo-data")>("@/lib/demo-data");
+    const enabled = DEMO_CURRENCY_DEFINITIONS.filter((currency) => !currency.disabled).map((currency) => currency.code);
     const ids = new Set<string>();
     for (const wallet of DEMO_WALLET_CONTAINERS.filter((wallet) => !wallet.deleted)) {
       expect(wallet.balances.map((balance) => balance.currency)).toEqual(enabled);
@@ -211,15 +240,5 @@ describe("real demo fixture", () => {
         }
       }
     }
-  });
-});
-
-describe("getLegacyWallets compatibility", () => {
-  it("adapts only the exact stored built-in default without combining balances", async () => {
-    (results.wallets.data![0] as Record<string, unknown>).default_balance_id = "balance-usd";
-    await expect(getLegacyWallets()).resolves.toEqual([expect.objectContaining({ id: "wallet-active", currency: "USD", openingBalanceMinor: 100, balanceMinor: 125 })]);
-  });
-  it("fails visibly when an old screen encounters a custom default", async () => {
-    await expect(getLegacyWallets()).rejects.toThrow("Legacy wallet currency unavailable");
   });
 });

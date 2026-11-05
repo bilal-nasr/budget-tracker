@@ -1,4 +1,5 @@
 "use client";
+import { currencyIntent } from "@/lib/currency-intent";
 
 import { useOptimistic, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
@@ -8,7 +9,7 @@ import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
 import { useDisplayPrefs } from "@/components/providers/display-prefs";
 import { formatAmount } from "@/lib/money";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { useComposer } from "@/components/shell/composer";
 import { Button } from "@/components/ui/button";
 import { receiveSalary } from "@/features/salary/actions";
@@ -31,7 +32,7 @@ function shortDate(date: string, locale: string): string {
 
 /**
  * Fixed monthly salary. One press of "Got salary" adds the saved amount to the
- * saved wallet as income. Every confirmed receipt opens an installment cycle.
+ * saved balance as income. Every confirmed receipt opens an installment cycle.
  */
 export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
   const t = useTranslations("Salary");
@@ -39,7 +40,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
   const locale = useLocale();
   const router = useRouter();
   const tc = useTranslations("Categories");
-  const { salary, legacyWalletById, timezone } = useAppData();
+  const { salary, balanceChoiceById, timezone, definition } = useRuntimeBalances();
   const { digits } = useDisplayPrefs();
   const { openSalary } = useComposer();
   const [pending, startTransition] = useTransition();
@@ -53,7 +54,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
     lastReceivedOn: todayIn(timezone),
     receivedThisMonth: true,
   }));
-  const wallet = salary ? legacyWalletById(salary.walletId) : undefined;
+  const balance = salary ? balanceChoiceById(salary.balanceId) : undefined;
 
   const receive = () => {
     if (!draft || inFlight.current) return;
@@ -85,13 +86,13 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
     });
   };
   const openReceive = () => {
-    if (!uncertain || !draft) setDraft({ requestId: crypto.randomUUID(), expectedCycleId: serverStatus.receiptId });
+    if (!uncertain || !draft) setDraft({ expectedUnits: currencyIntent(balance?.definition), requestId: crypto.randomUUID(), expectedCycleId: serverStatus.receiptId });
     setConfirmMounted(true);
     setConfirmOpen(true);
   };
 
   // Reconcile the already-confirmed request before testing eligibility for a
-  // NEW receipt. A refresh may remove the salary configuration or its wallet
+  // NEW receipt. A refresh may remove the salary configuration or its balance
   // after the original income committed but its response was lost.
   if (draft && (uncertain || pending)) {
     return <section aria-labelledby="h-salary" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -101,13 +102,13 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
     </section>;
   }
 
-  if (!salary || !wallet || wallet.archived) {
+  if (!salary || !balance || balance.archived) {
     return (
       <section aria-labelledby="h-salary" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
         <div>
           <h2 id="h-salary" className="text-[17px] font-semibold">{t("title")}</h2>
           <p className="mt-1 text-[15px] text-muted-foreground">
-            {salary && (!wallet || wallet.archived) ? t("walletGone") : t("setBody")}
+            {salary && (!balance || balance.archived) ? t("walletGone") : t("setBody")}
           </p>
         </div>
         <Button variant="outline" className="self-start" onClick={openSalary}>
@@ -123,10 +124,10 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
         <div className="min-w-0">
           <h2 id="h-salary" className="text-[17px] font-semibold">{t("title")}</h2>
           <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-            {t("goesTo")} <bdi>{wallet.name}</bdi> · {wallet.currency}
+            {t("goesTo")} <bdi>{balance.name}</bdi> · {balance.currency}
           </p>
         </div>
-        <Amount minor={salary.amountMinor} currency={wallet.currency} className="text-[22px] font-bold tracking-tight" />
+        <Amount minor={salary.amountMinor} currency={balance.currency} className="text-[22px] font-bold tracking-tight" />
       </div>
 
       <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
@@ -161,8 +162,8 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
       >
         <p>
           {t("confirmBody", {
-            amount: `⁦${formatAmount(salary.amountMinor, wallet.currency, { digits })}⁩`,
-            wallet: `⁨${wallet.name}⁩`,
+            amount: `⁦${formatAmount(salary.amountMinor, definition(balance.currency), { digits })}⁩`,
+            wallet: `⁨${balance.name}⁩`,
           })}
         </p>
         {status.lastReceivedOn ? (

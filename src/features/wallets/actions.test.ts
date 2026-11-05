@@ -12,6 +12,7 @@ import {
   createWallet,
   setDefaultWalletBalance,
   updateWallet,
+  reorderWallets,
 } from "./actions";
 
 import * as walletActions from "./actions";
@@ -37,6 +38,29 @@ beforeEach(() => {
 });
 
 describe("wallet balance actions", () => {
+  it("saves the complete global wallet permutation through the atomic RPC", async () => {
+    expect(await reorderWallets([balanceId, walletId])).toEqual({ ok: true });
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("reorder_wallets", { p_ids: [balanceId, walletId] });
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");
+  });
+  it.each([{ ids: [walletId, walletId] }, { ids: ["bad"] }, { ids: [null] }, { ids: "not-an-array" }])("rejects malformed order $ids before authentication", async ({ ids }) => {
+    expect(await reorderWallets(ids as unknown as string[])).toEqual({ ok: false, error: "invalid" });
+    expect(mocks.actionClient).not.toHaveBeenCalled();
+  });
+  it.each([["wallet.reorderConflict", "reorderConflict"], ["private detail", "failed"]])("contains an incomplete, stale, or foreign order RPC failure %s", async (message, error) => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message } });
+    expect(await reorderWallets([walletId])).toEqual({ ok: false, error });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+  it("contains reorder authentication and transport failures", async () => {
+    mocks.actionClient.mockResolvedValueOnce({ error: "notConfigured" });
+    expect(await reorderWallets([walletId])).toEqual({ ok: false, error: "notConfigured" });
+    mocks.rpc.mockRejectedValueOnce(new Error("private transport"));
+    expect(await reorderWallets([walletId])).toEqual({ ok: false, error: "failed" });
+    mocks.actionClient.mockRejectedValueOnce(new Error("private auth"));
+    expect(await reorderWallets([walletId])).toEqual({ ok: false, error: "failed" });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
   it("creates a fully covered container with a chosen default through one RPC", async () => {
     const result = await createWallet({ name: " Pocket ", kind: "cash", currency: " eur ", openingBalanceMinor: 125 });
     expect(result).toEqual({ ok: true, id: balanceId });

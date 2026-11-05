@@ -1,5 +1,7 @@
 -- Synthetic fixtures only. Run after both SYP migrations with supabase test db.
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 -- Administrator-only seeding of the historical migration management state.
 create function pg_temp.seed_needs_attention(p_id uuid,p_value boolean) returns void
 language plpgsql security definer set search_path='' as $$ begin
@@ -19,13 +21,13 @@ select no_plan();
 
 select ok(not exists(select 1 from pg_type where typnamespace='public'::regnamespace and typname='currency'), 'currency metadata no longer depends on a static enum');
 select ok(has_function_privilege('authenticated',
-  'public.record_transfer(date,uuid,uuid,bigint,bigint,text,integer)', 'execute'),
+  'public.record_balance_transfer(uuid,date,uuid,uuid,bigint,bigint,text,integer)', 'execute'),
   'authenticated users may call record_transfer');
 select ok(not has_function_privilege('anon',
-  'public.record_transfer(date,uuid,uuid,bigint,bigint,text,integer)', 'execute'),
+  'public.record_balance_transfer(uuid,date,uuid,uuid,bigint,bigint,text,integer)', 'execute'),
   'anonymous callers cannot execute record_transfer');
 select ok(not (select prosecdef from pg_proc
-  where oid = 'public.record_transfer(date,uuid,uuid,bigint,bigint,text,integer)'::regprocedure),
+  where oid = 'public.record_balance_transfer(uuid,date,uuid,uuid,bigint,bigint,text,integer)'::regprocedure),
   'record_transfer runs as the caller, not the schema owner');
 select ok(not has_function_privilege('authenticated', 'public.wallet_reference_lock()', 'execute')
   and not has_function_privilege('anon', 'public.wallet_reference_lock()', 'execute'),
@@ -104,10 +106,10 @@ create function pg_temp.currency_transfer(
   occurred_on date,from_wallet uuid,to_wallet uuid,from_amount bigint,to_amount bigint,
   note text default null,rate integer default null
 ) returns uuid language sql as $$
-  select id from public.record_transfer(occurred_on,from_wallet,to_wallet,from_amount,to_amount,note,rate);
+  select id from public.record_balance_transfer(gen_random_uuid(),occurred_on,from_wallet,to_wallet,from_amount,to_amount,note,rate);
 $$;
 create temp table currency_moves (name text primary key, id uuid not null);
-create temp table currency_first_result as select * from public.record_transfer('2026-11-04',
+create temp table currency_first_result as select * from public.record_balance_transfer(gen_random_uuid(),'2026-11-04',
   'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000001', 1250, 200);
 insert into currency_moves select 'syp-usd',id from currency_first_result;
 select is((select revision from currency_first_result),
@@ -115,7 +117,7 @@ select is((select revision from currency_first_result),
   'transfer response carries the final revision for its one inserted parent');
 select is((select revision from public.transactions where id=(select id from currency_moves where name='syp-usd')),
   1,'transfer returns a parent initialized with a valid revision');
-select ok((select proretset from pg_proc where oid='public.record_transfer(date,uuid,uuid,bigint,bigint,text,integer)'::regprocedure),
+select ok((select proretset from pg_proc where oid='public.record_balance_transfer(uuid,date,uuid,uuid,bigint,bigint,text,integer)'::regprocedure),
   'transfer RPC returns one revision-bearing record set');
 select is((select count(*) from public.transactions where id = (select id from currency_moves where name = 'syp-usd')),
   1::bigint, 'a manual SYP exchange records one transfer event');
@@ -157,41 +159,41 @@ create temp table currency_checkpoint as select
   (select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000003') as syp_balance,
   (select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000001') as usd_balance;
 
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000001', 100, 100, null, 90000)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000001', 100, 100, null, 90000)$$,
   '22023', 'rate is only supported for USD/LBP exchanges', 'SYP to USD cannot submit a USD/LBP rate');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000003', 100, 100, null, 90000)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000003', 100, 100, null, 90000)$$,
   '22023', 'rate is only supported for USD/LBP exchanges', 'USD to SYP cannot submit a USD/LBP rate');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000002', 100, 100, null, 90000)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000002', 100, 100, null, 90000)$$,
   '22023', 'rate is only supported for USD/LBP exchanges', 'SYP to LBP cannot submit a USD/LBP rate');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000002', 'c6100000-0000-4000-8000-000000000003', 100, 100, null, 90000)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000002', 'c6100000-0000-4000-8000-000000000003', 100, 100, null, 90000)$$,
   '22023', 'rate is only supported for USD/LBP exchanges', 'LBP to SYP cannot submit a USD/LBP rate');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100, null, 90000)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100, null, 90000)$$,
   '22023', 'rate is only supported for USD/LBP exchanges', 'same-currency SYP transfer cannot submit a rate');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000011', 100, 100, null, 90000)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000011', 100, 100, null, 90000)$$,
   '22023', 'rate is only supported for USD/LBP exchanges', 'same-currency USD transfer cannot submit a rate');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 99)$$,
-  '22023', 'same-currency transfers must have equal amounts', 'same-currency SYP legs must be equal');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
-  '22023', 'distinct wallets are required', 'a wallet cannot transfer to itself');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 0)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 99)$$,
+  '22023', 'balance.amountMismatch', 'same-currency SYP legs must be equal');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
+  '22023', 'balance.same', 'a wallet cannot transfer to itself');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 0)$$,
   '22023', 'invalid transfer amounts', 'invalid received amount cannot produce a partial event');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', null, 100)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', null, 100)$$,
   '22023', 'invalid transfer amounts', 'null sent amount is rejected');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 1000000000000001, 1000000000000001)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 1000000000000001, 1000000000000001)$$,
   '22023', 'invalid transfer amounts', 'amounts above the ledger cap are rejected');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000002', 100, 100, null, 0)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000002', 100, 100, null, 0)$$,
   '22023', 'invalid USD/LBP rate', 'invalid supported-pair rate is rejected before mutation');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000009', 100, 100)$$,
-  '22023', 'wallet not found or archived', 'an archived destination is rejected');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000009', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
-  '22023', 'wallet not found or archived', 'an archived source is rejected');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6200000-0000-4000-8000-000000000001', 100, 100)$$,
-  '22023', 'wallet not found or archived', 'a different tenant destination is indistinguishable from a missing wallet');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6200000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
-  '22023', 'wallet not found or archived', 'a different tenant source is rejected');
-select throws_ok($$select public.record_transfer('1999-12-31', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000009', 100, 100)$$,
+  'P0001', 'wallet.needsAttention', 'an archived destination is rejected');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000009', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
+  'P0001', 'wallet.needsAttention', 'an archived source is rejected');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6200000-0000-4000-8000-000000000001', 100, 100)$$,
+  'P0001', 'balance.unavailable', 'a different tenant destination is indistinguishable from a missing wallet');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6200000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
+  'P0001', 'balance.unavailable', 'a different tenant source is rejected');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'1999-12-31', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100)$$,
   '22023', 'invalid transfer details', 'invalid ledger date is rejected');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100, repeat('x', 141))$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100, repeat('x', 141))$$,
   '22023', 'invalid transfer details', 'overlong notes are rejected');
 select is((select count(*) from public.transactions), (select event_count from currency_checkpoint),
   'rejected transfers create no events');
@@ -250,8 +252,8 @@ select is((select count(*) from public.installments), 0::bigint, 'tenant B sees 
 select is((select count(*) from public.month_budgets('2026-11-01')), 0::bigint, 'tenant B sees no tenant A budgets');
 select is((select count(*) from public.month_category_spend('2026-11-01')), 0::bigint, 'tenant B sees no tenant A spending');
 select is((select usd_lbp_rate from public.profiles), 72000, 'tenant B reference rate was never changed');
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6200000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
-  '22023', 'wallet not found or archived', 'tenant B cannot target tenant A wallet');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6200000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
+  'P0001', 'balance.unavailable', 'tenant B cannot target tenant A wallet');
 select throws_ok($$insert into public.fixed_expenses(name,amount_minor,balance_id,category_id)
   select 'Synthetic foreign fixed',1250,'c6100000-0000-4000-8000-000000000003',id
   from public.categories where kind='expense' and parent_id is null order by position limit 1$$,
@@ -264,11 +266,11 @@ select throws_ok($$update public.profiles set salary_balance_id='c6100000-0000-4
   'P0001', 'balance.unavailable', 'the early lock preserves salary wallet ownership validation');
 
 select set_config('request.jwt.claims', '{"role":"authenticated"}', true);
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100)$$,
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100)$$,
   '42501', 'authentication required', 'a role without an authenticated user cannot record money');
 set local role anon;
-select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100)$$,
-  '42501', 'permission denied for function record_transfer', 'anon cannot execute the transfer RPC');
+select throws_ok($$select public.record_balance_transfer(gen_random_uuid(),'2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100)$$,
+  '42501', 'permission denied for function record_balance_transfer', 'anon cannot execute the transfer RPC');
 reset role;
 set constraints all immediate;
 select * from finish();

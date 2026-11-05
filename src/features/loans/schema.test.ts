@@ -3,7 +3,7 @@ import { isLoanDate, loanCreateSchema, loanPaymentSchema } from "./schema";
 
 const input = {
   requestId: "aaaaaaaa-0000-4000-8000-000000000001", name: "  Friend  ", direction: "borrowed",
-  principalMinor: 100000, feeBps: 725, walletId: "aaaaaaaa-0000-4000-8000-000000000002",
+  principalMinor: 100000, feeBps: 725, balanceId: "aaaaaaaa-0000-4000-8000-000000000002",
   feeCategoryId: "aaaaaaaa-0000-4000-8000-000000000003", openedOn: "2026-11-04",
   creationMode: "new", principalPaidBeforeMinor: 0, feePaidBeforeMinor: 0,
 };
@@ -25,6 +25,6 @@ describe("loan terms", () => {
     expect(loanCreateSchema.safeParse({ ...input, userId: "forged" }).success).toBe(false);
   });
   it("rejects noninteger money and future payload fields", () => {
-    expect(loanPaymentSchema.safeParse({ requestId: input.requestId, loanId: input.requestId, walletId: input.walletId, amountMinor: 0.1, occurredOn: input.openedOn }).success).toBe(false);
+    expect(loanPaymentSchema.safeParse({ requestId: input.requestId, loanId: input.requestId, balanceId: input.balanceId, amountMinor: 0.1, occurredOn: input.openedOn }).success).toBe(false);
   });
 });

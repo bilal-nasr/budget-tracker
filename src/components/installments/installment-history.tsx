@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { loadInstallmentHistory, type InstallmentHistoryPage } from "@/features/installments/history-actions";
 import type { Installment } from "@/features/installments/schema";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { useComposer } from "@/components/shell/composer";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ export function InstallmentHistory({ item, onClose }: { item: Installment; onClo
   const t = useTranslations("Installments");
   const ta = useTranslations("Activity");
   const locale = useLocale();
-  const { legacyWalletById } = useAppData();
+  const { balanceChoiceById } = useRuntimeBalances();
   const { openDetail } = useComposer();
   const [page, setPage] = useState<InstallmentHistoryPage | null>(() => item.historyComplete === false ? null : {
     rows: item.payments.flatMap((p) => p.transaction ? [p.transaction] : []), next: null,
@@ -45,7 +45,7 @@ export function InstallmentHistory({ item, onClose }: { item: Installment; onClo
       {page?.rows.map((transaction) => <li key={transaction.id} className="border-b border-border last:border-b-0">
         <button type="button" onClick={() => { onClose(); openDetail(transaction); }}
           className="flex min-h-12 w-full items-center justify-between gap-3 text-start">
-          <span className="min-w-0 truncate text-[15px]">{date.format(new Date(`${transaction.occurredOn}T00:00:00Z`))} · <bdi>{legacyWalletById(transaction.walletId)?.name}</bdi></span>
+          <span className="min-w-0 truncate text-[15px]">{date.format(new Date(`${transaction.occurredOn}T00:00:00Z`))} · <bdi>{balanceChoiceById(transaction.balanceId)?.name}</bdi></span>
           <Amount minor={transaction.amountMinor} currency={item.currency} className="shrink-0 font-semibold" />
         </button>
       </li>)}

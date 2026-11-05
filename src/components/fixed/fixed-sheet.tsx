@@ -1,8 +1,11 @@
 "use client";
+import { useRouter } from "@/i18n/navigation";
+import { currencyIntent } from "@/lib/currency-intent";
 
+import { BalancePicker } from "@/components/add/balance-picker";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances, useMoneyDraftUnit } from "@/components/add/runtime-balances";
 import { CategorySelect } from "@/components/categories/category-select";
 import { categoryOptions } from "@/features/categories/catalogue";
 import { InstallmentForm } from "@/components/installments/installment-sheet";
@@ -12,7 +15,7 @@ import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from "@/features/fixed/actions";
 import type { FixedExpense } from "@/features/fixed/schema";
-import { CURRENCY_DECIMALS, parseAmount, toInputText } from "@/lib/money";
+import { parseAmount, toInputText } from "@/lib/money";
 import { parseOptionalDay } from "@/lib/numeric-text";
 import { ExpenseBreakdownFields, useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-fields";
 import { parseExpenseItemDrafts, type ExpenseItemDraft } from "@/features/transactions/breakdown";
@@ -20,43 +23,48 @@ import { parseExpenseItemDrafts, type ExpenseItemDraft } from "@/features/transa
 export type FixedSheetState = { item: FixedExpense | null };
 
 function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => void }) {
+  const router = useRouter();
   const t = useTranslations("Fixed");
+  const tBalance = useTranslations("Add");
+  const currencyLabel = tBalance("walletCurrency");
   const tCurrencies = useTranslations("Currencies");
   const tc = useTranslations("Categories");
   const tAdd = useTranslations("Add");
   const tb = useTranslations("Breakdown");
   const breakdownLabels = useExpenseBreakdownLabels();
-  const { legacyWallets: wallets, categories, legacyWalletById } = useAppData();
+  const { balanceChoices: wallets, categories, balanceChoiceById, definition, walletContainers, enabledCurrencies, defaultBalanceId } = useRuntimeBalances();
   const [pending, startTransition] = useTransition();
-  const usable = wallets.filter((w) => !w.archived || w.id === item?.walletId);
+  const usable = wallets.filter((w) => !w.archived || w.id === item?.balanceId);
   const expenseCategories = categoryOptions(categories, "expense", item?.categoryId);
 
   const [name, setName] = useState(item?.name ?? "");
-  const [walletId, setWalletId] = useState(item?.walletId ?? usable[0]?.id ?? "");
-  const wallet = legacyWalletById(walletId);
-  const currency = wallet?.currency ?? "USD";
-  const [amount, setAmount] = useState(item && wallet ? toInputText(item.amountMinor, wallet.currency) : "");
+  const [balanceId, setBalanceId] = useState(item?.balanceId ?? (usable.find((balance) => balance.id === defaultBalanceId) ?? usable[0])?.id ?? "");
+  const balance = balanceChoiceById(balanceId);
+  const currency = balance?.currency ?? enabledCurrencies[0]?.code ?? "";
+  const [amount, setAmount] = useState(item && balance ? toInputText(item.amountMinor, definition(balance.currency)) : "");
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? "");
   const [dueDay, setDueDay] = useState(item?.dueDay ? String(item.dueDay) : "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [itemDrafts, setItemDrafts] = useState<ExpenseItemDraft[]>(() => (item?.items ?? []).map((line, index) => ({
-    key: `fixed-${index}`, description: line.description, amountText: toInputText(line.amountMinor, currency),
+    key: `fixed-${index}`, description: line.description, amountText: toInputText(line.amountMinor, definition(currency)),
   })));
 
-  const minor = amount.trim() === "" ? null : parseAmount(amount, currency);
+  useMoneyDraftUnit(balance?.definition, () => { setAmount(""); setItemDrafts([]); }, balance !== undefined && !balance.archived);
+  const minor = amount.trim() === "" ? null : parseAmount(amount, definition(currency));
   const amountError = amount.trim() !== "" && minor === null ? t("errorAmount") : null;
   const { value: dayNumber, invalid: invalidDay } = parseOptionalDay(dueDay);
   const dayError = invalidDay ? t("errorDay") : null;
-  const breakdown = parseExpenseItemDrafts(currency, minor, itemDrafts);
+  const breakdown = parseExpenseItemDrafts(definition(currency), minor, itemDrafts);
   const canSave =
-    name.trim() !== "" && minor !== null && minor > 0 && wallet !== undefined && expenseCategories.some((c) => c.id === categoryId) && !dayError && breakdown.valid;
+    name.trim() !== "" && minor !== null && minor > 0 && balance !== undefined && !balance.archived && expenseCategories.some((c) => c.id === categoryId) && !dayError && breakdown.valid;
 
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     setError(null);
     startTransition(async () => {
       const result = await action();
       if (!result.ok) {
+        if (result.error === "conflict") { setAmount(""); setItemDrafts([]); router.refresh(); }
         setError(result.error === "notConfigured" ? t("errorPreview") : result.error === "categoryUnavailable" ? tc("errorUnavailable") : t("errorFailed"));
         return;
       }
@@ -75,7 +83,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
       onSubmit={(e) => {
         e.preventDefault();
         if (!canSave || minor === null || !breakdown.valid) return;
-        const input = { name: name.trim(), amountMinor: minor, walletId, categoryId, dueDay: dayNumber, items: breakdown.items };
+        const input = { expectedUnits: currencyIntent(definition(currency)), name: name.trim(), amountMinor: minor, balanceId: balanceId, categoryId, dueDay: dayNumber, items: breakdown.items };
         run(() => (item ? updateFixedExpense(item.id, input) : createFixedExpense(input)));
       }}
     >
@@ -89,25 +97,13 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         required
       />
       <div className="flex flex-col gap-1.5">
-        <span id="fx-wallet" className="text-sm font-medium">{t("wallet")}</span>
-        <div role="radiogroup" aria-labelledby="fx-wallet" className="flex flex-wrap gap-2">
-          {usable.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              role="radio"
-              aria-checked={w.id === walletId}
-              disabled={pending || (w.currency !== currency && (itemDrafts.length > 0 || (item?.items?.length ?? 0) > 0))}
-              onClick={() => {
-                setWalletId(w.id);
-                if (w.currency !== currency) setAmount("");
-              }}
-              className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
-            >
-              <bdi>{w.name}</bdi> · {w.currency}
-            </button>
-          ))}
-        </div>
+<BalancePicker currencyLabel={currencyLabel} label={t("wallet")} wallets={walletContainers} currencies={enabledCurrencies} value={balanceId} onChange={(id) => {
+            if (balanceChoiceById(id)?.currency !== currency) {
+              if (itemDrafts.length || item?.items?.length) { setError(tb("removeBeforeCurrencyChange")); return; }
+              setAmount("");
+            }
+            setBalanceId(id);
+          }} />
         <p className="text-[13px] text-muted-foreground">{t("walletHelp")}</p>
         {itemDrafts.length > 0 || (item?.items?.length ?? 0) > 0 ? <p className="text-[13px] text-muted-foreground">{tb("removeBeforeCurrencyChange")}</p> : null}
       </div>
@@ -116,7 +112,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         description={tCurrencies("reenterAmount", { currency })}
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
+        inputMode={definition(currency).decimalPlaces === 0 ? "numeric" : "decimal"}
         placeholder="0"
         autoComplete="off"
         dir="ltr"
@@ -143,7 +139,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         <p className="text-[13px] text-muted-foreground">{t("dueHelp")}</p>
       </div>
 
-      <ExpenseBreakdownFields currency={currency} parentMinor={minor} items={itemDrafts}
+      <ExpenseBreakdownFields currency={definition(currency)} parentMinor={minor} items={itemDrafts}
         onChange={setItemDrafts} labels={breakdownLabels} disabled={pending} />
 
       {error ? (

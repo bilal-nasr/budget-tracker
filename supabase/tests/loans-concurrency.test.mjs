@@ -11,11 +11,11 @@ const token = process.env.LOANS_TEST_ACCESS_TOKEN;
 const configured = Boolean(url && key && token);
 if (configured && !["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname)) throw new Error("Loan concurrency checks require a loopback disposable test stack");
 function client() {
-  return createClient(url, key, { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } });
+  return createClient(url, key, { global: { headers: { Authorization: `Bearer ${token}`, "x-budget-units": JSON.stringify({ USD: 2 }) } }, auth: { persistSession: false, autoRefreshToken: false } });
 }
 async function fixture() {
   const db = client();
-  const container = await db.rpc("create_wallet", { p_name: "Synthetic loan race", p_kind: "cash", p_currency: "USD", p_opening_minor: 0 });
+  const container = await db.rpc("create_wallet", { p_name: "Synthetic loan race", p_kind: "cash", p_default_currency: "USD", p_opening_minor: 0 });
   assert.equal(container.error, null);
   const wallet = await db.from("wallets").select("default_balance_id").eq("id", container.data).single();
   assert.equal(wallet.error, null);

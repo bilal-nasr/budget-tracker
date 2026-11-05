@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fixedInputSchema } from "./schema";
 
 const input = { name: "Household", amountMinor: 5000,
-  walletId: "00000000-0000-4000-8000-000000000001",
+  balanceId: "00000000-0000-4000-8000-000000000001",
   categoryId: "00000000-0000-4000-8000-000000000002", dueDay: null };
 
 describe("fixed expense breakdown", () => {

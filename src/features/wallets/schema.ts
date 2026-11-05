@@ -1,8 +1,8 @@
+import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { z } from "zod";
-import { CURRENCIES, MAX_MINOR, type Currency } from "@/lib/money";
+import { MAX_MINOR } from "@/lib/money";
 export { attachedBalances, defaultBalance, nextDefaultBalance, totalsByCurrency } from "./totals";
 
-export const currencySchema = z.enum(CURRENCIES);
 export const walletKindSchema = z.enum(["cash", "bank", "card"]);
 
 export type WalletKind = z.infer<typeof walletKindSchema>;
@@ -21,7 +21,7 @@ export const walletBalanceSchema = z.object({
 
 export type WalletBalance = z.infer<typeof walletBalanceSchema>;
 
-/** Strict container model; promoted to Wallet when existing callers migrate. */
+/** A container owns durable, currency-specific balance rows. */
 export const walletContainerSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1).max(40),
@@ -51,6 +51,7 @@ export const walletContainerSchema = z.object({
 export type WalletContainer = z.infer<typeof walletContainerSchema>;
 
 export const walletCreateInputSchema = z.object({
+  expectedUnits: expectedUnitsSchema.optional(),
   name: z.string().trim().min(1).max(40),
   kind: walletKindSchema,
   currency: z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9]{0,11}$/),
@@ -63,38 +64,3 @@ export const walletUpdateInputSchema = z.object({
   kind: walletKindSchema,
 }).strict();
 export type WalletUpdateInput = z.infer<typeof walletUpdateInputSchema>;
-
-export const walletBalanceInputSchema = z.object({
-  currency: z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9]{0,11}$/),
-}).strict();
-export type WalletBalanceInput = z.infer<typeof walletBalanceInputSchema>;
-
-export const walletInputSchema = z.object({
-  name: z.string().trim().min(1).max(40),
-  kind: walletKindSchema,
-  currency: currencySchema,
-  /** Signed: a card or overdraft can start negative. */
-  openingBalanceMinor: z.number().int().min(-MAX_MINOR).max(MAX_MINOR),
-});
-
-export type WalletInput = z.infer<typeof walletInputSchema>;
-
-/** Take a new wallet's starting balance from an existing wallet instead of creating new money. */
-export const walletFundingSchema = z.object({
-  fromWalletId: z.uuid(),
-  /** What leaves the source wallet, in the source wallet's currency. */
-  takenMinor: z.number().int().min(1).max(MAX_MINOR),
-});
-export type WalletFunding = z.infer<typeof walletFundingSchema>;
-
-/** Temporary single-currency model for untouched queries and UI. */
-export type Wallet = {
-  id: string;
-  name: string;
-  kind: WalletKind;
-  currency: Currency;
-  openingBalanceMinor: number;
-  balanceMinor: number;
-  position: number;
-  archived: boolean;
-};

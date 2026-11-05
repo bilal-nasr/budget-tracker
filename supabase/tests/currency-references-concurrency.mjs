@@ -20,7 +20,7 @@ const args = ["exec", "-i", "-e", "PGPASSWORD=", "-e", "PGOPTIONS=", "-e", "PGPA
   "-d", database, "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"];
 const owner = randomUUID();
 const active = new Set();
-const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true);`;
+const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 
 function session() {
   const child = spawn("docker", args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });

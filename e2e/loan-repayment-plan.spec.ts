@@ -23,7 +23,7 @@ for (const locale of ["en", "ar"] as const) {
       await dialog.getByLabel(t.principal, { exact: true }).fill(locale === "ar" ? "٢٠٠٠" : "2000");
       await dialog.getByRole("radio", { name: t.existing, exact: true }).check();
       await dialog.getByRole("combobox", { name: t.category }).click();
-      await page.getByRole("option").first().click();
+      await page.getByRole("listbox").getByRole("option").first().click();
       await dialog.getByLabel(t.monthlyPayment, { exact: true }).fill(locale === "ar" ? "٢٨٥" : "285");
       const count = dialog.getByLabel(t.paymentCount, { exact: true });
       await count.fill(locale === "ar" ? "٧" : "7");
