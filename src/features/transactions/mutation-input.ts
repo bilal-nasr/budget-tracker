@@ -1,5 +1,6 @@
+import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { z } from "zod";
-import { CURRENCIES, MAX_MINOR } from "@/lib/money";
+import { MAX_MINOR } from "@/lib/money";
 import { expenseItemInputSchema, MAX_EXPENSE_ITEMS, summarizeBreakdown } from "./breakdown";
 import { cashSettlementInputSchema } from "./settlement";
 import { serializeSettlement } from "./settlement-serialization";
@@ -9,12 +10,14 @@ export const transactionIdSchema = z.uuid().transform((id) => id.toLowerCase());
 export const transactionRevisionSchema = z.number().int().min(1).max(2_147_483_647);
 
 export const transactionWriteInputSchema = z.strictObject({
+  expectedUnits: expectedUnitsSchema.optional(),
   kind: z.enum(["expense", "income"]),
   occurredOn: z.iso.date().refine((date) => date >= "2000-01-01"),
-  walletId: transactionIdSchema,
+  /** Exact durable balance identity. */
+  balanceId: transactionIdSchema,
   amountMinor: z.number().int().min(1).max(MAX_MINOR),
   /** Omitted on update preserves the stored purchase denomination. */
-  costCurrency: z.enum(CURRENCIES).optional(),
+  costCurrency: z.string().regex(/^[A-Z][A-Z0-9]{0,11}$/).optional(),
   categoryId: transactionIdSchema,
   note: z.string().trim().max(140).optional(),
   items: z.array(expenseItemInputSchema).max(MAX_EXPENSE_ITEMS).optional(),
@@ -36,14 +39,14 @@ export type TransactionSaveArgs = {
   p_input: {
     kind: "expense" | "income";
     occurredOn: string;
-    walletId: string;
+    balanceId: string;
     amountMinor: number;
     costCurrency?: TransactionWriteInput["costCurrency"];
     categoryId: string;
     note: string | null;
   };
   p_items: NonNullable<TransactionWriteInput["items"]> | null;
-  p_settlement: NonNullable<TransactionWriteInput["settlement"]> | Record<string, never> | null;
+  p_settlement: { tenderMinor: number; changes: { balanceId: string; amountMinor: number; rate?: unknown }[] } | Record<string, never> | null;
 };
 
 /** One payload mapping; call only after the schema above has validated input. */
@@ -52,12 +55,16 @@ export function transactionSaveArgs(
   expectedRevision: number | null,
   input: TransactionWriteInput,
 ): TransactionSaveArgs {
-  const { kind, occurredOn, walletId, amountMinor, costCurrency, categoryId, note, items, settlement } = input;
+  const { kind, occurredOn, balanceId, amountMinor, costCurrency, categoryId, note, items, settlement } = input;
   return {
     p_id: id,
     p_expected_revision: expectedRevision,
-    p_input: { kind, occurredOn, walletId, amountMinor, ...(costCurrency ? { costCurrency } : {}), categoryId, note: note || null },
+    p_input: { kind, occurredOn, balanceId, amountMinor, ...(costCurrency ? { costCurrency } : {}), categoryId, note: note || null },
     p_items: items ?? null,
-    p_settlement: serializeSettlement(settlement),
+    p_settlement: (() => {
+      const serialized = serializeSettlement(settlement);
+      if (!serialized || !("tenderMinor" in serialized) || !("changes" in serialized)) return serialized;
+      return { tenderMinor: serialized.tenderMinor, changes: serialized.changes };
+    })(),
   };
 }

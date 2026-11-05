@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_MINOR, parseAmount, type Currency } from "@/lib/money";
+import { MAX_MINOR, parseAmount, type CurrencyDefinition } from "@/lib/money";
 import { MAX_EXPENSE_ITEMS, MAX_ITEM_DESCRIPTION_LENGTH, summarizeBreakdown, type BreakdownSummary, type ExpenseItemInput } from "./breakdown-summary";
 export { MAX_EXPENSE_ITEMS, MAX_ITEM_DESCRIPTION_LENGTH, summarizeBreakdown } from "./breakdown-summary";
 export type { BreakdownSummary, ExpenseItemInput } from "./breakdown-summary";
@@ -19,7 +19,7 @@ export type ExpenseItemDraftResult =
 
 /** Every draft line must validate. Invalid/blank lines are never discarded. */
 export function parseExpenseItemDrafts(
-  currency: Currency,
+  currency: CurrencyDefinition,
   parentMinor: number | null,
   drafts: readonly ExpenseItemDraft[],
 ): ExpenseItemDraftResult {

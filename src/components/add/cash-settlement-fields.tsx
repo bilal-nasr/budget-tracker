@@ -1,25 +1,27 @@
 "use client";
 
-import { useId } from "react";
+import { BalancePicker } from "./balance-picker";
+import type { WalletContainer } from "@/features/wallets/schema";
 import { Plus, Trash2 } from "lucide-react";
 import { TextField } from "@/components/ui/text-field";
-import { CURRENCY_DECIMALS, parseAmount, toInputText, type Currency } from "@/lib/money";
+import { parseAmount, toInputText, type CurrencyDefinition } from "@/lib/money";
 import { validateSettlement, type CashSettlementInput, type SettlementError, type SettlementRate } from "@/features/transactions/settlement";
 import type { SettlementSnapshot } from "@/features/transactions/settlement-serialization";
 
-export type SettlementWallet = { id: string; name: string; currency: Currency; archived: boolean };
+/** Cashier choices identify exact durable balance rows and their owning wallet name. */
+export type SettlementWallet = { id: string; name: string; currency: string; archived: boolean };
 export type CashChangeDraft = {
   key: string;
   amountText: string;
-  currency: Currency;
-  walletId: string;
+  currency: string;
+  balanceId: string;
   /** Read-only compatibility data retained only by an exact historical edit. */
   rate?: SettlementRate;
 };
 export type CashSettlementDraft = { enabled: boolean; tenderText: string; changes: CashChangeDraft[] };
 export type SettlementEditContext = {
-  walletId: string;
-  original: { walletId: string; currency: Currency; amountMinor: number; settlement: SettlementSnapshot | null };
+  balanceId: string;
+  original: { balanceId: string; currency: string; amountMinor: number; settlement: SettlementSnapshot | null };
 };
 
 let fallbackKey = 0;
@@ -31,19 +33,19 @@ function newChangeKey(): string {
 
 function unchangedFinancials(
   context: SettlementEditContext | undefined,
-  payCurrency: Currency,
-  costCurrency: Currency,
+  payCurrency: string,
+  costCurrency: string,
   costMinor: number,
   settlement: CashSettlementInput,
 ): boolean {
-  if (!context || context.walletId !== context.original.walletId || payCurrency !== context.original.settlement?.tenderCurrency ||
+  if (!context || context.balanceId !== context.original.balanceId || payCurrency !== context.original.settlement?.tenderCurrency ||
       costCurrency !== context.original.currency ||
       costMinor !== context.original.amountMinor) return false;
   const original = context.original.settlement;
   if (!original || original.tenderMinor !== settlement.tenderMinor || original.changes.length !== settlement.changes.length) return false;
   return original.changes.every((before, index) => {
     const after = settlement.changes[index];
-    return before.walletId === after.walletId && before.amountMinor === after.amountMinor &&
+    return before.balanceId === after.balanceId && before.amountMinor === after.amountMinor &&
       (["base", "quote", "quoteMajorNumerator", "quoteMajorDenominator"] as const)
         .every((key) => before.rate?.[key] === after.rate?.[key]);
   });
@@ -51,18 +53,19 @@ function unchangedFinancials(
 
 export function settlementDraftFromSnapshot(
   snapshot: SettlementSnapshot | null,
-  currency: Currency,
-  walletId: string,
+  currency: string,
+  balanceId: string,
   duplicate = false,
+  definitions: readonly CurrencyDefinition[],
 ): CashSettlementDraft {
   return {
     enabled: snapshot !== null,
-    tenderText: snapshot ? toInputText(snapshot.tenderMinor, snapshot.tenderCurrency) : "",
+    tenderText: snapshot ? toInputText(snapshot.tenderMinor, requireDefinition(snapshot.tenderCurrency, definitions)) : "",
     changes: snapshot?.changes.map((change) => ({
       key: newChangeKey(),
-      amountText: toInputText(change.amountMinor, change.currency),
+      amountText: toInputText(change.amountMinor, requireDefinition(change.currency, definitions)),
       currency: change.currency,
-      walletId: change.walletId,
+      balanceId: change.balanceId,
       ...(!duplicate && change.rate ? { rate: change.rate } : {}),
     })) ?? [],
   };
@@ -71,6 +74,7 @@ export function settlementDraftFromSnapshot(
 export type CashSettlementLabels = {
   title: string;
   paidFrom: string;
+  payerCurrency?: string;
   tender: string;
   change: string;
   currency: string;
@@ -84,27 +88,29 @@ export type CashSettlementLabels = {
 /** Parent uses this same pure parser for Save validity; incomplete text is never dropped. */
 export function parseSettlementDraft(
   draft: CashSettlementDraft,
-  payCurrency: Currency,
-  costCurrency: Currency,
+  payCurrency: string,
+  costCurrency: string,
   costMinor: number | null,
   wallets: readonly SettlementWallet[],
   editContext?: SettlementEditContext,
+  definitions: readonly CurrencyDefinition[] = [],
 ): { ok: true; settlement: CashSettlementInput | null } | { ok: false; error: SettlementError | "walletUnavailable" } {
   if (!draft.enabled) return { ok: true, settlement: null };
-  const tenderMinor = parseAmount(draft.tenderText, payCurrency);
+  if (!enabledDraftCurrencies(draft, definitions, payCurrency, costCurrency)) return { ok: false, error: "walletUnavailable" };
+  const tenderMinor = parseAmount(draft.tenderText, requireDefinition(payCurrency, definitions));
   if (costMinor === null || tenderMinor === null) return { ok: false, error: "amount" };
 
-  const currencies: Currency[] = [];
+  const currencies: string[] = [];
   const receivers: SettlementWallet[] = [];
   const changes: CashSettlementInput["changes"] = [];
   for (const row of draft.changes) {
-    const amountMinor = parseAmount(row.amountText, row.currency);
+    const amountMinor = parseAmount(row.amountText, requireDefinition(row.currency, definitions));
     if (amountMinor === null) return { ok: false, error: "amount" };
-    const receiver = wallets.find((wallet) => wallet.id === row.walletId && wallet.currency === row.currency);
+    const receiver = wallets.find((balance) => balance.id === row.balanceId && balance.currency === row.currency);
     if (!receiver) return { ok: false, error: "walletUnavailable" };
     currencies.push(row.currency);
     receivers.push(receiver);
-    changes.push({ walletId: receiver.id, amountMinor, ...(row.rate ? { rate: row.rate } : {}) });
+    changes.push({ balanceId: receiver.id, amountMinor, ...(row.rate ? { rate: row.rate } : {}) });
   }
 
   const candidate = { tenderMinor, changes };
@@ -112,7 +118,7 @@ export function parseSettlementDraft(
   if (!unchanged && receivers.some((receiver) => receiver.archived)) return { ok: false, error: "walletUnavailable" };
   const settlement: CashSettlementInput = unchanged
     ? candidate
-    : { tenderMinor, changes: changes.map(({ walletId, amountMinor }) => ({ walletId, amountMinor })) };
+    : { tenderMinor, changes: changes.map(({ balanceId: balanceId, amountMinor }) => ({ balanceId, amountMinor })) };
   const validation = validateSettlement({
     costMinor,
     costCurrency,
@@ -123,126 +129,51 @@ export function parseSettlementDraft(
   return validation.ok ? { ok: true, settlement } : { ok: false, error: validation.reason };
 }
 
-/** Expanded cash-payment details. The parent owns Standard/Cash purchase mode. */
-export function CashSettlementFields({
-  draft,
-  payCurrency,
-  costCurrency,
-  costMinor,
-  wallets,
-  payerWalletId,
-  payerWallets,
-  payerBalance,
-  labels,
-  onChange,
-  onPayerWalletChange,
-  disabled = false,
-  editContext,
+/** Expanded cash-payment details. Every selection resolves an existing balance. */
+export function CashSettlementFields({ draft, payCurrency, costCurrency, costMinor, wallets, containers,
+  payerBalanceId, payerBalance, labels, onChange, onPayerBalanceChange, disabled = false, editContext, definitions,
 }: {
-  draft: CashSettlementDraft;
-  payCurrency: Currency;
-  costCurrency: Currency;
-  costMinor: number | null;
-  wallets: readonly SettlementWallet[];
-  payerWalletId?: string;
-  payerWallets?: readonly SettlementWallet[];
-  payerBalance?: React.ReactNode;
-  labels: CashSettlementLabels;
-  onChange: (draft: CashSettlementDraft) => void;
-  onPayerWalletChange?: (walletId: string) => void;
-  onCreateWallet?: () => void;
-  disabled?: boolean;
-  editContext?: SettlementEditContext;
+  draft: CashSettlementDraft; payCurrency: string; costCurrency: string; costMinor: number | null;
+  wallets: readonly SettlementWallet[]; containers: WalletContainer[]; definitions: readonly CurrencyDefinition[];
+  payerBalanceId?: string; payerBalance?: React.ReactNode; labels: CashSettlementLabels;
+  onChange: (draft: CashSettlementDraft) => void; onPayerBalanceChange?: (balanceId: string) => void;
+  disabled?: boolean; editContext?: SettlementEditContext;
 }) {
-  const id = useId();
-  const currencies = Object.keys(CURRENCY_DECIMALS) as Currency[];
-  const originalChanges = editContext?.original.settlement?.changes ?? [];
-  const parsed = parseSettlementDraft(draft, payCurrency, costCurrency, costMinor, wallets, editContext);
-  const selectClass = "h-12 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-base text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+  const parsed = parseSettlementDraft(draft, payCurrency, costCurrency, costMinor, wallets, editContext, definitions);
   const change = (patch: Partial<CashSettlementDraft>) => onChange({ ...draft, ...patch });
-  const updateRow = (key: string, patch: Partial<CashChangeDraft>) =>
-    change({ changes: draft.changes.map((row) => row.key === key ? { ...row, ...patch } : row) });
+  const updateRow = (key: string, patch: Partial<CashChangeDraft>) => change({changes:draft.changes.map((row)=>row.key===key?{...row,...patch}:row)});
+  return <fieldset disabled={disabled} className="min-w-0 border-t border-border py-3 disabled:opacity-60">
+    <legend className="px-1 text-sm font-semibold">{labels.title}</legend>
+    <div className="flex min-w-0 flex-col gap-3 pt-2">
+      {payerBalanceId !== undefined && onPayerBalanceChange ? <div className="flex flex-col gap-1">
+        <BalancePicker label={labels.paidFrom} currencyLabel={labels.payerCurrency ?? labels.currency} wallets={containers} currencies={[...definitions]} value={payerBalanceId} onChange={onPayerBalanceChange}/>
+        {payerBalance}
+      </div> : null}
+      <TextField label={labels.tender} description={payCurrency} value={draft.tenderText} onChange={(event)=>change({tenderText:event.target.value})}
+        dir="ltr" disabled={!definitions.some((unit) => unit.code === payCurrency)} inputMode={definitions.find((unit) => unit.code === payCurrency)?.decimalPlaces===0?"numeric":"decimal"} autoComplete="off"/>
+      {draft.changes.map((row)=> <div key={row.key} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border p-3">
+        <BalancePicker label={labels.wallet} currencyLabel={labels.currency} wallets={containers} currencies={[...definitions]} value={row.balanceId} onChange={(id)=>{
+          const receiver=wallets.find((balance)=>balance.id===id);
+          if(receiver) updateRow(row.key,{balanceId:id,currency:receiver.currency,amountText:receiver.currency===row.currency?row.amountText:"",rate:undefined});
+        }}/>
+        <TextField label={labels.change} value={row.amountText} placeholder="0" onChange={(event)=>updateRow(row.key,{amountText:event.target.value,rate:undefined})}
+          dir="ltr" disabled={!definitions.some((unit) => unit.code === row.currency)} inputMode={definitions.find((unit) => unit.code === row.currency)?.decimalPlaces===0?"numeric":"decimal"} autoComplete="off"/>
+        <button type="button" aria-label={labels.removeChange} onClick={()=>change({changes:draft.changes.filter((item)=>item.key!==row.key)})}
+          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border text-muted-foreground hover:bg-accent"><Trash2 aria-hidden className="size-4"/>{labels.removeChange}</button>
+      </div>)}
+      <button type="button" onClick={()=>change({changes:[...draft.changes,{key:newChangeKey(),amountText:"",currency:payCurrency,
+        balanceId:wallets.find((balance)=>!balance.archived&&balance.id===payerBalanceId)?.id ?? wallets.find((balance)=>!balance.archived&&balance.currency===payCurrency)?.id ?? ""}]})}
+        className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 text-sm font-medium hover:bg-accent"><Plus aria-hidden className="size-4"/>{labels.addChange}</button>
+      {!parsed.ok?<p role="alert" className="text-sm font-medium">{labels.errors[parsed.error]}</p>:null}
+    </div>
+  </fieldset>;
+}
 
-  return (
-    <fieldset disabled={disabled} className="min-w-0 border-t border-border py-3 disabled:opacity-60">
-      <legend className="px-1 text-sm font-semibold">{labels.title}</legend>
-      <div id={`${id}-fields`} className="flex min-w-0 flex-col gap-3 pt-2">
-          {payerWalletId !== undefined && payerWallets && onPayerWalletChange ? (
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`${id}-payer-wallet`} className="flex flex-col gap-1.5 text-sm font-medium">
-                {labels.paidFrom}
-                <select id={`${id}-payer-wallet`} aria-label={labels.paidFrom} value={payerWalletId}
-                  onChange={(event) => onPayerWalletChange(event.target.value)} className={selectClass}>
-                  {payerWallets.map((wallet) => (
-                    <option key={wallet.id} value={wallet.id}>{wallet.name} · {wallet.currency}</option>
-                  ))}
-                </select>
-              </label>
-              {payerBalance}
-            </div>
-          ) : null}
-          <div className="flex flex-col gap-1">
-            <bdi dir="ltr" className="text-sm text-muted-foreground">{payCurrency}</bdi>
-            <TextField type="text" label={labels.tender} value={draft.tenderText}
-              onChange={(event) => change({ tenderText: event.target.value })} dir="ltr"
-              inputMode={CURRENCY_DECIMALS[payCurrency] ? "decimal" : "numeric"} autoComplete="off" />
-          </div>
-
-          {draft.changes.map((row, index) => {
-            const originalWalletIds = new Set(originalChanges.filter((item) => item.currency === row.currency).map((item) => item.walletId));
-            const receivers = wallets.filter((wallet) => wallet.currency === row.currency && (!wallet.archived || originalWalletIds.has(wallet.id)));
-            return (
-              <div key={row.key} className="flex min-w-0 flex-col gap-3 rounded-xl border border-border p-3">
-                <div className="flex items-start gap-2">
-                  <label htmlFor={`${id}-currency-${index}`} className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm font-medium">
-                    {labels.currency}
-                    <select id={`${id}-currency-${index}`} aria-label={labels.currency} className={selectClass} value={row.currency}
-                      onChange={(event) => {
-                        const currency = event.target.value as Currency;
-                        updateRow(row.key, {
-                          currency,
-                          amountText: "",
-                          walletId: wallets.find((wallet) => !wallet.archived && wallet.currency === currency)?.id ??
-                            originalChanges.find((item) => item.currency === currency)?.walletId ?? "",
-                          rate: undefined,
-                        });
-                      }}>
-                      {currencies.map((currency) => <option key={currency} value={currency}
-                        disabled={!wallets.some((wallet) => !wallet.archived && wallet.currency === currency) &&
-                          !originalChanges.some((item) => item.currency === currency)}>{currency}</option>)}
-                    </select>
-                  </label>
-                  <button type="button" aria-label={labels.removeChange} onClick={() => change({ changes: draft.changes.filter((item) => item.key !== row.key) })}
-                    className="mt-7 flex size-12 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-accent">
-                    <Trash2 aria-hidden className="size-4" />
-                  </button>
-                </div>
-                <TextField type="text" label={labels.change} value={row.amountText} placeholder="0"
-                  onChange={(event) => updateRow(row.key, { amountText: event.target.value, rate: undefined })} dir="ltr"
-                  inputMode={CURRENCY_DECIMALS[row.currency] ? "decimal" : "numeric"} autoComplete="off" />
-                {receivers.length > 0 ? (
-                  <label htmlFor={`${id}-wallet-${index}`} className="flex flex-col gap-1.5 text-sm font-medium">
-                    {labels.wallet}
-                    <select id={`${id}-wallet-${index}`} aria-label={labels.wallet} value={row.walletId}
-                      onChange={(event) => updateRow(row.key, { walletId: event.target.value, rate: undefined })} className={selectClass}>
-                      <option value="">{labels.selectWallet}</option>
-                      {receivers.map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.name} · {wallet.currency}</option>)}
-                    </select>
-                  </label>
-                ) : null}
-              </div>
-            );
-          })}
-
-          <button type="button" onClick={() => change({ changes: [...draft.changes, {
-            key: newChangeKey(), amountText: "", currency: payCurrency,
-            walletId: wallets.find((wallet) => !wallet.archived && wallet.currency === payCurrency)?.id ?? "",
-          }] })} className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 text-sm font-medium hover:bg-accent">
-            <Plus aria-hidden className="size-4" />
-            {labels.addChange}
-          </button>
-          {!parsed.ok ? <p role="alert" className="text-sm font-medium">{labels.errors[parsed.error]}</p> : null}
-      </div>
-    </fieldset>
-  );
+function requireDefinition(code: string, definitions: readonly CurrencyDefinition[]): CurrencyDefinition {
+  const definition = definitions.find((currency) => currency.code === code);
+  if (!definition) throw new Error("App currency data unavailable");
+  return definition;
+}
+function enabledDraftCurrencies(draft: CashSettlementDraft, definitions: readonly CurrencyDefinition[], pay: string, cost: string): boolean {
+  return [pay, cost, ...draft.changes.map((change) => change.currency)].every((code) => definitions.some((definition) => definition.code === code && !definition.disabled));
 }

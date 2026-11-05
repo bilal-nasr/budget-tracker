@@ -2,10 +2,10 @@ import "server-only";
 
 import ExcelJS, { type CellValue, type TableColumnProperties } from "exceljs";
 import { categoryName } from "@/features/categories/schema";
-import type { Currency } from "@/lib/money";
 import { buildExportSchedules, minorToMajor } from "./schedules";
 import { getExportLabels, SHEET_KEYS, type SheetKey } from "./labels";
-import type { ExportData } from "./model";
+import { historicalExportBalances, type ExportData } from "./model";
+import { requireCurrency } from "@/lib/currency";
 
 import { applyExportWorkbookStyle } from "./workbook-style";
 
@@ -19,12 +19,12 @@ function monthValue(value: string): Date {
   return new Date(`${value}-01T00:00:00Z`);
 }
 
-function money(value: number | null, currency: Currency): number | null {
-  return value === null ? null : minorToMajor(value, currency);
-}
-
 export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   const labels = getExportLabels(data.locale);
+  const balances = historicalExportBalances(data.wallets, data.currencies);
+  const currencies = data.currencies.map((currency) => currency.code);
+  const definition = (code: string) => requireCurrency(code, data.currencies);
+  const money = (value: number | null, currency: string): number | null => value === null ? null : minorToMajor(value, definition(currency));
   const schedules = buildExportSchedules(data);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Budget Tracker";
@@ -60,9 +60,14 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     return sheet;
   };
 
-  const wallets = new Map(data.wallets.map((wallet) => [wallet.id, wallet]));
+  const wallets = new Map(balances.map((balance) => [balance.id, balance]));
   const categories = new Map(data.categories.map((category) => [category.id, category]));
-  const walletName = (id: string) => wallets.get(id)?.name ?? id;
+  const exactBalance = (id: string) => {
+    const balance = wallets.get(id);
+    if (!balance) throw new Error("export_data_unavailable");
+    return balance;
+  };
+  const walletName = (id: string) => exactBalance(id).name;
   const categoryLabel = (id: string | null) => id ? (categories.get(id) ? categoryName(categories.get(id)!, data.locale) : id) : "";
   const yesNo = (value: boolean) => value ? labels.values.yes : labels.values.no;
   const budgetStatus = (value: "under" | "over" | "on" | "unbudgeted") => labels.values[value];
@@ -84,7 +89,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     labels.columns.operatingExpense, labels.columns.budget, labels.columns.actual, labels.columns.borrowedOutstanding,
     labels.columns.lentOutstanding, labels.columns.installmentOutstanding, labels.columns.receivableOutstanding,
     labels.columns.netActivity];
-  (["USD", "LBP", "SYP"] as const).forEach((currency, index) => {
+  currencies.forEach((currency, index) => {
     const reconciliations = schedules.reconciliations.filter((row) => row.currency === currency);
     const activity = schedules.monthlyActivity.filter((row) => row.currency === currency);
     const budgets = schedules.budgetActuals.filter((row) => row.currency === currency);
@@ -106,14 +111,15 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   });
 
   table("reconciliation", "ReconciliationTable", [
-    { key: "walletName", label: labels.columns.walletName }, { key: "walletId", label: labels.columns.walletId },
+    { key: "walletName", label: labels.columns.walletName }, { key: "balanceId", label: labels.columns.balanceId },
     { key: "currency", label: labels.columns.currency }, { key: "archived", label: labels.columns.archived },
     { key: "opening", label: labels.columns.openingBalance }, { key: "inflow", label: labels.columns.inflow },
     { key: "outflow", label: labels.columns.outflow }, { key: "calculated", label: labels.columns.calculatedClosing },
     { key: "app", label: labels.columns.appClosing }, { key: "difference", label: labels.columns.difference },
-  ], schedules.reconciliations.map((row) => [row.walletName, row.walletId, row.currency, yesNo(row.archived),
+    { key: "walletId", label: labels.columns.walletId },
+  ], schedules.reconciliations.map((row) => [row.walletName, row.balanceId, row.currency, yesNo(row.archived),
     money(row.openingBalanceMinor, row.currency), money(row.inflowMinor, row.currency), money(row.outflowMinor, row.currency),
-    money(row.calculatedClosingMinor, row.currency), money(row.exportedClosingMinor, row.currency), money(row.differenceMinor, row.currency)]));
+    money(row.calculatedClosingMinor, row.currency), money(row.exportedClosingMinor, row.currency), money(row.differenceMinor, row.currency), row.walletId]));
 
   table("monthlyActivity", "MonthlyActivityTable", [
     { key: "month", label: labels.columns.month }, { key: "currency", label: labels.columns.currency },
@@ -130,15 +136,16 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   table("walletLedger", "WalletLedgerTable", [
     { key: "date", label: labels.columns.date }, { key: "transactionId", label: labels.columns.transactionId },
     { key: "leg", label: labels.columns.leg }, { key: "wallet", label: labels.columns.walletName },
-    { key: "walletId", label: labels.columns.walletId }, { key: "currency", label: labels.columns.currency },
+    { key: "balanceId", label: labels.columns.balanceId }, { key: "currency", label: labels.columns.currency },
     { key: "inflow", label: labels.columns.inflow }, { key: "outflow", label: labels.columns.outflow },
     { key: "category", label: labels.columns.categoryName }, { key: "categoryId", label: labels.columns.categoryId },
     { key: "note", label: labels.columns.note }, { key: "source", label: labels.columns.source },
     { key: "fixed", label: labels.columns.fixedExpenseId }, { key: "installment", label: labels.columns.installmentId },
     { key: "loan", label: labels.columns.loanId }, { key: "receivable", label: labels.columns.receivableId },
-  ], schedules.walletLedger.map((row) => [dateValue(row.occurredOn), row.transactionId, enumLabel(row.leg), row.walletName, row.walletId,
+    { key: "walletId", label: labels.columns.walletId },
+  ], schedules.walletLedger.map((row) => [dateValue(row.occurredOn), row.transactionId, enumLabel(row.leg), row.walletName, row.balanceId,
     row.currency, money(row.inflowMinor, row.currency), money(row.outflowMinor, row.currency), row.categoryName, row.categoryId,
-    row.note, enumLabel(row.source), row.fixedExpenseId, row.installmentId, row.loanId, row.pendingPaymentId]));
+    row.note, enumLabel(row.source), row.fixedExpenseId, row.installmentId, row.loanId, row.pendingPaymentId, row.walletId]));
 
   table("budgetActual", "BudgetActualTable", [
     { key: "month", label: labels.columns.month }, { key: "category", label: labels.columns.categoryName },
@@ -153,22 +160,25 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   table("transactions", "TransactionsTable", [
     { key: "date", label: labels.columns.date }, { key: "id", label: labels.columns.transactionId },
     { key: "type", label: labels.columns.type }, { key: "wallet", label: labels.columns.walletName },
-    { key: "walletId", label: labels.columns.walletId }, { key: "category", label: labels.columns.categoryName },
+    { key: "balanceId", label: labels.columns.balanceId }, { key: "category", label: labels.columns.categoryName },
     { key: "categoryId", label: labels.columns.categoryId }, { key: "currency", label: labels.columns.currency },
     { key: "amount", label: labels.columns.amount }, { key: "note", label: labels.columns.note },
     { key: "source", label: labels.columns.source }, { key: "revision", label: labels.columns.revision },
     { key: "toWallet", label: `${labels.columns.transferIn} ${labels.columns.walletName}` },
-    { key: "toWalletId", label: `${labels.columns.transferIn} ${labels.columns.walletId}` },
+    { key: "toBalanceId", label: `${labels.columns.transferIn} ${labels.columns.balanceId}` },
     { key: "toCurrency", label: `${labels.columns.transferIn} ${labels.columns.currency}` },
     { key: "toAmount", label: `${labels.columns.transferIn} ${labels.columns.amount}` },
     { key: "fixed", label: labels.columns.fixedExpenseId }, { key: "installment", label: labels.columns.installmentId },
     { key: "loan", label: labels.columns.loanId }, { key: "receivable", label: labels.columns.receivableId },
-  ], data.transactions.map((row) => [dateValue(row.occurredOn), row.id, enumLabel(row.kind), walletName(row.walletId), row.walletId,
+    { key: "walletId", label: labels.columns.walletId },
+    { key: "snapshot", label: labels.columns.walletNameSnapshot },
+    { key: "toSnapshot", label: labels.columns.toWalletNameSnapshot },
+  ], data.transactions.map((row) => [dateValue(row.occurredOn), row.id, enumLabel(row.kind), walletName(row.balanceId), row.balanceId,
     categoryLabel(row.categoryId), row.categoryId, row.currency, money(row.amountMinor, row.currency), row.note, enumLabel(row.source),
-    row.revision, row.toWalletId ? walletName(row.toWalletId) : null, row.toWalletId,
-    row.toWalletId ? wallets.get(row.toWalletId)?.currency ?? null : null,
-    row.toAmountMinor === null ? null : money(row.toAmountMinor, wallets.get(row.toWalletId!)?.currency ?? row.currency),
-    row.fixedExpenseId, row.installmentId, row.loanId, row.pendingPaymentId ?? null]));
+    row.revision, row.toBalanceId ? walletName(row.toBalanceId) : null, row.toBalanceId,
+    row.toBalanceId ? exactBalance(row.toBalanceId).currency : null,
+    row.toAmountMinor === null ? null : money(row.toAmountMinor, exactBalance(row.toBalanceId!).currency),
+    row.fixedExpenseId, row.installmentId, row.loanId, row.pendingPaymentId ?? null, exactBalance(row.balanceId).walletId, row.walletNameSnapshot ?? null, row.toWalletNameSnapshot ?? null]));
 
   table("expenseItems", "ExpenseItemsTable", [
     { key: "transaction", label: labels.columns.transactionId }, { key: "id", label: labels.columns.id },
@@ -179,11 +189,27 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
 
   table("wallets", "WalletsTable", [
     { key: "name", label: labels.columns.walletName }, { key: "id", label: labels.columns.walletId },
-    { key: "type", label: labels.columns.walletKind }, { key: "currency", label: labels.columns.currency },
+    { key: "type", label: labels.columns.walletKind }, { key: "default", label: labels.columns.defaultBalanceId },
+    { key: "deleted", label: labels.columns.deleted }, { key: "attention", label: labels.columns.needsAttention },
+    { key: "position", label: labels.columns.position },
+  ], data.wallets.map((row) => [row.name, row.id, enumLabel(row.kind), row.defaultBalanceId,
+    yesNo(row.deleted), yesNo(row.needsAttention), row.position]));
+
+  table("currencies", "CurrenciesTable", [
+    { key: "code", label: labels.columns.currency }, { key: "symbol", label: labels.columns.symbol },
+    { key: "precision", label: labels.columns.decimalPlaces }, { key: "disabled", label: labels.columns.disabled },
+    { key: "used", label: labels.columns.firstUsed },
+  ], data.currencies.map((row) => [row.code, row.symbol, row.decimalPlaces, yesNo(row.disabled), yesNo(row.firstUsed)]));
+
+  table("balances", "BalancesTable", [
+    { key: "name", label: labels.columns.walletName }, { key: "id", label: labels.columns.balanceId },
+    { key: "wallet", label: labels.columns.walletId }, { key: "currency", label: labels.columns.currency },
     { key: "opening", label: labels.columns.openingBalance }, { key: "closing", label: labels.columns.appClosing },
-    { key: "archived", label: labels.columns.archived }, { key: "position", label: labels.columns.position },
-  ], data.wallets.map((row) => [row.name, row.id, enumLabel(row.kind), row.currency, money(row.openingBalanceMinor, row.currency),
-    money(row.balanceMinor, row.currency), yesNo(row.archived), row.position]));
+    { key: "detached", label: labels.columns.detached }, { key: "position", label: labels.columns.position },
+    { key: "openingExact", label: `${labels.columns.openingBalance} ${labels.columns.exactMinor}` },
+    { key: "closingExact", label: `${labels.columns.appClosing} ${labels.columns.exactMinor}` },
+  ], balances.map((row) => [row.name, row.id, row.walletId, row.currency, money(row.openingBalanceMinor, row.currency),
+    money(row.balanceMinor, row.currency), yesNo(row.detached), row.position, String(row.openingBalanceMinor), String(row.balanceMinor)]));
 
   table("categories", "CategoriesTable", [
     { key: "name", label: labels.columns.categoryName }, { key: "id", label: labels.columns.categoryId },
@@ -194,20 +220,20 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
 
   const salary = data.profile.salary;
   table("salary", "SalaryTable", [
-    { key: "wallet", label: labels.columns.walletName }, { key: "walletId", label: labels.columns.walletId },
+    { key: "wallet", label: labels.columns.walletName }, { key: "balanceId", label: labels.columns.balanceId },
     { key: "currency", label: labels.columns.currency }, { key: "amount", label: labels.columns.amount },
-  ], salary && wallets.get(salary.walletId) ? [[walletName(salary.walletId), salary.walletId, wallets.get(salary.walletId)!.currency,
-    money(salary.amountMinor, wallets.get(salary.walletId)!.currency)]] : []);
+  ], salary && wallets.get(salary.balanceId) ? [[walletName(salary.balanceId), salary.balanceId, wallets.get(salary.balanceId)!.currency,
+    money(salary.amountMinor, wallets.get(salary.balanceId)!.currency)]] : []);
 
   table("fixedExpenses", "FixedExpensesTable", [
     { key: "name", label: labels.columns.description }, { key: "id", label: labels.columns.id },
-    { key: "wallet", label: labels.columns.walletName }, { key: "walletId", label: labels.columns.walletId },
+    { key: "wallet", label: labels.columns.walletName }, { key: "balanceId", label: labels.columns.balanceId },
     { key: "category", label: labels.columns.categoryName }, { key: "categoryId", label: labels.columns.categoryId },
     { key: "currency", label: labels.columns.currency }, { key: "amount", label: labels.columns.amount },
     { key: "due", label: labels.columns.dueDay },
   ], data.fixedExpenses.map((row) => {
-    const currency = wallets.get(row.walletId)?.currency ?? "USD";
-    return [row.name, row.id, walletName(row.walletId), row.walletId, categoryLabel(row.categoryId), row.categoryId,
+    const currency = exactBalance(row.balanceId).currency;
+    return [row.name, row.id, walletName(row.balanceId), row.balanceId, categoryLabel(row.categoryId), row.categoryId,
       currency, money(row.amountMinor, currency), row.dueDay];
   }));
 
@@ -218,7 +244,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "before", label: labels.columns.paidBefore }, { key: "paid", label: labels.columns.paid },
     { key: "remaining", label: labels.columns.remaining }, { key: "monthly", label: labels.columns.monthlyPayment },
     { key: "due", label: labels.columns.dueDay }, { key: "status", label: labels.columns.status },
-  ], data.installments.map((row) => [row.name, row.id, walletName(row.walletId), categoryLabel(row.categoryId), row.currency,
+  ], data.installments.map((row) => [row.name, row.id, walletName(row.balanceId), categoryLabel(row.categoryId), row.currency,
     money(row.totalMinor, row.currency), money(row.paidBeforeMinor, row.currency), money(row.paidMinor, row.currency),
     money(row.remainingMinor, row.currency), money(row.monthlyMinor, row.currency), row.dueDay, enumLabel(row.cycleStatus)]));
 
@@ -227,7 +253,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "installment", label: labels.columns.installmentId }, { key: "wallet", label: labels.columns.walletName },
     { key: "currency", label: labels.columns.currency }, { key: "amount", label: labels.columns.amount },
   ], data.installments.flatMap((installment) => installment.payments.map((payment) => [dateValue(payment.occurredOn),
-    payment.transactionId, installment.id, walletName(payment.walletId), installment.currency, money(payment.amountMinor, installment.currency)])));
+    payment.transactionId, installment.id, walletName(payment.balanceId), installment.currency, money(payment.amountMinor, installment.currency)])));
 
   table("loans", "LoansTable", [
     { key: "name", label: labels.columns.description }, { key: "id", label: labels.columns.loanId },
@@ -237,7 +263,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "fee", label: labels.columns.fee }, { key: "total", label: labels.columns.totalDue },
     { key: "paid", label: labels.columns.paid }, { key: "remaining", label: labels.columns.remaining },
     { key: "archived", label: labels.columns.archived },
-  ], data.loans.map((row) => [row.name, row.id, enumLabel(row.direction), walletName(row.walletId), row.currency, dateValue(row.openedOn),
+  ], data.loans.map((row) => [row.name, row.id, enumLabel(row.direction), walletName(row.balanceId), row.currency, dateValue(row.openedOn),
     money(row.principalMinor, row.currency), row.feeBps / 10_000, money(row.feeMinor, row.currency), money(row.totalDueMinor, row.currency),
     money(row.principalPaidMinor + row.feePaidMinor, row.currency), money(row.remainingMinor, row.currency), yesNo(row.archivedAt !== null)]));
 
@@ -248,7 +274,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "amount", label: labels.columns.amount }, { key: "principal", label: labels.columns.principal },
     { key: "fee", label: labels.columns.fee },
   ], data.transactions.filter((row) => row.kind === "loan").map((row) => [dateValue(row.occurredOn), row.id, row.loanId,
-    enumLabel(row.loanEvent), walletName(row.walletId), row.currency, money(row.amountMinor, row.currency),
+    enumLabel(row.loanEvent), walletName(row.balanceId), row.currency, money(row.amountMinor, row.currency),
     money(row.loanPrincipalMinor, row.currency), money(row.loanFeeMinor, row.currency)]));
 
   table("receivables", "ReceivablesTable", [
@@ -265,10 +291,40 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     { key: "category", label: labels.columns.categoryName }, { key: "currency", label: labels.columns.currency },
     { key: "amount", label: labels.columns.amount },
   ], data.pendingReceipts.map((row) => {
-    const currency = wallets.get(row.walletId)?.currency ?? "USD";
-    return [dateValue(row.occurredOn), row.id, row.paymentId, walletName(row.walletId), categoryLabel(row.categoryId),
+    const currency = exactBalance(row.balanceId).currency;
+    return [dateValue(row.occurredOn), row.id, row.paymentId, walletName(row.balanceId), categoryLabel(row.categoryId),
       currency, money(row.amountMinor, currency)];
   }));
+
+  // Exact facts use text cells: Excel numeric cells have only 15 significant digits.
+  // Paths retain source identities and include every minor-unit field and snapshot.
+  const facts: CellValue[][] = [];
+  const collectFacts = (value: unknown, path: string, currency: string | null = null) => {
+    if (!value || typeof value !== "object" || value instanceof Date) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        const id = entry && typeof entry === "object" && "id" in entry ? String(entry.id) : String(index);
+        collectFacts(entry, `${path}/${id}`, currency);
+      });
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    const balanceId = typeof record.balanceId === "string" && wallets.has(record.balanceId) ? record.balanceId : null;
+    const unit = typeof record.currency === "string" ? record.currency : balanceId ? exactBalance(balanceId).currency : currency;
+    for (const [key, entry] of Object.entries(record)) {
+      const factUnit = key === "tenderMinor" && typeof record.tenderCurrency === "string" ? record.tenderCurrency
+        : key === "toAmountMinor" && typeof record.toBalanceId === "string" ? exactBalance(record.toBalanceId).currency : unit;
+      if (entry === null || ["string", "number", "boolean"].includes(typeof entry)) {
+        facts.push([`${path}/${key}`, factUnit, entry === null ? null : String(entry)]);
+      } else collectFacts(entry, `${path}/${key}`, unit);
+    }
+  };
+  collectFacts(data, "source");
+  collectFacts(schedules, "schedules");
+  table("exactFacts", "ExactFactsTable", [
+    { key: "path", label: labels.columns.factPath }, { key: "currency", label: labels.columns.currency },
+    { key: "value", label: labels.columns.exactValue },
+  ], facts);
 
   const recordChecks: Array<[string, number]> = [
     [labels.sheets.transactions, data.transactions.length],
@@ -283,13 +339,13 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   ];
   const checkRows: CellValue[][] = [
     ...recordChecks.map(([name, count]) => [`${name} - ${labels.values.records}`, count, labels.values.recordCounts]),
-    ...(["USD", "LBP", "SYP"] as const).map((currency) => [
+    ...currencies.map((currency) => [
       `${labels.values.walletDifference} - ${currency}`,
       schedules.reconciliations.filter((row) => row.currency === currency)
         .reduce((sum, row) => sum + money(row.differenceMinor, currency)!, 0),
       labels.values.reconciliationChecks,
     ]),
-    ...(["USD", "LBP", "SYP"] as const).flatMap((currency) => {
+    ...currencies.flatMap((currency) => {
       const ledger = schedules.walletLedger.filter((row) => row.currency === currency);
       return [
         [`${labels.sheets.walletLedger} ${labels.columns.inflow} - ${currency}`,
@@ -320,10 +376,10 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   schedules.reconciliations.forEach((row, index) => {
     const excelRow = 5 + index;
     formula(reconciliationSheet.getCell(excelRow, 6),
-      `SUMIFS(${tableColumn("WalletLedgerTable", labels.columns.inflow)},${tableColumn("WalletLedgerTable", labels.columns.walletId)},$B${excelRow})`,
+      `SUMIFS(${tableColumn("WalletLedgerTable", labels.columns.inflow)},${tableColumn("WalletLedgerTable", labels.columns.balanceId)},$B${excelRow})`,
       money(row.inflowMinor, row.currency)!);
     formula(reconciliationSheet.getCell(excelRow, 7),
-      `SUMIFS(${tableColumn("WalletLedgerTable", labels.columns.outflow)},${tableColumn("WalletLedgerTable", labels.columns.walletId)},$B${excelRow})`,
+      `SUMIFS(${tableColumn("WalletLedgerTable", labels.columns.outflow)},${tableColumn("WalletLedgerTable", labels.columns.balanceId)},$B${excelRow})`,
       money(row.outflowMinor, row.currency)!);
     formula(reconciliationSheet.getCell(excelRow, 8), `E${excelRow}+F${excelRow}-G${excelRow}`,
       money(row.calculatedClosingMinor, row.currency)!);
@@ -331,7 +387,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
       money(row.differenceMinor, row.currency)!);
   });
 
-  (["USD", "LBP", "SYP"] as const).forEach((currency, index) => {
+  currencies.forEach((currency, index) => {
     const excelRow = 5 + index;
     const reconciliations = schedules.reconciliations.filter((row) => row.currency === currency);
     const activity = schedules.monthlyActivity.filter((row) => row.currency === currency);
@@ -373,7 +429,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
       activity.reduce((sum, row) => sum + money(row.netWalletActivityMinor, currency)!, 0));
   });
 
-  (["USD", "LBP", "SYP"] as const).forEach((currency, index) => {
+  currencies.forEach((currency, index) => {
     const excelRow = 5 + recordChecks.length + index;
     const result = schedules.reconciliations.filter((row) => row.currency === currency)
       .reduce((sum, row) => sum + money(row.differenceMinor, currency)!, 0);
@@ -381,8 +437,8 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
       `SUMIFS(${tableColumn("ReconciliationTable", labels.columns.difference)},${tableColumn("ReconciliationTable", labels.columns.currency)},"${currency}")`,
       result);
   });
-  (["USD", "LBP", "SYP"] as const).forEach((currency, currencyIndex) => {
-    const firstRow = 5 + recordChecks.length + 3 + currencyIndex * 2;
+  currencies.forEach((currency, currencyIndex) => {
+    const firstRow = 5 + recordChecks.length + currencies.length + currencyIndex * 2;
     const ledger = schedules.walletLedger.filter((row) => row.currency === currency);
     formula(checksSheet.getCell(firstRow, 2),
       `SUMIFS(${tableColumn("WalletLedgerTable", labels.columns.inflow)},${tableColumn("WalletLedgerTable", labels.columns.currency)},"${currency}")`,
@@ -392,9 +448,18 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
       ledger.reduce((sum, row) => sum + money(row.outflowMinor, currency)!, 0));
   });
 
-  const accountingFormat = (currency: string) => currency === "USD"
-    ? "#,##0.00;(#,##0.00);-"
-    : "#,##0;(#,##0);-";
+  const accountingFormat = (currency: string) => {
+    const decimals = definition(currency).decimalPlaces;
+    const digits = decimals === 0 ? "" : `.${"0".repeat(decimals)}`;
+    return `#,##0${digits};(#,##0${digits});-`;
+  };
+  currencies.forEach((currency, index) => {
+    const differenceRow = 5 + recordChecks.length + index;
+    const firstLedgerRow = 5 + recordChecks.length + currencies.length + index * 2;
+    for (const row of [differenceRow, firstLedgerRow, firstLedgerRow + 1]) {
+      checksSheet.getCell(row, 2).numFmt = accountingFormat(currency);
+    }
+  });
   const headerColumn = (sheet: ExcelJS.Worksheet, label: string) => {
     const cells = sheet.getRow(4).values as CellValue[];
     const index = cells.indexOf(label);
@@ -424,13 +489,14 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   const destinationAmountColumn = headerColumn(transactionSheet, `${labels.columns.transferIn} ${labels.columns.amount}`);
   if (destinationCurrencyColumn !== null && destinationAmountColumn !== null) {
     for (let row = 5; row <= transactionSheet.rowCount; row++) {
+      if (!transactionSheet.getCell(row, destinationCurrencyColumn).value) continue;
       transactionSheet.getCell(row, destinationAmountColumn).numFmt = accountingFormat(
         String(transactionSheet.getCell(row, destinationCurrencyColumn).value ?? ""),
       );
     }
   }
   moneyColumns("expenseItems", [labels.columns.amount]);
-  moneyColumns("wallets", [labels.columns.openingBalance, labels.columns.appClosing]);
+  moneyColumns("balances", [labels.columns.openingBalance, labels.columns.appClosing]);
   moneyColumns("salary", [labels.columns.amount]);
   moneyColumns("fixedExpenses", [labels.columns.amount]);
   moneyColumns("installments", [labels.columns.total, labels.columns.paidBefore, labels.columns.paid, labels.columns.remaining, labels.columns.monthlyPayment]);
@@ -440,7 +506,7 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
   moneyColumns("receivables", [labels.columns.total, labels.columns.received, labels.columns.remaining]);
   moneyColumns("receipts", [labels.columns.amount]);
 
-  for (let row = 5; row <= 7; row++) {
+  for (let row = 5; row < 5 + currencies.length; row++) {
     const numFmt = accountingFormat(String(summary.getCell(row, 1).value));
     for (let column = 2; column <= 11; column++) summary.getCell(row, column).numFmt = numFmt;
   }

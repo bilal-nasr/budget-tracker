@@ -1,91 +1,91 @@
 import { dueThisCycle, type Installment } from "@/features/installments/cycle";
-import type { Wallet } from "@/features/wallets/schema";
-import { CURRENCIES, emptyCurrencyTotals, sumMinor, type Currency } from "@/lib/money";
+import { sumMinor } from "@/lib/money";
 import type { FixedExpense } from "./schema";
 
-export type WalletNeed = {
-  walletId: string;
-  currency: Currency;
+export type BalanceNeed = {
+  balanceId: string;
+  currency: string;
   /** Monthly fixed items plus current receipt-cycle installment targets. */
   totalMinor: number;
   /** The part not paid yet. */
   unpaidMinor: number;
-  /** How much the wallet lacks to cover the unpaid part; 0 when it has enough. */
+  /** How much the balance lacks to cover the unpaid part; 0 when it has enough. */
   shortMinor: number;
 };
 
 export type FixedSummary = {
-  /** In wallet display order. */
-  byWallet: WalletNeed[];
-  total: Record<Currency, number>;
+  /** In balance display order. */
+  byBalance: BalanceNeed[];
+  total: Record<string, number>;
   /** Unpaid, per currency. */
-  left: Record<Currency, number>;
+  left: Record<string, number>;
   /** Salary minus the fixed total in the salary's own currency. Negative when short. */
-  salaryAfter: { currency: Currency; minor: number; excludedCurrencies: Currency[] } | null;
+  salaryAfter: { currency: string; minor: number; excludedCurrencies: string[] } | null;
 };
 
-/** Per-wallet needs, totals and salary left after fixed expenses. Currencies are never combined. */
+/** Per-balance needs, totals and salary left after fixed expenses. Currencies are never combined. */
 export function summarizeFixed(
   items: readonly FixedExpense[],
-  walletById: (id: string) => Wallet | undefined,
-  salary: { amountMinor: number; walletId: string } | null,
-  installments: readonly Installment[] = [],
+  balanceById: (id: string) => { id: string; currency: string; balanceMinor: number; position: number } | undefined,
+  salary: { amountMinor: number; balanceId: string } | null,
+  installments: readonly Installment[],
+  currencyOrder: readonly string[],
 ): FixedSummary {
-  const total = emptyCurrencyTotals();
-  const left = emptyCurrencyTotals();
-  const needs = new Map<string, WalletNeed & { position: number; balance: number }>();
+  const total = {} as Record<string, number>;
+  const left = {} as Record<string, number>;
+  const needs = new Map<string, BalanceNeed & { position: number; balance: number }>();
 
   // Installment targets use actual salary cycles; fixed items keep their month.
   const lines = [
     ...items.map((item) => ({
-      walletId: item.walletId,
+      balanceId: item.balanceId,
       amountMinor: item.amountMinor,
       unpaid: item.paidOn === null ? item.amountMinor : 0,
     })),
     ...installments.map((i) => {
       const due = dueThisCycle(i);
-      return { walletId: i.walletId, amountMinor: due, unpaid: Math.max(0, due - i.paidThisCycleMinor) };
+      return { balanceId: i.balanceId, amountMinor: due, unpaid: Math.max(0, due - i.paidThisCycleMinor) };
     }),
   ].filter((line) => line.amountMinor > 0);
 
   for (const line of lines) {
-    const wallet = walletById(line.walletId);
-    if (!wallet) continue;
+    const balance = balanceById(line.balanceId);
+    if (!balance) continue;
     const unpaid = line.unpaid;
-    total[wallet.currency] = sumMinor([total[wallet.currency], line.amountMinor]);
-    left[wallet.currency] = sumMinor([left[wallet.currency], unpaid]);
-    const need = needs.get(wallet.id) ?? {
-      walletId: wallet.id,
-      currency: wallet.currency,
+    total[balance.currency] = sumMinor([total[balance.currency] ?? 0, line.amountMinor]);
+    left[balance.currency] = sumMinor([left[balance.currency] ?? 0, unpaid]);
+    const need = needs.get(balance.id) ?? {
+      balanceId: balance.id,
+      currency: balance.currency,
       totalMinor: 0,
       unpaidMinor: 0,
       shortMinor: 0,
-      position: wallet.position,
-      balance: wallet.balanceMinor,
+      position: balance.position,
+      balance: balance.balanceMinor,
     };
     need.totalMinor = sumMinor([need.totalMinor, line.amountMinor]);
     need.unpaidMinor = sumMinor([need.unpaidMinor, unpaid]);
-    needs.set(wallet.id, need);
+    needs.set(balance.id, need);
   }
 
   const byWallet = [...needs.values()]
     .sort((a, b) => a.position - b.position)
     .map((n) => ({
-      walletId: n.walletId,
+      balanceId: n.balanceId,
       currency: n.currency,
       totalMinor: n.totalMinor,
       unpaidMinor: n.unpaidMinor,
       shortMinor: Math.max(0, sumMinor([n.unpaidMinor, -n.balance])),
     }));
 
-  const salaryWallet = salary ? walletById(salary.walletId) : undefined;
+  const salaryWallet = salary ? balanceById(salary.balanceId) : undefined;
   let salaryAfter: FixedSummary["salaryAfter"] = null;
   if (salary && salaryWallet) {
     salaryAfter = {
       currency: salaryWallet.currency,
-      minor: sumMinor([salary.amountMinor, -total[salaryWallet.currency]]),
-      excludedCurrencies: CURRENCIES.filter((currency) => currency !== salaryWallet.currency && total[currency] > 0),
+      minor: sumMinor([salary.amountMinor, -(total[salaryWallet.currency] ?? 0)]),
+      excludedCurrencies: currencyOrder.filter((currency) => currency !== salaryWallet.currency && total[currency] > 0),
     };
   }
-  return { byWallet, total, left, salaryAfter };
+  return { byBalance: byWallet, total, left, salaryAfter };
 }

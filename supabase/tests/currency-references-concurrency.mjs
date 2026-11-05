@@ -11,7 +11,8 @@ import { spawn } from "node:child_process";
 const container = process.env.CURRENCY_TEST_DOCKER_CONTAINER;
 const database = process.env.CURRENCY_TEST_DATABASE;
 if (process.env.CURRENCY_TEST_ALLOW_FIXTURES !== "1"
-    || container !== "supabase_db_budget-tracker-round3-check" || !/^round3_check_\d+$/.test(database ?? "")) {
+    || !((container === "supabase_db_budget-tracker-round3-check" && /^round3_check_\d+$/.test(database ?? ""))
+      || (container === "supabase_db_CODEX-BUDGET-MULTIWALLET-SYSTEM-20261105" && database === "postgres"))) {
   throw new Error("Currency concurrency tests require the exact designated synthetic PG17 container/database and explicit fixture opt-in");
 }
 const args = ["exec", "-i", "-e", "PGPASSWORD=", "-e", "PGOPTIONS=", "-e", "PGPASSFILE=/tmp/budget-no-pgpass",
@@ -19,7 +20,7 @@ const args = ["exec", "-i", "-e", "PGPASSWORD=", "-e", "PGOPTIONS=", "-e", "PGPA
   "-d", database, "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose"];
 const owner = randomUUID();
 const active = new Set();
-const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true);`;
+const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 
 function session() {
   const child = spawn("docker", args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
@@ -66,17 +67,18 @@ let passed = 0;
 let category;
 
 function reference(kind, wallet, id, mode = "insert") {
-  if (kind === "salary") return `update public.profiles set salary_amount_minor=1250,salary_wallet_id='${wallet}' where user_id='${owner}';`;
-  if (mode === "move") return `update public.${kind} set wallet_id='${wallet}' where id='${id}';`;
-  if (kind === "fixed_expenses") return `insert into public.fixed_expenses(id,name,amount_minor,wallet_id,category_id)
+  if (kind === "salary") return `update public.profiles set salary_amount_minor=1250,salary_balance_id='${wallet}' where user_id='${owner}';`;
+  if (mode === "move") return `update public.${kind} set balance_id='${wallet}' where id='${id}';`;
+  if (kind === "fixed_expenses") return `insert into public.fixed_expenses(id,name,amount_minor,balance_id,category_id)
     values('${id}','Synthetic fixed concurrency',1250,'${wallet}','${category}');`;
-  return `insert into public.installments(id,name,total_minor,monthly_minor,wallet_id,category_id,currency)
+  return `insert into public.installments(id,name,total_minor,monthly_minor,balance_id,category_id,currency)
     values('${id}','Synthetic installment concurrency',10000,1250,'${wallet}','${category}','USD');`;
 }
 async function makeWallet() {
-  const wallet = randomUUID();
-  await owned(`insert into public.wallets(id,name,kind,currency) values('${wallet}','Synthetic currency concurrency','cash','SYP');`);
-  return wallet;
+  const output = await owned("select public.create_wallet('Synthetic reference','cash','USD',0);");
+  const wallet = output.split(/\r?\n/).find((line) => /^[a-f0-9-]{36}$/.test(line));
+  const balanceOutput = await owned(`select id from public.wallet_balances where wallet_id='${wallet}' and currency='SYP';`);
+  return balanceOutput.split(/\r?\n/).find((line) => /^[a-f0-9-]{36}$/.test(line));
 }
 
 try {
@@ -93,7 +95,7 @@ try {
     const wallet = await makeWallet();
     const id = randomUUID();
     if (mode === "move") await owned(reference(kind, await makeWallet(), id));
-    else if (kind === "salary") await owned(`update public.profiles set salary_wallet_id=null,salary_amount_minor=null where user_id='${owner}';`);
+    else if (kind === "salary") await owned(`update public.profiles set salary_balance_id=null,salary_amount_minor=null where user_id='${owner}';`);
     const writer = session();
     writer.send(`begin; ${claims} ${reference(kind, wallet, id, mode)} select 'REFERENCE_READY';`);
     await writer.wait("REFERENCE_READY");
@@ -101,22 +103,23 @@ try {
     editor.send(`begin; ${claims}
       do $$ begin
         begin
-          perform 1 from public.wallets where id='${wallet}' for no key update nowait;
+          perform 1 from public.wallet_balances where id='${wallet}' for no key update nowait;
           raise exception 'missing conflicting wallet reference lock';
         exception when lock_not_available then null; end;
       end $$;
       select 'REFERENCE_LOCK_CONFIRMED';
-      update public.wallets set currency='USD' where id='${wallet}'; commit;`);
+      select public.set_currency_disabled('SYP',true); commit;`);
     try { await editor.wait("REFERENCE_LOCK_CONFIRMED"); }
     catch (error) { await writer.end("rollback;\n"); await editor.end(); throw error; }
     const first = await writer.end("commit;\n");
     const second = await editor.end();
     assert.equal(first.code, 0, first.errors);
-    assert.notEqual(second.code, 0, "referenced wallet edit must be rejected after the writer commits");
-    assert.match(second.errors, /wallet currency cannot change/);
-    assert.equal((await owned(`select currency::text from public.wallets where id='${wallet}';`)).split(/\r?\n/).at(-1), "SYP");
-    console.log(`PASS reference-first ${kind} ${mode}: conflicting lock, rejected edit, SYP unchanged`);
+    assert.notEqual(second.code, 0, "referenced global disable must be rejected after the writer commits");
+    assert.match(second.errors, /currency.inUse/);
+    assert.equal((await owned(`select currency::text from public.wallet_balances where id='${wallet}';`)).split(/\r?\n/).at(-1), "SYP");
+    console.log(`PASS reference-first ${kind} ${mode}: conflicting lock, rejected disable, balance retained`);
     passed++;
+    await owned(`delete from public.fixed_expenses; delete from public.installments; update public.profiles set salary_balance_id=null,salary_amount_minor=null where user_id='${owner}'; select public.set_currency_disabled('SYP',false);`);
   }
 
   for (const kind of ["installments", "fixed_expenses", "salary"]) {
@@ -124,7 +127,7 @@ try {
     const id = randomUUID();
     const application = `currency-reference-${randomUUID()}`;
     const editor = session();
-    editor.send(`begin; ${claims} update public.wallets set currency='USD' where id='${wallet}'; select 'CURRENCY_READY';`);
+    editor.send(`begin; ${claims} select public.set_currency_disabled('SYP',true); select 'CURRENCY_READY';`);
     await editor.wait("CURRENCY_READY");
     const writer = session();
     writer.send(`set application_name='${application}'; begin; ${claims} select 'WRITER_READY'; ${reference(kind, wallet, id)} commit;`);
@@ -139,7 +142,7 @@ try {
         if waiting then exit; end if;
         if not exists(select 1 from pg_stat_activity where application_name='${application}')
            or exists(select 1 from pg_stat_activity where application_name='${application}' and state='idle' and query ~* '^commit') then
-          raise exception 'reference writer did not wait for the currency edit';
+          raise exception 'reference writer did not wait for the global disable';
         end if;
         if clock_timestamp()>deadline then raise exception 'currency reference wait barrier timed out'; end if;
         perform pg_sleep(0.005);
@@ -150,16 +153,14 @@ try {
     const first = await editor.end("commit;\n");
     const second = await writer.end();
     assert.equal(first.code, 0, first.errors);
-    assert.equal(second.code, 0, second.errors);
-    const state = await owned(kind === "installments"
-      ? `select i.currency::text||'|'||w.currency::text from public.installments i join public.wallets w on w.id=i.wallet_id where i.id='${id}';`
-      : kind === "salary" ? `select w.currency::text from public.profiles p join public.wallets w on w.id=p.salary_wallet_id where p.user_id='${owner}';`
-        : `select w.currency::text from public.fixed_expenses f join public.wallets w on w.id=f.wallet_id where f.id='${id}';`);
-    assert.equal(state.split(/\r?\n/).at(-1), kind === "installments" ? "USD|USD" : "USD");
-    console.log(`PASS currency-first ${kind}: writer waits and reads committed USD currency`);
+    assert.notEqual(second.code, 0, "new references must reject the committed disable");
+    assert.match(second.errors, /currency.disabled/);
+    assert.equal((await owned(`select disabled_at is not null from public.currencies where code='SYP';`)).split(/\r?\n/).at(-1), "t");
+    console.log(`PASS disable-first ${kind}: writer waits and rejects the disabled exact balance`);
     passed++;
+    await owned(`delete from public.fixed_expenses; delete from public.installments; update public.profiles set salary_balance_id=null,salary_amount_minor=null where user_id='${owner}'; select public.set_currency_disabled('SYP',false);`);
   }
-  console.log(`PASS: ${passed}/9 wallet currency/reference concurrency cases on the designated PG17 fixture.`);
+  console.log(`PASS: ${passed}/9 wallet balance/reference concurrency cases on the designated PG17 fixture.`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

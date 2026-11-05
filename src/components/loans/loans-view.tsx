@@ -1,4 +1,5 @@
 "use client";
+import { useAppData } from "@/components/providers/app-data";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shell/empty-state";
 import { summarizeLoans } from "@/features/loans/calculations";
 import type { Loan } from "@/features/loans/schema";
-import type { Currency } from "@/lib/money";
 
 // Sheets load on first open; the list renders without their code.
 const LoanSheet = dynamic(() => import("./loan-sheet").then((m) => m.LoanSheet));
@@ -17,6 +17,7 @@ const LoanPaymentSheet = dynamic(() => import("./loan-payment-sheet").then((m) =
 
 export function LoansView({ loans, initialLoanId }: { loans: Loan[]; initialLoanId?: string }) {
   const t = useTranslations("Loans");
+  const { currencies } = useAppData();
   const [sheet, setSheet] = useState<{ mode: "create" | "detail" | "edit" | "pay"; id?: string } | null>(initialLoanId ? { mode: "detail", id: initialLoanId } : null);
   const [showSettled, setShowSettled] = useState(false);
   const current = loans.find((loan) => loan.id === sheet?.id);
@@ -37,7 +38,7 @@ export function LoansView({ loans, initialLoanId }: { loans: Loan[]; initialLoan
     <div className="flex flex-col gap-6">
       {!loans.length ? <EmptyState title={t("emptyTitle")} body={t("emptyBody")} action={<Button onClick={() => setSheet({ mode: "create" })}><Plus aria-hidden />{t("add")}</Button>} /> : <>
         {!totals ? <p role="status">{t("totalsUnavailable")}</p> : <div className="flex flex-col gap-3 border-b border-border pb-4">
-          {(Object.keys(totals) as Currency[]).filter((c) => loans.some((loan) => !loan.deletedAt && loan.currency === c)).map((currency) => <section key={currency} aria-label={currency} className="flex flex-col gap-1">
+          {currencies.map((currency) => currency.code).filter((c) => loans.some((loan) => !loan.deletedAt && loan.currency === c)).map((currency) => <section key={currency} aria-label={currency} className="flex flex-col gap-1">
             <h2 className="text-sm font-semibold">{currency}</h2>
             <p className="flex flex-wrap justify-between gap-2 text-[15px]"><span>{t("owed")}</span><Amount minor={totals[currency].owedMinor} currency={currency} /></p>
             <p className="flex flex-wrap justify-between gap-2 text-[15px]"><span>{t("receivable")}</span><Amount minor={totals[currency].receivableMinor} currency={currency} /></p>

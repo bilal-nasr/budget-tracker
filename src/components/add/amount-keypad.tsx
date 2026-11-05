@@ -1,12 +1,12 @@
 "use client";
 
 import { Delete } from "lucide-react";
-import { CURRENCY_DECIMALS, type Currency } from "@/lib/money";
+import { type CurrencyDefinition } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 /** Applies one key press to the typed amount string. Pure, so it is easy to test. */
-export function applyKey(value: string, key: string, currency: Currency): string {
-  const decimals = CURRENCY_DECIMALS[currency];
+export function applyKey(value: string, key: string, currency: CurrencyDefinition): string {
+  const decimals = currency.decimalPlaces;
   if (key === "back") return value.slice(0, -1);
   if (key === ".") {
     if (decimals === 0 || value.includes(".")) return value;
@@ -34,7 +34,7 @@ export function AmountKeypad({
   className,
 }: {
   value: string;
-  currency: Currency;
+  currency: CurrencyDefinition;
   onChange: (next: string) => void;
   backspaceLabel: string;
   /** When set, a tall "Aa" key is shown that opens free-text entry (a custom label). */
@@ -55,9 +55,9 @@ export function AmountKeypad({
       <button
         type="button"
         className={cn(keyClass, "text-2xl font-semibold text-foreground")}
-        onClick={() => press(CURRENCY_DECIMALS[currency] === 0 ? "000" : ".")}
+        onClick={() => press((currency.decimalPlaces) === 0 ? "000" : ".")}
       >
-        {CURRENCY_DECIMALS[currency] === 0 ? "000" : "."}
+        {(currency.decimalPlaces) === 0 ? "000" : "."}
       </button>
       <button type="button" className={keyClass} onClick={() => press("0")}>
         0

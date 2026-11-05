@@ -1,4 +1,4 @@
-import { CURRENCY_DECIMALS, MAX_MINOR, type Currency } from "@/lib/money";
+import { MAX_MINOR } from "@/lib/money";
 import { normalizeNumericDigits } from "@/lib/numeric-text";
 
 const bounded = (value: number, min = 0) => Number.isSafeInteger(value) && value >= min && value <= MAX_MINOR;
@@ -50,8 +50,8 @@ export function allocateRepayment(amountMinor: number, principalRemainingMinor: 
   return { principalMinor, feeMinor: amountMinor - principalMinor };
 }
 
-export function summarizeLoans(loans: readonly { direction: "borrowed" | "lent"; currency: Currency; remainingMinor: number; deletedAt: string | null }[]): Record<Currency, { owedMinor: number; receivableMinor: number }> | null {
-  const totals = Object.fromEntries(Object.keys(CURRENCY_DECIMALS).map((c) => [c, { owedMinor: 0, receivableMinor: 0 }])) as Record<Currency, { owedMinor: number; receivableMinor: number }>;
+export function summarizeLoans(loans: readonly { direction: "borrowed" | "lent"; currency: string; remainingMinor: number; deletedAt: string | null }[]): Record<string, { owedMinor: number; receivableMinor: number }> | null {
+  const totals = Object.fromEntries([...new Set(loans.map((loan) => loan.currency))].map((c) => [c, { owedMinor: 0, receivableMinor: 0 }])) as Record<string, { owedMinor: number; receivableMinor: number }>;
   for (const loan of loans) {
     if (loan.deletedAt !== null) continue;
     if (!bounded(loan.remainingMinor) || !totals[loan.currency]) return null;

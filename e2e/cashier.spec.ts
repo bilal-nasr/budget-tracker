@@ -45,7 +45,7 @@ for (const locale of ["en", "ar"] as const) {
     await dialog.getByRole("radiogroup", { name: m.Cashier.paymentStyle })
       .getByText(m.Cashier.cashPurchase, { exact: true })
       .click();
-    await dialog.getByLabel(m.Cashier.purchaseCurrency).selectOption("LBP");
+    await dialog.getByLabel(m.Cashier.purchaseCurrency).selectOption({ label: "LBP" });
     for (const key of ["3", "4", "0", "000"]) await dialog.getByRole("button", { name: key, exact: true }).click();
     await expect(dialog.getByLabel(m.Add.amount, { exact: true })).toContainText("340,000");
     await expect(dialog.getByLabel(m.Cashier.paidFrom)).toBeVisible();
@@ -53,7 +53,7 @@ for (const locale of ["en", "ar"] as const) {
     await page.getByRole("option", { name: locale === "ar" ? "أخرى" : "Other", exact: true }).click();
     await dialog.getByLabel(m.Cashier.tender).fill("5");
     await dialog.getByRole("button", { name: m.Cashier.addChange, exact: true }).click();
-    await dialog.getByLabel(m.Cashier.currency).selectOption("LBP");
+    await dialog.getByLabel(m.Cashier.currency).selectOption({ label: "LBP" });
     await dialog.getByLabel(m.Cashier.change).fill("110000");
     await expect(dialog.getByLabel(m.Cashier.tender)).toHaveValue("5");
     await expect(dialog.getByLabel(m.Cashier.change)).toHaveValue("110000");
@@ -85,7 +85,7 @@ for (const locale of ["en", "ar"] as const) {
     await dialog.getByRole("button", { name: m.Cashier.addChange, exact: true }).click();
     await dialog.getByLabel(m.Cashier.change, { exact: true }).fill("5");
     await dialog.getByRole("button", { name: m.Cashier.addChange, exact: true }).click();
-    await dialog.getByLabel(m.Cashier.currency).nth(1).selectOption("LBP");
+    await dialog.getByLabel(m.Cashier.currency).nth(1).selectOption({ label: "LBP" });
     await dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1).fill("223750");
     // Cross-currency change takes the actual amounts; no quote is asked for.
     await expect(dialog.getByLabel(m.Cashier.rate, { exact: true })).toHaveCount(0);
@@ -102,7 +102,7 @@ for (const locale of ["en", "ar"] as const) {
     await expect(dialog.getByText(m.Cashier.mismatch)).toBeVisible();
     await dialog.getByLabel(m.Cashier.tender).fill("20");
     await expect(save).toBeEnabled();
-    await dialog.getByLabel(m.Cashier.currency).nth(1).selectOption("SYP");
+    await dialog.getByLabel(m.Cashier.currency).nth(1).selectOption({ label: "SYP" });
     await expect(dialog.getByLabel(m.Cashier.change, { exact: true }).first()).toHaveValue("5");
     await expect(dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1)).toHaveValue("");
     await dialog.getByLabel(m.Cashier.change, { exact: true }).nth(1).fill("32500");
@@ -131,7 +131,7 @@ for (const locale of ["en", "ar"] as const) {
     await expectNoHorizontalOverflow(page);
   });
   test(`${locale} receiving-wallet filter includes the one purchase`, async ({ page }) => {
-    await page.goto(`/${locale}/activity?walletId=00000000-0000-4000-8000-000000000003&q=Coffee`);
+    await page.goto(`/${locale}/activity?balanceId=00000000-0000-4000-8000-000000000003&q=Coffee`);
     await expect(page.locator("main section li button").filter({ hasText: "Coffee" })).toHaveCount(1);
     await expectNoHorizontalOverflow(page);
   });

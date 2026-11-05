@@ -7,7 +7,7 @@ vi.mock("@/features/profile/queries", () => ({ getProfile: async () => ({ timezo
 import { createPendingPayment, recordPendingReceipt, updatePendingPayment, deletePendingPayment } from "./actions";
 const id = "ab000000-0000-4000-8000-000000000001";
 const job = { requestId: id, client: "Client", project: "Website", currency: "USD" as const, totalMinor: 10000, dueOn: null };
-const receipt = { requestId: id, paymentId: id, walletId: id, categoryId: id, amountMinor: 2500, occurredOn: "2026-01-01" };
+const receipt = { requestId: id, paymentId: id, balanceId: id, categoryId: id, amountMinor: 2500, occurredOn: "2026-01-01" };
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.ctx.mockResolvedValue({ supabase: { rpc: mocks.rpc }, userId: id });

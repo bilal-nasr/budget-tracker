@@ -4,9 +4,9 @@ import { MAX_MINOR } from "@/lib/money";
 
 const requestId = "a1000000-0000-4000-8000-000000000001";
 const installmentId = "a2000000-0000-4000-8000-000000000001";
-const walletId = "a3000000-0000-4000-8000-000000000001";
+const balanceId = "a3000000-0000-4000-8000-000000000001";
 const receiptId = "a4000000-0000-4000-8000-000000000001";
-const payment = { requestId, installmentId, walletId, amountMinor: 4000, occurredOn: "2026-10-31", salaryCycleId: null, overrideOfTransactionId: null };
+const payment = { requestId, installmentId, balanceId, amountMinor: 4000, occurredOn: "2026-10-31", salaryCycleId: null, overrideOfTransactionId: null };
 
 describe("cycle write inputs", () => {
   it("requires caller-stable IDs and explicit initial-cycle/null acknowledgment", () => {
@@ -34,13 +34,13 @@ describe("cycle write inputs", () => {
   });
   it("does not accept browser-supplied salary amounts, source identity, or payment category", () => {
     expect(receiveSalaryInputSchema.safeParse({ requestId, expectedCycleId: null, amountMinor: 999 }).success).toBe(false);
-    expect(receiveSalaryInputSchema.safeParse({ requestId, expectedCycleId: null, walletId }).success).toBe(false);
+    expect(receiveSalaryInputSchema.safeParse({ requestId, expectedCycleId: null, balanceId }).success).toBe(false);
     for (const field of ["categoryId", "source", "currency", "userId"]) {
       expect(cyclePaymentInputSchema.safeParse({ ...payment, [field]: requestId }).success).toBe(false);
     }
   });
   it("rejects malformed identifiers in every cycle/write identity position", () => {
-    for (const key of ["requestId", "installmentId", "walletId", "salaryCycleId", "overrideOfTransactionId"]) {
+    for (const key of ["requestId", "installmentId", "balanceId", "salaryCycleId", "overrideOfTransactionId"]) {
       expect(cyclePaymentInputSchema.safeParse({ ...payment, [key]: "invalid" }).success).toBe(false);
     }
     expect(receiveSalaryInputSchema.safeParse({ requestId: "invalid", expectedCycleId: null }).success).toBe(false);

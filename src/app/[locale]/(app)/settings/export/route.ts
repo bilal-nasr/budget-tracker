@@ -33,7 +33,9 @@ export async function GET(
     if (supabaseConfigured() && !(await getUserId())) {
       return Response.json({ error: "unauthorized" }, { status: 401, headers: privateHeaders() });
     }
-    const data = await getExportData(locale);
+    // One cutoff anchors both complete snapshot reads and the serialized workbook.
+    const exportedAt = new Date();
+    const data = await getExportData(locale, exportedAt);
     const buffer = await writeExportWorkbook(data);
     return new Response(Uint8Array.from(buffer), {
       status: 200,

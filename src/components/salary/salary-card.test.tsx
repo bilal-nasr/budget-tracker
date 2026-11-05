@@ -1,4 +1,6 @@
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
+import { runtimeAppFixture } from "@/test/runtime-app-fixture";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -10,7 +12,7 @@ vi.mock("@/features/transactions/actions",()=>({deleteTransaction:mocks.remove})
 vi.mock("sonner",()=>({toast:mocks.toast}));
 vi.mock("@/i18n/navigation",()=>({useRouter:()=>({refresh:mocks.refresh,push:mocks.push})}));
 vi.mock("@/components/shell/composer",()=>({useComposer:()=>({openSalary:mocks.openSalary})}));
-vi.mock("@/components/providers/app-data",()=>({useAppData:()=>mocks.appData()}));
+vi.mock("@/components/providers/app-data",async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(), useAppDataOptional:()=>({currencyByCode:(code:string)=>SEED_CURRENCY_DEFINITIONS.find((definition)=>definition.code===code)}),useAppData:()=>runtimeAppFixture(mocks.appData())}));
 vi.mock("@/components/ui/confirm-sheet",()=>({ConfirmSheet:({open,onConfirm,children}:{open:boolean;onConfirm:()=>void;children:ReactNode})=>open?<div>{children}<button type="button" onClick={onConfirm}>Confirm salary</button></div>:null}));
 import { SalaryCard } from "./salary-card";
 const id="a1000000-0000-4000-8000-000000000001";
@@ -18,7 +20,7 @@ const status={receiptId:id,lastReceivedOn:"2026-11-01",receivedThisMonth:true};
 const view=(receiptId=id)=><NextIntlClientProvider locale="en" messages={messages}><SalaryCard status={{...status,receiptId}}/></NextIntlClientProvider>;
 const bank = {id:"bank",name:"Bank",currency:"USD",archived:false};
 beforeEach(()=>{vi.clearAllMocks();mocks.receive.mockResolvedValue({ok:false,error:"notConfigured"});
-  mocks.appData.mockReturnValue({salary:{amountMinor:180000,walletId:"bank"},timezone:"Asia/Beirut",walletById:()=>bank});
+  mocks.appData.mockReturnValue({salary:{amountMinor:180000,balanceId:"bank"},timezone:"Asia/Beirut",fixtureBalanceById:()=>bank});
 });
 afterEach(cleanup);
 it("retains the original receipt request after an unknown result even when new server props arrive",async()=>{
@@ -51,8 +53,8 @@ it.each(["salary cleared","wallet archived","wallet removed"])("keeps the uncert
   fireEvent.click(await screen.findByRole("button",{name:"Confirm salary"}));
   await waitFor(()=>expect(screen.getByRole("button",{name:"Retry same salary"}).matches(":disabled")).toBe(false));
   const first=mocks.receive.mock.calls[0][0];
-  mocks.appData.mockReturnValue({salary:change==="salary cleared"?null:{amountMinor:180000,walletId:"bank"},
-    timezone:"Asia/Beirut",walletById:()=>change==="wallet removed"?undefined:{...bank,archived:change==="wallet archived"}});
+  mocks.appData.mockReturnValue({salary:change==="salary cleared"?null:{amountMinor:180000,balanceId:"bank"},
+    timezone:"Asia/Beirut",fixtureBalanceById:()=>change==="wallet removed"?undefined:{...bank,archived:change==="wallet archived"}});
   rendered.rerender(view("a2000000-0000-4000-8000-000000000001"));
   expect(screen.queryByRole("button",{name:"Set salary"})).toBeNull();
   expect(screen.queryByRole("button",{name:/^Edit$/})).toBeNull();
@@ -72,7 +74,7 @@ it("keeps salary setup locked when provider configuration disappears during a pe
   fireEvent.click(await screen.findByRole("button",{name:"Confirm salary"}));
   await waitFor(()=>expect(mocks.receive).toHaveBeenCalledOnce());
   const original=mocks.receive.mock.calls[0][0];
-  mocks.appData.mockReturnValue({salary:null,timezone:"Asia/Beirut",walletById:()=>undefined});
+  mocks.appData.mockReturnValue({salary:null,timezone:"Asia/Beirut",fixtureBalanceById:()=>undefined});
   rendered.rerender(view());
   expect(screen.queryByRole("button",{name:"Set salary"})).toBeNull();
   expect(screen.getByRole("button",{name:"Retry same salary"}).matches(":disabled")).toBe(true);

@@ -1,55 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
-  CURRENCIES,
-  CURRENCY_DECIMALS,
-  MAX_MINOR,
-  MAX_RATE,
-  currencyPrefix,
-  emptyCurrencyTotals,
-  isCurrency,
   supportsUsdLbpRate,
-  type Currency,
+  SEED_CURRENCY_DEFINITIONS,
+  enabledCurrencies,
+  indexCurrencies,
+  requireCurrency,
 } from "./currency";
 
-describe("currency registry", () => {
-  it("keeps stable currency order and explicit ledger precision", () => {
-    expect(CURRENCIES).toEqual(["USD", "LBP", "SYP"]);
-    expect(CURRENCY_DECIMALS).toEqual({ USD: 2, LBP: 0, SYP: 0 });
-    expect(Object.isFrozen(CURRENCIES)).toBe(true);
-    expect(Object.isFrozen(CURRENCY_DECIMALS)).toBe(true);
-    expect(MAX_MINOR).toBe(1_000_000_000_000_000);
-    expect(Number.isSafeInteger(MAX_MINOR)).toBe(true);
-    expect(MAX_RATE).toBe(10_000_000);
+describe("runtime currency catalog", () => {
+  const btc = { code: "BTC", symbol: "₿", decimalPlaces: 8, disabled: false, firstUsed: false };
+  const disabled = { code: "OLD", symbol: "OLD", decimalPlaces: 3, disabled: true, firstUsed: true };
+
+  it("resolves runtime and historical definitions without falling back", () => {
+    const definitions = indexCurrencies([btc, disabled]);
+    expect(definitions.get("BTC")).toEqual(btc);
+    expect(requireCurrency("BTC", [btc, disabled])).toEqual(btc);
+    expect(requireCurrency("OLD", [btc, disabled])).toEqual(disabled);
+    expect(() => requireCurrency("USD", [btc, disabled])).toThrow();
+    expect(() => indexCurrencies([btc, btc])).toThrow();
   });
 
-  it.each(CURRENCIES)("recognizes the exact %s currency code", (currency) => {
-    expect(isCurrency(currency)).toBe(true);
-  });
-
-  it.each([undefined, null, "", "EUR", "syp", " SYP", "SYP ", ["SYP"], 760, {}])(
-    "rejects an unsupported or malformed code: %j",
-    (value) => expect(isCurrency(value)).toBe(false),
-  );
-
-  it("gives SYP its own prefix instead of a non-USD LBP fallback", () => {
-    expect(currencyPrefix("USD")).toBe("$");
-    expect(currencyPrefix("LBP")).toBe("LBP");
-    expect(currencyPrefix("SYP")).toBe("SYP");
-    expect(() => currencyPrefix("EUR" as Currency)).toThrow(RangeError);
-  });
-
-  it("creates fresh complete totals without sharing mutable state", () => {
-    const first = emptyCurrencyTotals();
-    const second = emptyCurrencyTotals();
-    first.SYP = 1250;
-    expect(first).toEqual({ USD: 0, LBP: 0, SYP: 1250 });
-    expect(second).toEqual({ USD: 0, LBP: 0, SYP: 0 });
-    expect(first).not.toBe(second);
+  it("offers only enabled definitions while retaining seeded precision", () => {
+    expect(enabledCurrencies([disabled, btc])).toEqual([btc]);
+    expect(SEED_CURRENCY_DEFINITIONS).toEqual([
+      { code: "USD", symbol: "$", decimalPlaces: 2, disabled: false, firstUsed: false },
+      { code: "LBP", symbol: "LBP", decimalPlaces: 0, disabled: false, firstUsed: false },
+      { code: "SYP", symbol: "SYP", decimalPlaces: 0, disabled: false, firstUsed: false },
+    ]);
   });
 });
 
 describe("USD/LBP reference-rate boundary", () => {
-  it.each(CURRENCIES.flatMap((from) => CURRENCIES.map((to) => [from, to] as const)))(
+  it.each(["USD", "LBP", "SYP", "BTC"].flatMap((from) => ["USD", "LBP", "SYP", "BTC"].map((to) => [from, to] as const)))(
     "supports only the explicitly different-currency USD/LBP pair: %s → %s",
     (from, to) => {
       expect(supportsUsdLbpRate(from, to)).toBe(

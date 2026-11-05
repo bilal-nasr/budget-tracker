@@ -1,3 +1,4 @@
+import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { z } from "zod";
 import { MAX_MINOR } from "@/lib/money";
 import type { SalaryReceipt } from "@/features/installments/cycle";
@@ -6,8 +7,9 @@ export { receiveSalaryInputSchema } from "@/features/installments/cycle-input";
 export type { ReceiveSalaryInput } from "@/features/installments/cycle-input";
 
 export const salaryInputSchema = z.object({
+  expectedUnits: expectedUnitsSchema.optional(),
   amountMinor: z.number().int().min(1).max(MAX_MINOR),
-  walletId: z.uuid(),
+  balanceId: z.uuid(),
 });
 export type SalaryInput = z.infer<typeof salaryInputSchema>;
 

@@ -11,12 +11,12 @@ import {
   parseExpenseItemDrafts,
   type ExpenseItemDraft,
 } from "@/features/transactions/breakdown";
-import { CURRENCY_DECIMALS, parseAmount, type Currency } from "@/lib/money";
+import { parseAmount, type CurrencyDefinition } from "@/lib/money";
 import type { ExpenseBreakdownLabels } from "./expense-breakdown-labels";
 export { useExpenseBreakdownLabels, type ExpenseBreakdownLabels } from "./expense-breakdown-labels";
 
 export type ExpenseBreakdownFieldsProps = {
-  currency: Currency;
+  currency: CurrencyDefinition;
   parentMinor: number | null;
   items: ExpenseItemDraft[];
   onChange: (next: ExpenseItemDraft[]) => void;
@@ -98,8 +98,8 @@ export function ExpenseBreakdownFields({
                       <Trash2 aria-hidden />
                     </Button>
                   </div>
-                  <TextField label={`${labels.amount} · ${currency}`} aria-label={labels.amount}
-                    value={item.amountText} dir="ltr" inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
+                  <TextField label={`${labels.amount} · ${currency.code}`} aria-label={labels.amount}
+                    value={item.amountText} dir="ltr" inputMode={currency.decimalPlaces === 0 ? "numeric" : "decimal"}
                     onChange={(event) => change(item.key, { amountText: event.target.value })}
                     onBlur={() => markTouched(`${item.key}-amount`)}
                     error={amountInvalid ? labels.invalidAmount : undefined}

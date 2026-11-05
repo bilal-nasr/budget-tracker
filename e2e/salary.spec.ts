@@ -49,8 +49,9 @@ test("salary sheet: edit amount and pick the wallet it goes to", async ({ page }
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Edit salary" })).toBeVisible();
   await expect(dialog.getByLabel("Salary amount")).toHaveValue("1800");
-  await dialog.getByRole("radio", { name: /Cash · LBP/ }).click();
-  await expect(dialog.getByRole("radio", { name: /Cash · LBP/ })).toBeChecked();
+  await dialog.getByLabel(en.Salary.wallet, { exact: true }).selectOption({ label: "Pocket" });
+  await dialog.getByLabel(en.Add.walletCurrency, { exact: true }).selectOption({ label: "LBP" });
+  await expect(dialog.getByLabel(en.Add.walletCurrency, { exact: true })).toHaveValue("00000000-0000-4000-8000-000000000003");
   await dialog.getByLabel("Salary amount").fill("1x");
   await expect(dialog.getByText("Enter a valid amount.")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Save salary" })).toBeDisabled();

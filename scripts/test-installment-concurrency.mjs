@@ -17,6 +17,7 @@ const database = process.env.INSTALLMENT_TEST_DATABASE;
 const port = process.env.INSTALLMENT_TEST_PORT ?? "54322";
 const container = process.env.INSTALLMENT_TEST_DOCKER_CONTAINER;
 const dockerDatabases = new Map([
+  ["supabase_db_CODEX-BUDGET-MULTIWALLET-SYSTEM-20261105", /^postgres$/],
   ["budget_round3_sql_probe", /^round3_check_\d+$/],
   ["supabase_db_budget-tracker-round3-check", /^round3_check_\d+$/],
 ]);
@@ -31,7 +32,7 @@ if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw n
 const owner = randomUUID();
 const wallet = randomUUID();
 const installment = randomUUID();
-const claims = `select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); set local role authenticated;`;
+const claims = `select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); set local role authenticated; select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 
 function session(sql, marker) {
   const common = ["-X", "-q", "-t", "-A", "--no-password", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", database];
@@ -119,10 +120,13 @@ try {
   await sql(`begin;
     insert into auth.users(id,instance_id,aud,role,email) values ('${owner}','00000000-0000-0000-0000-000000000000','authenticated','authenticated','${owner}@cycles.example.test');
     ${claims}
-    insert into public.wallets(id,name,kind,currency) values('${wallet}','Synthetic cycle bank','bank','USD');
-    insert into public.installments(id,name,total_minor,monthly_minor,wallet_id,category_id)
+    with fixture(id,name,kind,currency) as (values ('${wallet}','Synthetic cycle bank','bank','USD')), containers as (
+    insert into public.wallets(id,name,kind,default_balance_id) select id::uuid,name,kind::public.wallet_kind,id::uuid from fixture returning id,user_id
+    ) insert into public.wallet_balances(id,user_id,wallet_id,currency,position)
+    select case when catalog.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,catalog.code,(row_number() over(order by catalog.created_at,catalog.code)-1)::integer from fixture f join containers c on c.id=f.id::uuid join public.currencies catalog on catalog.user_id=c.user_id and catalog.disabled_at is null;
+    insert into public.installments(id,name,total_minor,monthly_minor,balance_id,category_id)
       select '${installment}','Synthetic cycle debt',1000000,10000,'${wallet}',id from public.categories where kind='expense' and parent_id is null order by position limit 1;
-    update public.profiles set salary_amount_minor=180000,salary_wallet_id='${wallet}';
+    update public.profiles set salary_amount_minor=180000,salary_balance_id='${wallet}';
     commit;`);
 
   oneWins(await race(payment(randomUUID(), 10000, null, null), payment(randomUUID(), 10000, null, null)), "already paid this cycle");
@@ -178,7 +182,7 @@ try {
   const editedPayment = randomUUID();
   await owned(payment(editedPayment, 1000, thirdSalary, null));
   const editStatement = `select * from public.save_transaction('${editedPayment}',1,
-    jsonb_build_object('kind','expense','occurredOn',current_date::text,'walletId','${wallet}',
+    jsonb_build_object('kind','expense','occurredOn',current_date::text,'balanceId','${wallet}',
       'amountMinor',1200,'categoryId',(select category_id from public.installments where id='${installment}'),
       'note','Synthetic cycle debt'),null,null)`;
   const editRace = await race(payment(editedPayment, 1000, thirdSalary, null), editStatement);

@@ -1,7 +1,9 @@
+import { AppDataProvider } from "@/components/providers/app-data";
+import { requireCurrency, SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
 import React, { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderBase, screen } from "@testing-library/react";
 import { ExpenseBreakdownFields, type ExpenseBreakdownLabels } from "./expense-breakdown-fields";
 import { ExpenseBreakdown } from "@/components/transactions/expense-breakdown";
 import { parseExpenseItemDrafts, type ExpenseItemDraft } from "@/features/transactions/breakdown";
@@ -21,8 +23,8 @@ const initial: ExpenseItemDraft[] = [{ key: "one", description: "Phone credits",
 function Harness({ parentMinor = 5000, rows = [] }: { parentMinor?: number; rows?: ExpenseItemDraft[] }) {
   const [items, setItems] = useState(rows);
   return <>
-    <ExpenseBreakdownFields currency="USD" parentMinor={parentMinor} items={items} onChange={setItems} labels={labels} />
-    <button disabled={!parseExpenseItemDrafts("USD", parentMinor, items).valid}>Save</button>
+    <ExpenseBreakdownFields currency={SEED_CURRENCY_DEFINITIONS[0]} parentMinor={parentMinor} items={items} onChange={setItems} labels={labels} />
+    <button disabled={!parseExpenseItemDrafts(requireCurrency("USD", SEED_CURRENCY_DEFINITIONS), parentMinor, items).valid}>Save</button>
   </>;
 }
 
@@ -98,3 +100,5 @@ describe("ExpenseBreakdown", () => {
     expect(screen.queryByText(labels.remainder)).toBeNull();
   });
 });
+
+function render(node: React.ReactNode) { return renderBase(node, { wrapper: ({ children }) => <AppDataProvider walletContainers={[]} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={[]} timezone="Asia/Beirut" salary={null} usdLbpRate={null}>{children}</AppDataProvider> }); }

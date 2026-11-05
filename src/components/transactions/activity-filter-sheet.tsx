@@ -27,7 +27,7 @@ export function FilterSheet({
   const tc = useTranslations("Categories");
   const locale = useLocale();
   const { categories, timezone } = useAppData();
-  const [walletId, setWalletId] = useState(filters.walletId);
+  const [balanceId, setBalanceId] = useState(filters.balanceId);
   const [categoryId, setCategoryId] = useState(filters.categoryId);
   const [from, setFrom] = useState(filters.from ?? "");
   const [to, setTo] = useState(filters.to ?? "");
@@ -40,7 +40,7 @@ export function FilterSheet({
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setWalletId(filters.walletId);
+      setBalanceId(filters.balanceId);
       setCategoryId(filters.categoryId);
       setFrom(filters.from ?? "");
       setTo(filters.to ?? "");
@@ -58,13 +58,13 @@ export function FilterSheet({
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
-            onClick={() => onApply({ walletId: undefined, categoryId: undefined, from: undefined, to: undefined })}
+            onClick={() => onApply({ balanceId: undefined, categoryId: undefined, from: undefined, to: undefined })}
           >
             {t("reset")}
           </Button>
           <Button
             disabled={bad}
-            onClick={() => onApply({ walletId, categoryId, from: from || undefined, to: to || undefined })}
+            onClick={() => onApply({ balanceId, categoryId, from: from || undefined, to: to || undefined })}
           >
             {t("apply")}
           </Button>
@@ -75,11 +75,11 @@ export function FilterSheet({
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-2 text-sm font-medium">{t("wallet")}</legend>
           <div role="radiogroup" aria-label={t("wallet")} className="flex flex-wrap gap-2">
-            <button type="button" role="radio" aria-checked={!walletId} onClick={() => setWalletId(undefined)} className={chip}>
+            <button type="button" role="radio" aria-checked={!balanceId} onClick={() => setBalanceId(undefined)} className={chip}>
               {t("allWallets")}
             </button>
             {wallets.map((w) => (
-              <button key={w.id} type="button" role="radio" aria-checked={walletId === w.id} onClick={() => setWalletId(w.id)} className={chip}>
+              <button key={w.id} type="button" role="radio" aria-checked={balanceId === w.id} onClick={() => setBalanceId(w.id)} className={chip}>
                 <bdi>{w.name}</bdi> · {w.currency}
               </button>
             ))}

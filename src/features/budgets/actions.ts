@@ -13,7 +13,7 @@ export async function saveBudgets(input: BudgetEdit): Promise<ActionResult> {
   const parsed = budgetEditSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
   if (parsed.data.limits.length === 0) return { ok: true };
-  const ctx = await actionClient();
+  const ctx = await actionClient(parsed.data.expectedUnits);
   if (ctx.error) return { ok: false, error: ctx.error };
 
   const { error } = await ctx.supabase.from("budgets").upsert(
@@ -26,7 +26,7 @@ export async function saveBudgets(input: BudgetEdit): Promise<ActionResult> {
     })),
     { onConflict: "user_id,category_id,currency,starts_month" },
   );
-  if (error) return { ok: false, error: categoryReferenceError(error) ?? "failed" };
+  if (error) return { ok: false, error: error.message === "currency.intentConflict" ? "conflict" : categoryReferenceError(error) ?? "failed" };
   revalidatePath("/", "layout");
   return { ok: true };
 }

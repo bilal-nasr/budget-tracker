@@ -1,5 +1,7 @@
 -- Rollback-only synthetic fixtures. Run through pnpm db:test on a disposable local stack.
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 
@@ -9,14 +11,18 @@ insert into auth.users (id, instance_id, aud, role, email) values
 select set_config('request.jwt.claims','{"sub":"aabbccdd-0000-4000-8000-000000000001","role":"authenticated"}',true);
 set local role authenticated;
 
-insert into public.wallets (id,name,kind,currency) values
- ('aabbccdd-1000-4000-8000-000000000001','Breakdown USD','cash','USD'),
+with fixture(id,name,kind,currency) as (values ('aabbccdd-1000-4000-8000-000000000001','Breakdown USD','cash','USD'),
  ('aabbccdd-1000-4000-8000-000000000002','Breakdown USD 2','cash','USD'),
- ('aabbccdd-1000-4000-8000-000000000003','Breakdown LBP','cash','LBP');
+ ('aabbccdd-1000-4000-8000-000000000003','Breakdown LBP','cash','LBP')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then 0::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
 
 create function pg_temp.breakdown_input(amount bigint default 5000, wallet uuid default 'aabbccdd-1000-4000-8000-000000000001')
 returns jsonb language sql as $$
- select jsonb_build_object('kind','expense','occurredOn','2026-11-04','walletId',wallet,
+ select jsonb_build_object('kind','expense','occurredOn','2026-11-04','balanceId',wallet,
    'amountMinor',amount,'categoryId',(select id from public.categories where kind='expense' and parent_id is null order by position limit 1),
    'note','Sister');
 $$;
@@ -30,7 +36,7 @@ select lives_ok($$select * from pg_temp.breakdown_save('aabbccdd-2000-4000-8000-
 select is((select count(*) from public.transactions),1::bigint,'one ledger row');
 select is((select count(*) from public.expense_items),2::bigint,'two descriptive rows');
 select is((select note from public.transactions),'Sister','parent name preserved');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id='aabbccdd-1000-4000-8000-000000000001'),-5000::bigint,'wallet debited once');
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id='aabbccdd-1000-4000-8000-000000000001'),-5000::bigint,'wallet debited once');
 select is((select sum(spent_minor)::bigint from public.month_category_spend('2026-11-01')),5000::bigint,'budget counts parent once');
 create temp table saved_revision as select revision from public.transactions;
 create temp table saved_items as select id from public.expense_items;
@@ -56,7 +62,7 @@ select throws_ok($$select * from pg_temp.breakdown_save('aabbccdd-2000-4000-8000
  (select revision from saved_revision),4000,'[]')$$,'BT003','transaction conflict','stale replacement fails');
 
 select throws_ok($$select * from public.save_transaction('aabbccdd-2000-4000-8000-000000000001',
- (select revision from public.transactions),pg_temp.breakdown_input(4000,'aabbccdd-1000-4000-8000-000000000003'),'[]')$$,
+ (select revision from public.transactions),pg_temp.breakdown_input(4000,'aabbccdd-1000-4000-8000-000000000003')||'{"costCurrency":"LBP"}'::jsonb,'[]')$$,
  'BT002','breakdown currency locked','saved breakdown requires separate clear before currency change');
 select lives_ok($$select * from public.save_transaction('aabbccdd-2000-4000-8000-000000000001',
  (select revision from public.transactions),pg_temp.breakdown_input(4000,'aabbccdd-1000-4000-8000-000000000002'),null)$$,'same currency wallet edit preserves items');
@@ -75,7 +81,7 @@ create temp table before_delete as select revision from public.transactions;
 select lives_ok($$select * from public.set_transaction_deleted('aabbccdd-2000-4000-8000-000000000001',
  (select revision from before_delete),true)$$,'guarded delete succeeds');
 select is((select count(*) from public.expense_items),0::bigint,'deleted parent hides items');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id='aabbccdd-1000-4000-8000-000000000002'),0::bigint,'delete reverses parent debit');
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id='aabbccdd-1000-4000-8000-000000000002'),0::bigint,'delete reverses parent debit');
 select throws_ok($$select * from pg_temp.breakdown_save('aabbccdd-2000-4000-8000-000000000001',null,4000,
  '[{"description":"Phone credits","amountMinor":2000}]')$$,'BT003','transaction conflict','create replay cannot resurrect a deleted parent');
 select throws_ok($$select * from public.set_transaction_deleted('aabbccdd-2000-4000-8000-000000000001',
@@ -83,7 +89,7 @@ select throws_ok($$select * from public.set_transaction_deleted('aabbccdd-2000-4
 select lives_ok($$select * from public.set_transaction_deleted('aabbccdd-2000-4000-8000-000000000001',
  (select revision from public.transactions),false)$$,'restore with deletion result revision succeeds');
 select is((select count(*) from public.expense_items),1::bigint,'restore reveals retained item');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id='aabbccdd-1000-4000-8000-000000000002'),-4000::bigint,'restore debits only parent');
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id='aabbccdd-1000-4000-8000-000000000002'),-4000::bigint,'restore debits only parent');
 
 create temp table old_undo as select revision from public.transactions;
 update public.transactions set note='Sister updated';
@@ -95,7 +101,7 @@ select throws_ok($$select * from public.save_transaction(null,null,pg_temp.break
 select throws_ok($$select * from public.save_transaction('aabbccdd-2000-4000-8000-000000000003',null,
  pg_temp.breakdown_input() || '{"userId":"forged"}','[]')$$,'22023','invalid transaction input','unknown parent ownership key rejected');
 select throws_ok($$select * from pg_temp.breakdown_save('aabbccdd-2000-4000-8000-000000000003',null,5000,
- '[{"description":"x","amountMinor":1,"walletId":"forged"}]')$$,'22023','invalid expense item','item ownership/financial keys rejected');
+ '[{"description":"x","amountMinor":1,"balanceId":"forged"}]')$$,'22023','invalid expense item','item ownership/financial keys rejected');
 select throws_ok($$select * from pg_temp.breakdown_save('aabbccdd-2000-4000-8000-000000000003',null,5000,
  '[{"description":" ","amountMinor":1}]')$$,'22023','invalid expense item','blank description rejected');
 select throws_ok($$select * from pg_temp.breakdown_save('aabbccdd-2000-4000-8000-000000000003',null,5000,

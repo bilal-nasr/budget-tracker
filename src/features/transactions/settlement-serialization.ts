@@ -1,11 +1,13 @@
-import { isCurrency, readMinor, type Currency } from "@/lib/money";
+import { currencyCodeSchema } from "@/features/currencies/schema";
+const isCurrency = (value: unknown): value is string => currencyCodeSchema.safeParse(value).success;
+import { readMinor } from "@/lib/money";
 import {
   cashSettlementInputSchema, validateSettlement,
   type CashSettlementInput, type SettlementRate,
 } from "./settlement";
 
 export const CASHIER_CHANGE_COLUMN_NAMES = [
-  "wallet_id", "amount_minor", "currency", "position",
+  "balance_id", "amount_minor", "currency", "position", "wallet_name_snapshot",
   "rate_base", "rate_quote", "rate_numerator", "rate_denominator",
 ] as const;
 export const SETTLEMENT_COLUMNS =
@@ -20,12 +22,14 @@ export function emptySettlementRow(): SettlementRow {
 }
 
 export type SettlementChangeSnapshot = {
-  walletId: string;
+  balanceId: string;
+  /** Immutable receiver name captured by the database, never accepted in a write. */
+  walletNameSnapshot?: string | null;
   amountMinor: number;
-  currency: Currency;
+  currency: string;
   rate?: SettlementRate;
 };
-export type SettlementSnapshot = { tenderMinor: number; tenderCurrency: Currency; changes: SettlementChangeSnapshot[] };
+export type SettlementSnapshot = { tenderMinor: number; tenderCurrency: string; changes: SettlementChangeSnapshot[] };
 
 export class SettlementSnapshotError extends Error {
   constructor() {
@@ -47,7 +51,7 @@ function readChange(value: unknown): { position: number; change: SettlementChang
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SettlementSnapshotError();
   const row = value as Partial<CashierChangeRow>;
   if (CASHIER_CHANGE_COLUMN_NAMES.some((column) => !Object.hasOwn(row, column) || row[column] === undefined) ||
-      typeof row.wallet_id !== "string" || !isCurrency(row.currency)) {
+      typeof row.balance_id !== "string" || !isCurrency(row.currency) || (row.wallet_name_snapshot !== null && typeof row.wallet_name_snapshot !== "string")) {
     throw new SettlementSnapshotError();
   }
   const position = integer(row.position);
@@ -65,13 +69,13 @@ function readChange(value: unknown): { position: number; change: SettlementChang
       quoteMajorDenominator: integer(row.rate_denominator),
     };
   }
-  return { position, change: { walletId: row.wallet_id, amountMinor, currency: row.currency, ...(rate ? { rate } : {}) } };
+  return { position, change: { balanceId: row.balance_id, ...(row.wallet_name_snapshot === null ? {} : { walletNameSnapshot: row.wallet_name_snapshot as string }), amountMinor, currency: row.currency, ...(rate ? { rate } : {}) } };
 }
 
 /** Reject missing/partial projections instead of hiding corrupt settlement data. */
 export function readSettlementSnapshot(
   row: Partial<SettlementRow>,
-  parent: { kind: string; costCurrency: Currency; payCurrency: Currency; amountMinor: number },
+  parent: { kind: string; costCurrency: string; payCurrency: string; amountMinor: number },
 ): SettlementSnapshot | null {
   if (!Object.hasOwn(row, "tender_minor") || row.tender_minor === undefined ||
       !Object.hasOwn(row, "cashier_changes") || !Array.isArray(row.cashier_changes)) {
@@ -102,8 +106,8 @@ export function readSettlementSnapshot(
 export function settlementInputFromSnapshot(snapshot: SettlementSnapshot): CashSettlementInput {
   const parsed = cashSettlementInputSchema.safeParse({
     tenderMinor: snapshot.tenderMinor,
-    changes: snapshot.changes.map(({ walletId, amountMinor, rate }) => ({
-      walletId,
+    changes: snapshot.changes.map(({ balanceId: balanceId, amountMinor, rate }) => ({
+      balanceId,
       amountMinor,
       ...(rate ? { rate } : {}),
     })),

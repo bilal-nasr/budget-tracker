@@ -1,4 +1,6 @@
 begin;
+-- Explicit denomination snapshots for the synthetic legacy fixtures.
+select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 insert into auth.users(id,email) values
@@ -6,10 +8,14 @@ insert into auth.users(id,email) values
  ('fb000000-0000-4000-8000-000000000002','fixed-b@example.test');
 select set_config('request.jwt.claims','{"sub":"fb000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 set local role authenticated;
-insert into public.wallets(id,name,kind,currency) values
- ('fb100000-0000-4000-8000-000000000001','Fixed cash','cash','USD'),
- ('fb100000-0000-4000-8000-000000000002','Other currency','cash','LBP');
-insert into public.fixed_expenses(id,name,amount_minor,wallet_id,category_id,items)
+with fixture(id,name,kind,currency) as (values ('fb100000-0000-4000-8000-000000000001','Fixed cash','cash','USD'),
+ ('fb100000-0000-4000-8000-000000000002','Other currency','cash','LBP')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then 0::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
+insert into public.fixed_expenses(id,name,amount_minor,balance_id,category_id,items)
 select 'fb200000-0000-4000-8000-000000000001','Household',5000,
  'fb100000-0000-4000-8000-000000000001',c.id,
  '[{"description":"Internet","amountMinor":2000},{"description":"Phone","amountMinor":1000}]'
@@ -22,11 +28,11 @@ select throws_ok($$update public.fixed_expenses set items='[{"description":"","a
  '22023','invalid fixed expense items','rejects empty descriptions');
 select throws_ok($$update public.fixed_expenses set items='[{"description":"Bad","amountMinor":1.5}]'$$,
  '22023','invalid fixed expense items','rejects fractional minor amounts');
-select throws_ok($$update public.fixed_expenses set wallet_id='fb100000-0000-4000-8000-000000000002'$$,
+select throws_ok($$update public.fixed_expenses set balance_id='fb100000-0000-4000-8000-000000000002'$$,
  'BT002','breakdown currency locked','cannot reinterpret saved lines in another currency');
 create temporary table payment as select * from public.pay_fixed_expense('fb200000-0000-4000-8000-000000000001');
 select is((select count(*) from public.transactions),1::bigint,'one payment creates only one ledger entry');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id='fb100000-0000-4000-8000-000000000001'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id='fb100000-0000-4000-8000-000000000001'),
  -5000::bigint,'only the parent total is deducted');
 select is((select count(*) from public.expense_items),2::bigint,'copies both breakdown lines');
 select is((select sum(amount_minor)::bigint from public.expense_items),3000::bigint,'partial breakdown remains partial');
@@ -35,7 +41,7 @@ select is((select t.revision from public.transactions t join payment p on t.id=p
 update public.fixed_expenses set items='[{"description":"Replacement","amountMinor":4000}]';
 select is((select description from public.expense_items where position=0),'Internet','template edits preserve historical payment items');
 select lives_ok($$select public.set_transaction_deleted(p.id,p.revision,true) from payment p$$,'Undo accepts returned revision');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id='fb100000-0000-4000-8000-000000000001'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id='fb100000-0000-4000-8000-000000000001'),
  0::bigint,'Undo restores the whole payment balance');
 select set_config('request.jwt.claims','{"sub":"fb000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select throws_ok($$select * from public.pay_fixed_expense('fb200000-0000-4000-8000-000000000001')$$,

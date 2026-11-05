@@ -1,11 +1,14 @@
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
+import { runtimeAppFixture } from "@/test/runtime-app-fixture";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "@/messages/en.json";
+vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import type { Category } from "./schema";
 const mock = vi.hoisted(() => ({ saveBudgets: vi.fn(), categories: [] as Category[] }));
-vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ categories: mock.categories }) }));
+vi.mock("@/components/providers/app-data", () => ({ useAppDataOptional: () => ({ currencyByCode: (code: string) => SEED_CURRENCY_DEFINITIONS.find((definition) => definition.code === code) }), useAppData: () => runtimeAppFixture({ categories: mock.categories, fixtureBalances: [] }) }));
 vi.mock("@/features/budgets/actions", () => ({ saveBudgets: mock.saveBudgets }));
 vi.mock("@/components/money/amount", () => ({ Amount: ({ minor }: { minor: number }) => <bdi>{minor}</bdi> }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ children }: { children: React.ReactNode }) => <div role="dialog">{children}</div> }));
@@ -32,5 +35,5 @@ it("offers clear-only controls for carried archived limits and hides unused arch
   expect(screen.queryByText("Child")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Clear budget for Past" }));
   fireEvent.click(screen.getByRole("button", { name: "Save budgets" }));
-  await waitFor(() => expect(mock.saveBudgets).toHaveBeenCalledWith({ month: "2026-11", currency: "USD", limits: [{ categoryId: "past", limitMinor: null }] }));
+  await waitFor(() => expect(mock.saveBudgets).toHaveBeenCalledWith({ expectedUnits: { USD: 2 }, month: "2026-11", currency: "USD", limits: [{ categoryId: "past", limitMinor: null }] }));
 });

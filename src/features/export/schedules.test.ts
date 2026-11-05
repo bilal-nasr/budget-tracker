@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { emptyTransactionMetadata, type Transaction } from "@/features/transactions/schema";
-import type { Wallet } from "@/features/wallets/schema";
+import type { BalanceFixture as Wallet } from "@/test/balance-fixtures";
 import type { ExportData } from "./model";
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
+import { singleBalanceWallets } from "./test-fixtures";
 import {
   buildBudgetActuals,
   buildMonthlyActivity,
@@ -17,12 +19,12 @@ const wallets: Wallet[] = [
   { id: "w-syp", name: "Syrian cash", kind: "cash", currency: "SYP", openingBalanceMinor: 5_000, balanceMinor: 5_600, position: 4, archived: false },
 ];
 
-function transaction(overrides: Partial<Transaction> & Pick<Transaction, "id" | "kind" | "amountMinor" | "currency" | "walletId">): Transaction {
+function transaction(overrides: Partial<Transaction> & Pick<Transaction, "id" | "kind" | "amountMinor" | "currency" | "balanceId">): Transaction {
   return {
     ...emptyTransactionMetadata(),
     occurredOn: "2026-11-01",
     categoryId: overrides.kind === "transfer" ? null : "c-main",
-    toWalletId: null,
+    toBalanceId: null,
     toAmountMinor: null,
     note: null,
     createdAt: "2026-11-01T10:00:00Z",
@@ -31,19 +33,19 @@ function transaction(overrides: Partial<Transaction> & Pick<Transaction, "id" | 
 }
 
 const transactions: Transaction[] = [
-  transaction({ id: "t-income", kind: "income", amountMinor: 5_000, currency: "USD", walletId: "w-usd" }),
-  transaction({ id: "t-expense", kind: "expense", amountMinor: 3_000, currency: "USD", walletId: "w-usd" }),
-  transaction({ id: "t-loan-in", kind: "loan", amountMinor: 2_000, currency: "USD", walletId: "w-usd", loanFlow: "in", loanId: "loan-in" }),
-  transaction({ id: "t-loan-out", kind: "loan", amountMinor: 1_000, currency: "USD", walletId: "w-usd", loanFlow: "out", loanId: "loan-out" }),
+  transaction({ id: "t-income", kind: "income", amountMinor: 5_000, currency: "USD", balanceId: "w-usd" }),
+  transaction({ id: "t-expense", kind: "expense", amountMinor: 3_000, currency: "USD", balanceId: "w-usd" }),
+  transaction({ id: "t-loan-in", kind: "loan", amountMinor: 2_000, currency: "USD", balanceId: "w-usd", loanFlow: "in", loanId: "loan-in" }),
+  transaction({ id: "t-loan-out", kind: "loan", amountMinor: 1_000, currency: "USD", balanceId: "w-usd", loanFlow: "out", loanId: "loan-out" }),
   transaction({
-    id: "t-transfer", kind: "transfer", amountMinor: 1_500, currency: "USD", walletId: "w-usd",
-    categoryId: null, toWalletId: "w-lbp", toAmountMinor: 130_000,
+    id: "t-transfer", kind: "transfer", amountMinor: 1_500, currency: "USD", balanceId: "w-usd",
+    categoryId: null, toBalanceId: "w-lbp", toAmountMinor: 130_000,
   }),
   transaction({
-    id: "t-settlement", kind: "expense", amountMinor: 1_000, currency: "USD", walletId: "w-usd",
+    id: "t-settlement", kind: "expense", amountMinor: 1_000, currency: "USD", balanceId: "w-usd",
     settlement: { tenderMinor: 2_000, tenderCurrency: "USD", changes: [
-      { walletId: "w-usd-archived", amountMinor: 500, currency: "USD" },
-      { walletId: "w-syp", amountMinor: 600, currency: "SYP" },
+      { balanceId: "w-usd-archived", amountMinor: 500, currency: "USD" },
+      { balanceId: "w-syp", amountMinor: 600, currency: "SYP" },
     ] },
   }),
 ];
@@ -55,7 +57,8 @@ function exportData(): ExportData {
     exportedAt: new Date("2026-11-05T08:00:00Z"),
     cutoffDate: "2026-11-05",
     profile: { locale: "en", digits: "latin", theme: "light", timezone: "Asia/Beirut", onboarded: true, usdLbpRate: null, salary: null },
-    wallets,
+    wallets: singleBalanceWallets(wallets),
+    currencies: SEED_CURRENCY_DEFINITIONS,
     categories: [{ id: "c-main", kind: "expense", nameEn: "General", nameAr: "عام", tile: 1, color: "teal", position: 1, parentId: null, archivedAt: null }],
     transactions,
     budgetRevisions: [],
@@ -143,10 +146,10 @@ describe("accounting schedules", () => {
         { id: "c-child", kind: "expense", nameEn: "Groceries", nameAr: "بقالة", tile: 2, color: "ochre", position: 1, parentId: "c-parent", archivedAt: null },
       ],
       transactions: [
-        transaction({ id: "jan", kind: "expense", amountMinor: 4_000, currency: "USD", walletId: "w-usd", categoryId: "c-child", occurredOn: "2026-01-10" }),
-        transaction({ id: "feb", kind: "expense", amountMinor: 6_000, currency: "USD", walletId: "w-usd", categoryId: "c-child", occurredOn: "2026-02-10" }),
-        transaction({ id: "mar", kind: "expense", amountMinor: 7_000, currency: "USD", walletId: "w-usd", categoryId: "c-child", occurredOn: "2026-03-10" }),
-        transaction({ id: "apr", kind: "expense", amountMinor: 21_000, currency: "USD", walletId: "w-usd", categoryId: "c-child", occurredOn: "2026-04-10" }),
+        transaction({ id: "jan", kind: "expense", amountMinor: 4_000, currency: "USD", balanceId: "w-usd", categoryId: "c-child", occurredOn: "2026-01-10" }),
+        transaction({ id: "feb", kind: "expense", amountMinor: 6_000, currency: "USD", balanceId: "w-usd", categoryId: "c-child", occurredOn: "2026-02-10" }),
+        transaction({ id: "mar", kind: "expense", amountMinor: 7_000, currency: "USD", balanceId: "w-usd", categoryId: "c-child", occurredOn: "2026-03-10" }),
+        transaction({ id: "apr", kind: "expense", amountMinor: 21_000, currency: "USD", balanceId: "w-usd", categoryId: "c-child", occurredOn: "2026-04-10" }),
       ],
       budgetRevisions: [
         { id: "b-jan", categoryId: "c-parent", currency: "USD", startsMonth: "2026-01-01", limitMinor: 10_000 },
@@ -175,7 +178,7 @@ describe("accounting schedules", () => {
       ...source,
       cutoffDate: "2026-01-31",
       transactions: [transaction({
-        id: "loan-fee", kind: "loan", amountMinor: 10_150, currency: "USD", walletId: "w-usd",
+        id: "loan-fee", kind: "loan", amountMinor: 10_150, currency: "USD", balanceId: "w-usd",
         categoryId: "c-child", occurredOn: "2026-01-15", loanFlow: "out", loanEvent: "repayment",
         loanPrincipalMinor: 10_000, loanFeeMinor: 150,
       })],
@@ -199,6 +202,6 @@ describe("accounting schedules", () => {
   });
 
   it("rejects unsafe minor-unit values instead of rounding them", () => {
-    expect(() => minorToMajor(Number.MAX_SAFE_INTEGER, "USD")).toThrow(RangeError);
+    expect(() => minorToMajor(Number.MAX_SAFE_INTEGER, SEED_CURRENCY_DEFINITIONS[0])).toThrow(RangeError);
   });
 });

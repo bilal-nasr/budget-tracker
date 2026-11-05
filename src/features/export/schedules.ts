@@ -1,5 +1,7 @@
 import { categoryName } from "@/features/categories/schema";
-import { CURRENCIES, CURRENCY_DECIMALS, readMinor, sumMinor, type Currency } from "@/lib/money";
+import { readMinor, sumMinor } from "@/lib/money";
+import { type CurrencyDefinition } from "@/lib/currency";
+import { historicalExportBalances, validateExportData } from "./model";
 import type {
   BudgetActualRow,
   ExportData,
@@ -9,8 +11,9 @@ import type {
   WalletReconciliation,
 } from "./model";
 
-export function minorToMajor(minor: number, currency: Currency): number {
-  return readMinor(minor) / 10 ** CURRENCY_DECIMALS[currency];
+export function minorToMajor(minor: number, definition: CurrencyDefinition): number {
+  if (!Number.isInteger(definition.decimalPlaces) || definition.decimalPlaces < 0 || definition.decimalPlaces > 8) throw new Error("export_data_unavailable");
+  return readMinor(minor) / 10 ** definition.decimalPlaces;
 }
 
 function safeTotal(values: readonly number[]): number {
@@ -18,21 +21,21 @@ function safeTotal(values: readonly number[]): number {
 }
 
 export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
-  const wallets = new Map(data.wallets.map((wallet) => [wallet.id, wallet]));
+  const wallets = new Map(historicalExportBalances(data.wallets, data.currencies).map((balance) => [balance.id, balance]));
   const categories = new Map(data.categories.map((category) => [category.id, category]));
   const rows: Array<{ row: WalletLedgerRow; legOrder: number }> = [];
 
   for (const transaction of data.transactions) {
     const addLeg = (
-      walletId: string,
-      currency: Currency,
+      balanceId: string,
+      currency: string,
       leg: WalletLedgerRow["leg"],
       inflowMinor: number,
       outflowMinor: number,
       legOrder: number,
     ) => {
-      const wallet = wallets.get(walletId);
-      if (!wallet || wallet.currency !== currency) throw new Error("export_data_unavailable");
+      const balance = wallets.get(balanceId);
+      if (!balance || balance.currency !== currency) throw new Error("export_data_unavailable");
       const category = transaction.categoryId ? categories.get(transaction.categoryId) : undefined;
       rows.push({
         row: {
@@ -40,8 +43,9 @@ export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
           transactionId: transaction.id,
           occurredOn: transaction.occurredOn,
           createdAt: transaction.createdAt,
-          walletId,
-          walletName: wallet.name,
+          balanceId: balanceId,
+          walletId: balance.walletId,
+          walletName: balance.name,
           currency,
           leg,
           inflowMinor: readMinor(inflowMinor),
@@ -60,21 +64,21 @@ export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
     };
 
     if (transaction.kind === "income") {
-      addLeg(transaction.walletId, transaction.currency, "income", transaction.amountMinor, 0, 0);
+      addLeg(transaction.balanceId, transaction.currency, "income", transaction.amountMinor, 0, 0);
     } else if (transaction.kind === "expense") {
-      addLeg(transaction.walletId, transaction.settlement?.tenderCurrency ?? transaction.currency, "expense", 0, transaction.settlement?.tenderMinor ?? transaction.amountMinor, 0);
+      addLeg(transaction.balanceId, transaction.settlement?.tenderCurrency ?? transaction.currency, "expense", 0, transaction.settlement?.tenderMinor ?? transaction.amountMinor, 0);
       transaction.settlement?.changes.forEach((change, index) => {
-        addLeg(change.walletId, change.currency, "cash-change", change.amountMinor, 0, index + 1);
+        addLeg(change.balanceId, change.currency, "cash-change", change.amountMinor, 0, index + 1);
       });
     } else if (transaction.kind === "transfer") {
-      if (!transaction.toWalletId || transaction.toAmountMinor === null) throw new Error("export_data_unavailable");
-      const target = wallets.get(transaction.toWalletId);
+      if (!transaction.toBalanceId || transaction.toAmountMinor === null) throw new Error("export_data_unavailable");
+      const target = wallets.get(transaction.toBalanceId);
       if (!target) throw new Error("export_data_unavailable");
-      addLeg(transaction.walletId, transaction.currency, "transfer-out", 0, transaction.amountMinor, 0);
+      addLeg(transaction.balanceId, transaction.currency, "transfer-out", 0, transaction.amountMinor, 0);
       addLeg(target.id, target.currency, "transfer-in", transaction.toAmountMinor, 0, 1);
     } else if (transaction.kind === "loan") {
-      if (transaction.loanFlow === "in") addLeg(transaction.walletId, transaction.currency, "loan-in", transaction.amountMinor, 0, 0);
-      else if (transaction.loanFlow === "out") addLeg(transaction.walletId, transaction.currency, "loan-out", 0, transaction.amountMinor, 0);
+      if (transaction.loanFlow === "in") addLeg(transaction.balanceId, transaction.currency, "loan-in", transaction.amountMinor, 0, 0);
+      else if (transaction.loanFlow === "out") addLeg(transaction.balanceId, transaction.currency, "loan-out", 0, transaction.amountMinor, 0);
       else throw new Error("export_data_unavailable");
     }
   }
@@ -89,18 +93,19 @@ export function buildReconciliations(
   data: ExportData,
   ledger: readonly WalletLedgerRow[],
 ): WalletReconciliation[] {
-  return [...data.wallets].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).map((wallet) => {
-    const rows = ledger.filter((row) => row.walletId === wallet.id);
+  return historicalExportBalances(data.wallets, data.currencies).map((balance) => {
+    const rows = ledger.filter((row) => row.balanceId === balance.id);
     const inflowMinor = safeTotal(rows.map((row) => row.inflowMinor));
     const outflowMinor = safeTotal(rows.map((row) => row.outflowMinor));
-    const calculatedClosingMinor = safeTotal([wallet.openingBalanceMinor, inflowMinor, -outflowMinor]);
-    const exportedClosingMinor = readMinor(wallet.balanceMinor);
+    const calculatedClosingMinor = safeTotal([balance.openingBalanceMinor, inflowMinor, -outflowMinor]);
+    const exportedClosingMinor = readMinor(balance.balanceMinor);
     return {
-      walletId: wallet.id,
-      walletName: wallet.name,
-      currency: wallet.currency,
-      archived: wallet.archived,
-      openingBalanceMinor: readMinor(wallet.openingBalanceMinor),
+      balanceId: balance.id,
+      walletId: balance.walletId,
+      walletName: balance.name,
+      currency: balance.currency,
+      archived: balance.archived,
+      openingBalanceMinor: readMinor(balance.openingBalanceMinor),
       inflowMinor,
       outflowMinor,
       calculatedClosingMinor,
@@ -117,8 +122,8 @@ function addSafe(left: number, right: number): number {
 export function buildMonthlyActivity(data: ExportData): MonthlyActivityRow[] {
   const ledger = buildWalletLedger(data);
   const rows = new Map<string, MonthlyActivityRow>();
-  const walletCurrency = new Map(data.wallets.map((wallet) => [wallet.id, wallet.currency]));
-  const get = (month: string, currency: Currency) => {
+  const walletCurrency = new Map(historicalExportBalances(data.wallets, data.currencies).map((balance) => [balance.id, balance.currency]));
+  const get = (month: string, currency: string) => {
     const key = `${month}|${currency}`;
     let row = rows.get(key);
     if (!row) {
@@ -146,8 +151,8 @@ export function buildMonthlyActivity(data: ExportData): MonthlyActivityRow[] {
     }
     else if (transaction.kind === "transfer") {
       row.transferOutMinor = addSafe(row.transferOutMinor, transaction.amountMinor);
-      if (!transaction.toWalletId || transaction.toAmountMinor === null) throw new Error("export_data_unavailable");
-      const targetCurrency = walletCurrency.get(transaction.toWalletId);
+      if (!transaction.toBalanceId || transaction.toAmountMinor === null) throw new Error("export_data_unavailable");
+      const targetCurrency = walletCurrency.get(transaction.toBalanceId);
       if (!targetCurrency) throw new Error("export_data_unavailable");
       const target = get(month, targetCurrency);
       target.transferInMinor = addSafe(target.transferInMinor, transaction.toAmountMinor);
@@ -163,7 +168,7 @@ export function buildMonthlyActivity(data: ExportData): MonthlyActivityRow[] {
     row.netWalletActivityMinor = safeTotal([row.walletInflowMinor, -row.walletOutflowMinor]);
   }
 
-  const currencyOrder = new Map(CURRENCIES.map((currency, index) => [currency, index]));
+  const currencyOrder = new Map<string, number>(data.currencies.map((currency, index) => [currency.code, index]));
   return [...rows.values()].sort((a, b) =>
     a.month.localeCompare(b.month) || (currencyOrder.get(a.currency) ?? 99) - (currencyOrder.get(b.currency) ?? 99),
   );
@@ -214,10 +219,10 @@ export function buildBudgetActuals(data: ExportData): BudgetActualRow[] {
   const output: BudgetActualRow[] = [];
   for (const combination of combinations) {
     const [categoryId, currencyText] = combination.split("|");
-    const currency = currencyText as Currency;
+    const currency = currencyText;
     const category = categories.get(categoryId);
     const start = firstMonth.get(combination);
-    if (!category || !CURRENCIES.includes(currency) || !start) throw new Error("export_data_unavailable");
+    if (!category || !data.currencies.some((definition) => definition.code === currency) || !start) throw new Error("export_data_unavailable");
     const history = revisions.get(combination) ?? [];
     for (let month = start; month <= cutoffMonth; month = monthAfter(month)) {
       const effective = [...history].reverse().find((revision) => revision.startsMonth.slice(0, 7) <= month);
@@ -234,13 +239,14 @@ export function buildBudgetActuals(data: ExportData): BudgetActualRow[] {
       });
     }
   }
-  const currencyOrder = new Map(CURRENCIES.map((currency, index) => [currency, index]));
+  const currencyOrder = new Map<string, number>(data.currencies.map((currency, index) => [currency.code, index]));
   return output.sort((a, b) => a.month.localeCompare(b.month) ||
     (currencyOrder.get(a.currency) ?? 99) - (currencyOrder.get(b.currency) ?? 99) ||
     a.categoryName.localeCompare(b.categoryName) || a.categoryId.localeCompare(b.categoryId));
 }
 
 export function buildExportSchedules(data: ExportData): ExportSchedules {
+  validateExportData(data);
   const walletLedger = buildWalletLedger(data);
   return {
     walletLedger,

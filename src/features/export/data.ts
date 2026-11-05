@@ -12,13 +12,16 @@ import { getProfile } from "@/features/profile/queries";
 import type { Profile } from "@/features/profile/schema";
 import { todayIn } from "@/features/transactions/group";
 import { TRANSACTION_COLUMNS, toTransaction, type TransactionRow } from "@/features/transactions/queries";
-import type { Wallet } from "@/features/wallets/schema";
+import { getWallets } from "@/features/wallets/queries";
+import { getCurrencies } from "@/features/currencies/queries";
+import { validateExportData } from "./model";
+import type { WalletContainer } from "@/features/wallets/schema";
+import type { CurrencyDefinition } from "@/lib/currency";
 import { demoBudgetData, demoFixed, demoInstallments, demoLoans, demoPage } from "@/lib/demo-data";
-import { isCurrency, readMinor } from "@/lib/money";
+import { readMinor } from "@/lib/money";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { createClient } from "@/lib/supabase/server";
 import type { BudgetRevision, ExportData, ExportLocale, ExportTransaction, PendingReceiptExport } from "./model";
-import { buildReconciliations, buildWalletLedger } from "./schedules";
 
 const EXPORT_PAGE_SIZE = 500;
 
@@ -53,7 +56,8 @@ export async function readAllRowsById<T extends { id: string }>(
 
 export type ExportSourceReaders = {
   getProfile: () => Promise<Profile>;
-  getWallets: () => Promise<Wallet[]>;
+  getWallets: () => Promise<WalletContainer[]>;
+  getCurrencies: () => Promise<CurrencyDefinition[]>;
   getCategories: () => Promise<Category[]>;
   getTransactions: (exportedAt: Date) => Promise<ExportTransaction[]>;
   getBudgetRevisions: (cutoffDate: string) => Promise<BudgetRevision[]>;
@@ -95,44 +99,8 @@ async function getTransactionsForExport(exportedAt: Date): Promise<ExportTransac
   return rows.map((row) => ({ ...toTransaction(row), pendingPaymentId: row.pending_payment_id }));
 }
 
-type WalletRow = {
-  id: string; name: string; kind: unknown; currency: unknown; opening_balance_minor: number | string;
-  position: number; archived_at: string | null;
-};
-type BalanceRow = { id: string; balance_minor: number | string };
-
-async function getWalletsForExport(): Promise<Wallet[]> {
-  if (!supabaseConfigured()) return (await import("@/lib/demo-data")).DEMO_WALLETS;
-  const db = await createClient();
-  const [walletRows, balanceRows] = await Promise.all([
-    readAllRowsById<WalletRow>(async (afterId, limit) => {
-      let query = db.from("wallets")
-        .select("id,name,kind,currency,opening_balance_minor,position,archived_at")
-        .order("id", { ascending: true }).limit(limit);
-      if (afterId !== null) query = query.gt("id", afterId);
-      const result = await query;
-      return { data: result.data as unknown as WalletRow[] | null, error: result.error };
-    }),
-    readAllRowsById<BalanceRow>(async (afterId, limit) => {
-      let query = db.from("wallet_balances").select("wallet_id,balance_minor")
-        .order("wallet_id", { ascending: true }).limit(limit);
-      if (afterId !== null) query = query.gt("wallet_id", afterId);
-      const result = await query;
-      const data = result.data?.map((row) => ({ id: row.wallet_id, balance_minor: row.balance_minor }));
-      return { data: data as BalanceRow[] | null, error: result.error };
-    }),
-  ]);
-  const balances = new Map(balanceRows.map((row) => [row.id, readMinor(row.balance_minor)]));
-  return walletRows.map((row) => {
-    if (!isCurrency(row.currency) || !["cash", "bank", "card"].includes(String(row.kind)) ||
-        !Number.isSafeInteger(row.position)) throw unavailable();
-    return {
-      id: row.id, name: row.name, kind: row.kind as Wallet["kind"], currency: row.currency,
-      openingBalanceMinor: readMinor(row.opening_balance_minor),
-      balanceMinor: balances.get(row.id) ?? readMinor(row.opening_balance_minor),
-      position: row.position, archived: row.archived_at !== null,
-    };
-  }).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+async function getWalletsForExport(): Promise<WalletContainer[]> {
+  return getWallets({ includeDeleted: true, includeNeedsAttention: true, includeDisabledBalances: true });
 }
 
 type CategoryRow = {
@@ -165,7 +133,7 @@ async function getCategoriesForExport(): Promise<Category[]> {
 }
 
 type FixedRow = {
-  id: string; name: string; amount_minor: number | string; wallet_id: string; category_id: string;
+  id: string; name: string; amount_minor: number | string; balance_id: string; category_id: string;
   due_day: number | null; items: FixedExpense["items"] | null;
 };
 
@@ -173,14 +141,14 @@ async function getFixedExpensesForExport(): Promise<FixedExpense[]> {
   if (!supabaseConfigured()) return demoFixed();
   const db = await createClient();
   const rows = await readAllRowsById<FixedRow>(async (afterId, limit) => {
-    let query = db.from("fixed_expenses").select("id,name,amount_minor,wallet_id,category_id,due_day,items")
+    let query = db.from("fixed_expenses").select("id,name,amount_minor,balance_id,category_id,due_day,items")
       .order("id", { ascending: true }).limit(limit);
     if (afterId !== null) query = query.gt("id", afterId);
     const result = await query;
     return { data: result.data as unknown as FixedRow[] | null, error: result.error };
   });
   return rows.map((row) => ({
-    id: row.id, name: row.name, amountMinor: readMinor(row.amount_minor), walletId: row.wallet_id,
+    id: row.id, name: row.name, amountMinor: readMinor(row.amount_minor), balanceId: row.balance_id,
     categoryId: row.category_id, dueDay: row.due_day, paidOn: null, items: row.items ?? [],
   }));
 }
@@ -206,7 +174,7 @@ async function getPendingPaymentsForExport(): Promise<PendingPayment[]> {
     return { data: result.data as unknown as PendingPaymentRow[] | null, error: result.error };
   });
   return rows.map((row) => {
-    if (!isCurrency(row.currency) || !Number.isSafeInteger(row.revision)) throw unavailable();
+    if (typeof row.currency !== "string" || !Number.isSafeInteger(row.revision)) throw unavailable();
     return {
       id: row.id, client: row.client, project: row.project, currency: row.currency,
       totalMinor: readMinor(row.total_minor), receivedMinor: readMinor(row.received_minor),
@@ -247,7 +215,7 @@ async function getBudgetRevisionsForExport(cutoffDate: string): Promise<BudgetRe
     return { data: result.data as unknown as BudgetRow[] | null, error: result.error };
   });
   return rows.map((row) => {
-    if (!isCurrency(row.currency) || !/^\d{4}-\d{2}-01$/.test(row.starts_month)) throw unavailable();
+    if (typeof row.currency !== "string" || !/^\d{4}-\d{2}-01$/.test(row.starts_month)) throw unavailable();
     return {
       id: row.id,
       categoryId: row.category_id,
@@ -268,7 +236,7 @@ async function getPendingReceiptsForExport(
       paymentId: transaction.pendingPaymentId!,
       amountMinor: transaction.amountMinor,
       occurredOn: transaction.occurredOn,
-      walletId: transaction.walletId,
+      balanceId: transaction.balanceId,
       categoryId: transaction.categoryId,
     }));
   }
@@ -279,7 +247,7 @@ async function getPendingReceiptsForExport(
       paymentId: payment.id,
       amountMinor: receipt.amountMinor,
       occurredOn: receipt.occurredOn,
-      walletId: receipt.walletId,
+      balanceId: receipt.balanceId,
       categoryId: null,
     }));
   }));
@@ -289,6 +257,7 @@ async function getPendingReceiptsForExport(
 const defaultReaders: ExportSourceReaders = {
   getProfile,
   getWallets: getWalletsForExport,
+  getCurrencies,
   getCategories: getCategoriesForExport,
   getTransactions: getTransactionsForExport,
   getBudgetRevisions: getBudgetRevisionsForExport,
@@ -308,8 +277,9 @@ export async function collectExportData(
     if (!(exportedAt instanceof Date) || !Number.isFinite(exportedAt.valueOf())) throw unavailable();
     const profile = await readers.getProfile();
     const cutoffDate = todayIn(profile.timezone, exportedAt);
-    const [wallets, categories, transactions, budgetRevisions, fixedExpenses, installments, loans, pendingPayments] = await Promise.all([
+    const [wallets, currencies, categories, transactions, budgetRevisions, fixedExpenses, installments, loans, pendingPayments] = await Promise.all([
       readers.getWallets(),
+      readers.getCurrencies(),
       readers.getCategories(),
       readers.getTransactions(exportedAt),
       readers.getBudgetRevisions(cutoffDate),
@@ -319,13 +289,14 @@ export async function collectExportData(
       readers.getPendingPayments(),
     ]);
     const pendingReceipts = await readers.getPendingReceipts(transactions, pendingPayments);
-    return {
+    const data: ExportData = {
       locale,
       timezone: profile.timezone,
       exportedAt: new Date(exportedAt.valueOf()),
       cutoffDate,
       profile,
       wallets,
+      currencies,
       categories,
       transactions,
       budgetRevisions,
@@ -344,6 +315,8 @@ export async function collectExportData(
       pendingPayments,
       pendingReceipts,
     };
+    validateExportData(data);
+    return data;
   } catch {
     throw unavailable();
   }
@@ -352,9 +325,8 @@ export async function collectExportData(
 function canonicalSnapshot(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) {
-    return value.map(canonicalSnapshot).sort((left, right) =>
-      JSON.stringify(left).localeCompare(JSON.stringify(right)),
-    );
+    // Catalog and wallet/balance presentation order are part of the snapshot.
+    return value.map(canonicalSnapshot);
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>)
@@ -395,21 +367,7 @@ export async function getExportData(
   exportedAt = new Date(),
 ): Promise<ExportData> {
   const configured = supabaseConfigured();
-  const data = configured
-    ? await collectConsistentExportData(locale, exportedAt, defaultReaders)
-    : await collectExportData(locale, exportedAt, defaultReaders);
-  if (configured) return data;
-  // Demo wallet figures are illustrative UI snapshots. The export uses the
-  // complete synthetic ledger, so derive its closing balances from the same
-  // rows to keep the accountant reconciliation meaningful.
-  const closingByWallet = new Map(
-    buildReconciliations(data, buildWalletLedger(data)).map((row) => [row.walletId, row.calculatedClosingMinor]),
-  );
-  return {
-    ...data,
-    wallets: data.wallets.map((wallet) => ({
-      ...wallet,
-      balanceMinor: closingByWallet.get(wallet.id) ?? wallet.openingBalanceMinor,
-    })),
-  };
+  return configured
+    ? collectConsistentExportData(locale, exportedAt, defaultReaders)
+    : collectExportData(locale, exportedAt, defaultReaders);
 }

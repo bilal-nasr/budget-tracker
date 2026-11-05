@@ -1,11 +1,12 @@
 "use client";
+import { currencyIntent } from "@/lib/currency-intent";
 
 import { useOptimistic, useState, useTransition } from "react";
 import { Check, Plus, TriangleAlert } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { useDisplayPrefs } from "@/components/providers/display-prefs";
 import { useComposer } from "@/components/shell/composer";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
@@ -17,7 +18,7 @@ import type { Installment } from "@/features/installments/schema";
 import { deleteTransaction } from "@/features/transactions/actions";
 import { todayIn } from "@/features/transactions/group";
 import { summarizeFixed } from "@/features/fixed/summary";
-import { CURRENCIES, formatAmount } from "@/lib/money";
+import { formatAmount } from "@/lib/money";
 import { ExpenseBreakdown } from "@/components/transactions/expense-breakdown";
 import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-labels";
 
@@ -32,7 +33,7 @@ function shortDate(date: string, locale: string): string {
 
 /**
  * Monthly fixed expenses. "Paid" records the expense and deducts it from its
- * wallet. Nothing is paid automatically; you press it after the salary lands.
+ * balance. Nothing is paid automatically; you press it after the salary lands.
  */
 export function FixedCard({
   items: serverItems,
@@ -47,7 +48,7 @@ export function FixedCard({
   const breakdownLabels = useExpenseBreakdownLabels();
   const tc = useTranslations("Categories");
   const locale = useLocale();
-  const { walletById, categoryById, timezone, salary } = useAppData();
+  const { balanceChoiceById, categoryById, timezone, salary, definition, currencies: catalog } = useRuntimeBalances();
   const { openFixed } = useComposer();
   const { digits } = useDisplayPrefs();
   const [pending, startTransition] = useTransition();
@@ -61,7 +62,7 @@ export function FixedCard({
     setBusyId(item.id);
     startTransition(async () => {
       markPaid(item.id);
-      const result = await payFixedExpense(item.id);
+      const result = await payFixedExpense(item.id, currencyIntent(balanceChoiceById(item.balanceId)?.definition));
       setBusyId(null);
       if (!result.ok) {
         toast.error(result.error === "notConfigured" ? t("errorPreview") : result.error === "categoryUnavailable" ? tc("errorUnavailable") : t("errorPay"));
@@ -81,10 +82,10 @@ export function FixedCard({
   };
 
   // Currencies are never combined.
-  const summary = summarizeFixed(items, walletById, salary, installments);
+  const summary = summarizeFixed(items, balanceChoiceById, salary, installments, catalog.map((currency) => currency.code));
   const left = summary.left;
-  const leftCurrencies = CURRENCIES.filter((c) => left[c] > 0);
-  const currencies = CURRENCIES.filter((c) => summary.total[c] > 0);
+  const leftCurrencies = catalog.map((currency) => currency.code).filter((c) => left[c] > 0);
+  const currencies = catalog.map((currency) => currency.code).filter((c) => summary.total[c] > 0);
 
   return (
     <section aria-labelledby="h-fixed" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -118,7 +119,7 @@ export function FixedCard({
       {items.length > 0 ? (
         <ul className="-mx-1 flex flex-col">
           {items.map((item) => {
-            const wallet = walletById(item.walletId);
+            const balance = balanceChoiceById(item.balanceId);
             const category = categoryById(item.categoryId);
             const paid = item.paidOn !== null;
             return (
@@ -135,8 +136,8 @@ export function FixedCard({
                       <bdi>{item.name}</bdi>
                     </span>
                     <span className="block text-[13px] text-muted-foreground">
-                      {wallet ? <Amount minor={item.amountMinor} currency={wallet.currency} /> : null} ·{" "}
-                      <bdi>{wallet?.name}</bdi>
+                      {balance ? <Amount minor={item.amountMinor} currency={balance.currency} /> : null} ·{" "}
+                      <bdi>{balance?.name}</bdi>
                       {item.dueDay ? ` · ${t("due", { day: item.dueDay })}` : ""}
                     </span>
                   </span>
@@ -156,11 +157,11 @@ export function FixedCard({
                     {busyId === item.id ? t("paying") : t("paid")}
                   </Button>
                 )}
-                {wallet && item.items && item.items.length > 0 ? (
+                {balance && item.items && item.items.length > 0 ? (
                   <details className="w-full text-sm">
                     <summary className="cursor-pointer py-2 font-medium">{tb("title")}</summary>
                     <ExpenseBreakdown items={item.items.map((line, position) => ({ ...line, id: `${item.id}-${position}`, position }))}
-                      parentMinor={item.amountMinor} currency={wallet.currency} labels={breakdownLabels} />
+                      parentMinor={item.amountMinor} currency={balance.currency} labels={breakdownLabels} />
                   </details>
                 ) : null}
               </li>
@@ -215,16 +216,16 @@ export function FixedCard({
           <div className="flex flex-col gap-1.5">
             <h3 id="h-fixed-wallets" className="text-sm font-medium">{t("perWallet")}</h3>
             <ul aria-labelledby="h-fixed-wallets" className="flex flex-col gap-1">
-              {summary.byWallet.map((need) => {
-                const w = walletById(need.walletId);
+              {summary.byBalance.map((need) => {
+                const w = balanceChoiceById(need.balanceId);
                 return (
-                  <li key={need.walletId} className="flex items-baseline justify-between gap-3 text-[15px]">
+                  <li key={need.balanceId} className="flex items-baseline justify-between gap-3 text-[15px]">
                     <span className="min-w-0 truncate"><bdi>{w?.name}</bdi></span>
                     <span className="flex shrink-0 flex-wrap items-baseline justify-end gap-x-2 text-end">
                       {need.shortMinor > 0 ? (
                         <span className="flex items-center gap-1 text-[13px] text-over">
                           <TriangleAlert aria-hidden className="size-3.5" />
-                          {t("short", { amount: formatAmount(need.shortMinor, need.currency, { digits }) })}
+                          {t("short", { amount: formatAmount(need.shortMinor, definition(need.currency), { digits }) })}
                         </span>
                       ) : null}
                       <Amount minor={need.totalMinor} currency={need.currency} className="font-semibold" />

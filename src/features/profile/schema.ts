@@ -9,7 +9,7 @@ export const profileSchema = z.object({
   /** Last USD to LBP rate used (LBP per 1 USD), or null. */
   usdLbpRate: z.number().int().min(1).max(10_000_000).nullable(),
   salary: z
-    .object({ amountMinor: z.number().int().positive(), walletId: z.uuid() })
+    .object({ amountMinor: z.number().int().positive(), balanceId: z.uuid() })
     .nullable(),
 });
 

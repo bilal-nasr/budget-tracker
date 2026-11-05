@@ -93,6 +93,7 @@ export function SettingsForm({ profile }: { profile: Profile }) {
       </section>
 
       <Link href="/settings/categories" className="inline-flex min-h-12 items-center justify-between rounded-xl border border-border bg-card px-4 py-3 font-medium focus-visible:outline-2 focus-visible:outline-ring">{t("categories")}</Link>
+      <Link href="/settings/currencies" className="inline-flex min-h-12 items-center justify-between rounded-xl border border-border bg-card px-4 py-3 font-medium focus-visible:outline-2 focus-visible:outline-ring">{t("currencies")}</Link>
 
       <ExportButton />
 

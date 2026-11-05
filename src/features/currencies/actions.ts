@@ -1,0 +1,239 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { actionClient, databaseActionError, type ActionResult } from "@/lib/supabase/action";
+import { readAllByKey } from "@/lib/supabase/read-all";
+import { readMinor } from "@/lib/money";
+import { currencyCodeSchema, currencyInputSchema, type CurrencyInput } from "./schema";
+
+export type CurrencyDisableBlocker =
+  | { kind: "lastEnabledCurrency" }
+  | { kind: "nonzeroBalance"; balanceId: string; walletId: string; walletName: string }
+  | { kind: "lastWalletBalance"; walletId: string; walletName: string }
+  | { kind: "salary"; balanceId: string; walletId: string; walletName: string }
+  | { kind: "fixedExpense"; id: string; name: string; balanceId: string }
+  | { kind: "installment"; id: string; name: string; balanceId: string }
+  | { kind: "loan"; id: string; name: string; balanceId: string }
+  | { kind: "pendingPayment"; id: string; label: string }
+  | { kind: "budget"; id: string; categoryId: string; startsMonth: string };
+
+async function safeActionClient() {
+  try {
+    return await actionClient();
+  } catch {
+    return { error: "failed" as const };
+  }
+}
+
+export async function createCurrency(input: CurrencyInput): Promise<ActionResult> {
+  const parsed = currencyInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { error } = await ctx.supabase.rpc("create_currency", {
+      p_code: parsed.data.code,
+      p_symbol: parsed.data.symbol,
+      p_decimal_places: parsed.data.decimalPlaces,
+    });
+    if (error) return { ok: false, error: databaseActionError(error) };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+export async function updateCurrency(currentCode: string, input: CurrencyInput): Promise<ActionResult> {
+  const current = currencyCodeSchema.safeParse(currentCode);
+  const parsed = currencyInputSchema.safeParse(input);
+  if (!current.success || !parsed.success) return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { error } = await ctx.supabase.rpc("update_currency", {
+      p_current_code: current.data,
+      p_code: parsed.data.code,
+      p_symbol: parsed.data.symbol,
+      p_decimal_places: parsed.data.decimalPlaces,
+    });
+    if (error) return { ok: false, error: databaseActionError(error) };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+export async function setCurrencyEnabled(code: string, enabled: boolean): Promise<ActionResult> {
+  const parsed = currencyCodeSchema.safeParse(code);
+  if (!parsed.success || typeof enabled !== "boolean") return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { error } = await ctx.supabase.rpc("set_currency_disabled", { p_code: parsed.data, p_disabled: !enabled });
+    if (error) return { ok: false, error: databaseActionError(error) };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+export async function deleteCurrency(code: string): Promise<ActionResult> {
+  const parsed = currencyCodeSchema.safeParse(code);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const ctx = await safeActionClient();
+  if (ctx.error) return { ok: false, error: ctx.error };
+  try {
+    const { error } = await ctx.supabase.rpc("delete_currency", { p_code: parsed.data });
+    if (error) return { ok: false, error: databaseActionError(error) };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** Read-only preview of every condition that would reject the disable transaction. */
+async function inspectCurrencyDisableUnsafe(code: string): Promise<CurrencyDisableBlocker[]> {
+  const parsed = currencyCodeSchema.safeParse(code);
+  const ctx = await safeActionClient();
+  if (!parsed.success || ctx.error) throw new Error("Currency inspection unavailable");
+
+  const read = (table: string, columns: string, key = "id") => readAllByKey<Record<string, unknown>>(async (after, limit) => {
+    let query = ctx.supabase.from(table).select(columns).eq("user_id", ctx.userId).order(key).limit(limit);
+    if (after !== null) query = query.gt(key, after);
+    const result = await query;
+    return { ...result, data: result.data as unknown as Record<string, unknown>[] | null };
+  }, (row) => String(row[key]), "Currency inspection unavailable");
+  const [currencyRows, walletRows, balanceRows, totalRows, profileRows, fixedRows, installmentRows, progressRows, loanRows, pendingRows, budgetRows] = await Promise.all([
+    read("currencies", "code, disabled_at", "code"),
+    read("wallets", "id, name, default_balance_id, deleted_at, needs_attention"),
+    read("wallet_balances", "id, wallet_id, currency, detached_at"),
+    read("wallet_balance_totals", "balance_id, wallet_id, currency, balance_minor", "balance_id"),
+    read("profiles", "user_id, salary_balance_id", "user_id"),
+    read("fixed_expenses", "id, name, balance_id"),
+    read("installments", "id, name, balance_id"),
+    read("installment_progress", "installment_id, remaining_minor", "installment_id"),
+    read("loan_progress", "id, name, balance_id, currency, remaining_minor, deleted_at"),
+    read("pending_payment_progress", "id, project, client, currency, remaining_minor, deleted_at"),
+    read("budgets", "id, category_id, currency, starts_month, limit_minor"),
+  ]);
+  const target = parsed.data;
+  if (!currencyRows.some((row) => row.code === target)) throw new Error("Currency inspection unavailable");
+
+  const wallets = new Map(walletRows.map((row) => [String(row.id), row]));
+  const balances = new Map(balanceRows.map((row) => [String(row.id), row]));
+  const totals = new Map<string, Record<string, unknown>>();
+  for (const row of totalRows) {
+    const id = String(row.balance_id);
+    if (totals.has(id)) throw new Error("Currency inspection unavailable");
+    totals.set(id, row);
+  }
+  for (const balance of balanceRows) {
+    const total = totals.get(String(balance.id));
+    if (!total || total.wallet_id !== balance.wallet_id || total.currency !== balance.currency || total.balance_minor === null) {
+      throw new Error("Currency inspection unavailable");
+    }
+  }
+  if (totals.size !== balances.size || [...totals.keys()].some((id) => !balances.has(id))) {
+    throw new Error("Currency inspection unavailable");
+  }
+  const knownCodes = new Set(currencyRows.map((row) => row.code));
+  for (const balance of balanceRows) {
+    if (!wallets.has(String(balance.wallet_id)) || !knownCodes.has(balance.currency)) throw new Error("Currency inspection unavailable");
+  }
+  for (const profile of profileRows) {
+    if (profile.salary_balance_id != null && !balances.has(String(profile.salary_balance_id))) throw new Error("Currency inspection unavailable");
+  }
+  for (const row of [...fixedRows, ...installmentRows, ...loanRows]) {
+    const balance = balances.get(String(row.balance_id));
+    if (!balance || (row.currency !== undefined && row.currency !== balance.currency)) throw new Error("Currency inspection unavailable");
+  }
+  for (const row of [...pendingRows, ...budgetRows]) {
+    if (!knownCodes.has(row.currency)) throw new Error("Currency inspection unavailable");
+  }
+  const enabled = new Set(currencyRows.filter((row) => row.disabled_at === null).map((row) => String(row.code)));
+  const targetBalances = balanceRows.filter((row) => row.currency === target);
+  const targetBalanceIds = new Set(targetBalances.map((row) => String(row.id)));
+  const blockers: CurrencyDisableBlocker[] = [];
+
+  if (enabled.has(target) && enabled.size === 1) blockers.push({ kind: "lastEnabledCurrency" });
+
+  for (const row of totalRows) {
+    if (row.currency !== target || row.balance_minor === null || readMinor(row.balance_minor as number | string) === 0) continue;
+    const wallet = wallets.get(String(row.wallet_id));
+    if (!wallet) throw new Error("Currency inspection unavailable");
+    blockers.push({ kind: "nonzeroBalance", balanceId: String(row.balance_id), walletId: String(row.wallet_id), walletName: String(wallet.name) });
+  }
+
+  for (const wallet of walletRows) {
+    if (wallet.deleted_at !== null || !targetBalanceIds.has(String(wallet.default_balance_id))) continue;
+    const hasAlternative = balanceRows.some((balance) => balance.wallet_id === wallet.id
+      && balance.id !== wallet.default_balance_id && balance.detached_at === null && enabled.has(String(balance.currency)) && balance.currency !== target);
+    if (!hasAlternative) blockers.push({ kind: "lastWalletBalance", walletId: String(wallet.id), walletName: String(wallet.name) });
+  }
+
+  for (const profile of profileRows) {
+    const balanceId = String(profile.salary_balance_id ?? "");
+    if (!targetBalanceIds.has(balanceId)) continue;
+    const balance = balances.get(balanceId);
+    const wallet = balance && wallets.get(String(balance.wallet_id));
+    if (!balance || !wallet) throw new Error("Currency inspection unavailable");
+    blockers.push({ kind: "salary", balanceId, walletId: String(balance.wallet_id), walletName: String(wallet.name) });
+  }
+  for (const fixed of fixedRows) {
+    if (targetBalanceIds.has(String(fixed.balance_id))) blockers.push({ kind: "fixedExpense", id: String(fixed.id), name: String(fixed.name), balanceId: String(fixed.balance_id) });
+  }
+  const remaining = new Map<string, number>();
+  for (const row of progressRows) {
+    const id = String(row.installment_id);
+    if (remaining.has(id) || row.remaining_minor == null) throw new Error("Currency inspection unavailable");
+    remaining.set(id, readMinor(row.remaining_minor as number | string));
+  }
+  if (remaining.size !== installmentRows.length) throw new Error("Currency inspection unavailable");
+  for (const installment of installmentRows) {
+    if (!remaining.has(String(installment.id))) throw new Error("Currency inspection unavailable");
+    if (targetBalanceIds.has(String(installment.balance_id)) && remaining.get(String(installment.id))! > 0) {
+      blockers.push({ kind: "installment", id: String(installment.id), name: String(installment.name), balanceId: String(installment.balance_id) });
+    }
+  }
+  for (const loan of loanRows) {
+    if (loan.currency === target && loan.deleted_at === null && readMinor(loan.remaining_minor as number | string) > 0) {
+      blockers.push({ kind: "loan", id: String(loan.id), name: String(loan.name), balanceId: String(loan.balance_id) });
+    }
+  }
+  for (const pending of pendingRows) {
+    if (pending.currency === target && pending.deleted_at === null && readMinor(pending.remaining_minor as number | string) > 0) {
+      blockers.push({ kind: "pendingPayment", id: String(pending.id), label: `${String(pending.client)} · ${String(pending.project)}` });
+    }
+  }
+
+  const currentMonth = `${new Date().toISOString().slice(0, 7)}-01`;
+  const byCategory = new Map<string, Record<string, unknown>[]>();
+  for (const budget of budgetRows.filter((row) => row.currency === target)) {
+    const category = String(budget.category_id);
+    byCategory.set(category, [...(byCategory.get(category) ?? []), budget]);
+  }
+  for (const [categoryId, rows] of byCategory) {
+    const current = rows.filter((row) => String(row.starts_month) <= currentMonth)
+      .sort((left, right) => String(right.starts_month).localeCompare(String(left.starts_month)))[0];
+    if (current?.limit_minor !== null && current !== undefined) {
+      blockers.push({ kind: "budget", id: String(current.id), categoryId, startsMonth: String(current.starts_month) });
+    }
+    for (const future of rows.filter((row) => String(row.starts_month) > currentMonth && row.limit_minor !== null)) {
+      blockers.push({ kind: "budget", id: String(future.id), categoryId, startsMonth: String(future.starts_month) });
+    }
+  }
+
+  return blockers;
+}
+
+export async function inspectCurrencyDisable(code: string): Promise<CurrencyDisableBlocker[]> {
+  try {
+    return await inspectCurrencyDisableUnsafe(code);
+  } catch {
+    throw new Error("Currency inspection unavailable");
+  }
+}

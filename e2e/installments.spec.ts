@@ -1,3 +1,4 @@
+import en from "../src/messages/en.json";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./support";
 
@@ -26,14 +27,15 @@ test("Pay sheet pre-fills the monthly amount, offers only same-currency wallets,
   await page.getByRole("button", { name: "Pay Laptop again", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Pay Laptop" });
   await expect(dialog.getByLabel("Amount")).toHaveValue("100");
-  await expect(dialog.getByRole("radio", { name: /Bank · USD/ })).toBeChecked();
-  await expect(dialog.getByRole("radio", { name: /LBP/ })).toHaveCount(0);
+  await expect(dialog.getByLabel(en.Installments.paidFrom, { exact: true })).toHaveValue("00000000-0000-4000-8000-000000000002");
+  await expect(dialog.getByLabel(en.Add.walletCurrency, { exact: true }).locator("option")).toHaveText(["USD"]);
+  await expect(dialog.getByLabel(en.Installments.paidFrom, { exact: true }).locator("option")).toContainText(["—", "Pocket", "Bank", "Card", "Syrian cash", "Syrian bank", "Loan demo USD"]);
   await expect(dialog).toContainText(/Left after this payment:\W*\$800\.00/);
   await dialog.getByLabel("Amount").fill("901");
   await expect(dialog.getByRole("button", { name: "Record payment" })).toBeDisabled();
   await expect(dialog.getByText(/more than what is left/)).toBeVisible();
   await dialog.getByLabel("Amount").fill("100");
-  await dialog.getByRole("radio", { name: /Cash · USD/ }).click();
+  await dialog.getByLabel(en.Installments.paidFrom, { exact: true }).selectOption({ label: "Pocket" });
   await dialog.getByRole("button", { name: "Record payment" }).click();
   const extra = page.getByRole("dialog", { name: "Another payment before your next salary?" });
   await expect(extra).toContainText("another expense");
@@ -103,7 +105,7 @@ test("partial SYP installment suggests the remaining target without mixing walle
   await row.getByRole("button",{name:"Pay Synthetic phone again",exact:true}).click();
   const dialog=page.getByRole("dialog",{name:"Pay Synthetic phone",exact:true});
   await expect(dialog.getByLabel("Amount")).toHaveValue("500");
-  await expect(dialog.getByRole("radio",{name:/USD|LBP/})).toHaveCount(0);
+  await expect(dialog.getByLabel(en.Add.walletCurrency, { exact: true }).locator("option")).toHaveText(["SYP"]);
   await expectNoHorizontalOverflow(page);
 });
 

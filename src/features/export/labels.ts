@@ -3,7 +3,7 @@ import type { ExportLocale } from "./model";
 export const SHEET_KEYS = [
   "cover", "summary", "reconciliation", "monthlyActivity", "walletLedger", "budgetActual",
   "transactions", "expenseItems", "wallets", "categories", "salary", "fixedExpenses", "installments",
-  "installmentPayments", "loans", "loanPayments", "receivables", "receipts", "checks",
+  "installmentPayments", "loans", "loanPayments", "receivables", "receipts", "checks", "currencies", "balances", "exactFacts",
 ] as const;
 export type SheetKey = (typeof SHEET_KEYS)[number];
 
@@ -19,7 +19,8 @@ type ExportLabels = {
     "dueDate" | "total" | "received" | "remaining" | "paidBefore" | "paid" | "monthlyPayment" | "direction" |
     "principal" | "feeRate" | "fee" | "totalDue" | "openedOn" | "client" | "project" | "revision" |
     "borrowedOutstanding" | "lentOutstanding" | "installmentOutstanding" | "receivableOutstanding" |
-    "metric" | "value" | "definition",
+    "metric" | "value" | "definition" | "balanceId" | "defaultBalanceId" | "deleted" | "needsAttention" |
+    "symbol" | "decimalPlaces" | "disabled" | "firstUsed" | "detached" | "exactMinor" | "factPath" | "exactValue" | "walletNameSnapshot" | "toWalletNameSnapshot",
     string
   >;
   enums: Record<string, string>;
@@ -37,7 +38,7 @@ const en: ExportLabels = {
     walletLedger: "Wallet Ledger", budgetActual: "Budget vs Actual", transactions: "Transactions", expenseItems: "Expense Items",
     wallets: "Wallets", categories: "Categories", salary: "Salary", fixedExpenses: "Fixed Expenses", installments: "Installments",
     installmentPayments: "Installment Payments", loans: "Loans", loanPayments: "Loan Payments", receivables: "Receivables",
-    receipts: "Receipts", checks: "Checks & Definitions",
+    receipts: "Receipts", checks: "Checks & Definitions", currencies: "Currency Catalog", balances: "Balances", exactFacts: "Source & Exact Facts",
   },
   columns: {
     date: "Date", month: "Month", id: "ID", transactionId: "Transaction ID", type: "Type", leg: "Ledger entry",
@@ -55,6 +56,10 @@ const en: ExportLabels = {
     openedOn: "Opened on", client: "Client", project: "Project", revision: "Revision", metric: "Metric", value: "Value",
     definition: "Definition", borrowedOutstanding: "Borrowed loans outstanding", lentOutstanding: "Lent loans outstanding",
     installmentOutstanding: "Installments outstanding", receivableOutstanding: "Receivables outstanding",
+    balanceId: "Balance ID", defaultBalanceId: "Default balance ID", deleted: "Deleted", needsAttention: "Needs attention",
+    symbol: "Symbol", decimalPlaces: "Decimal places", disabled: "Disabled", firstUsed: "Previously used", detached: "Detached",
+    exactMinor: "(minor units, exact)", factPath: "Source path", exactValue: "Exact value (text)",
+    walletNameSnapshot: "Wallet name snapshot", toWalletNameSnapshot: "Destination wallet name snapshot",
   },
   enums: {
     income: "Income", expense: "Expense", transfer: "Transfer", loan: "Loan", "loan-in": "Loan cash in",
@@ -67,7 +72,7 @@ const en: ExportLabels = {
     yes: "Yes", no: "No", under: "Under budget", over: "Over budget", on: "On budget", unbudgeted: "No budget",
     notAvailable: "n.a.", cashBasis: "Cash basis. Transactions are reported when money enters or leaves a wallet.",
     sourceDescription: "Source: Budget Tracker export for the signed-in account.",
-    currencyRule: "USD, LBP and SYP remain separate. No exchange rate is applied.",
+    currencyRule: "All currencies remain separate. No exchange rate is applied. Exact source facts are stored as text; numeric spreadsheet cells may round beyond 15 significant digits.",
     limitation: "This workbook is not a double-entry general ledger, trial balance, tax return or financial statement.",
     exportedAt: "Exported at", cutoff: "Reporting cutoff", timezone: "Timezone", workbookTitle: "Budget Tracker accounting export",
     recordCounts: "Record counts", records: "records", reconciliationChecks: "Wallet reconciliation checks",
@@ -81,7 +86,7 @@ const ar: ExportLabels = {
     walletLedger: "دفتر المحافظ", budgetActual: "الميزانية والفعلية", transactions: "المعاملات", expenseItems: "تفاصيل المصروفات",
     wallets: "المحافظ", categories: "الفئات", salary: "الراتب", fixedExpenses: "المصاريف الثابتة", installments: "الأقساط",
     installmentPayments: "دفعات الأقساط", loans: "القروض", loanPayments: "دفعات القروض", receivables: "المبالغ المستحقة",
-    receipts: "التحصيلات", checks: "الفحوص والتعريفات",
+    receipts: "التحصيلات", checks: "الفحوص والتعريفات", currencies: "دليل العملات", balances: "الأرصدة", exactFacts: "المصادر والقيم الدقيقة",
   },
   columns: {
     date: "التاريخ", month: "الشهر", id: "المعرّف", transactionId: "معرّف المعاملة", type: "النوع", leg: "قيد المحفظة",
@@ -99,6 +104,10 @@ const ar: ExportLabels = {
     openedOn: "تاريخ البدء", client: "العميل", project: "المشروع", revision: "المراجعة", metric: "البند", value: "القيمة",
     definition: "التعريف", borrowedOutstanding: "رصيد القروض المقترضة", lentOutstanding: "رصيد القروض المُقرضة",
     installmentOutstanding: "رصيد الأقساط", receivableOutstanding: "رصيد المبالغ المستحقة",
+    balanceId: "معرّف الرصيد", defaultBalanceId: "معرّف الرصيد الافتراضي", deleted: "محذوف", needsAttention: "يحتاج إلى مراجعة",
+    symbol: "الرمز", decimalPlaces: "المنازل العشرية", disabled: "معطّل", firstUsed: "مستخدم سابقاً", detached: "منفصل",
+    exactMinor: "(وحدات صغرى، دقيقة)", factPath: "مسار المصدر", exactValue: "القيمة الدقيقة (نص)",
+    walletNameSnapshot: "اسم المحفظة وقت المعاملة", toWalletNameSnapshot: "اسم محفظة الوجهة وقت المعاملة",
   },
   enums: {
     income: "دخل", expense: "مصروف", transfer: "تحويل", loan: "قرض", "loan-in": "نقد داخل من قرض",
@@ -112,7 +121,7 @@ const ar: ExportLabels = {
     yes: "نعم", no: "لا", under: "أقل من الميزانية", over: "أعلى من الميزانية", on: "مطابق للميزانية", unbudgeted: "بلا ميزانية",
     notAvailable: "غير متاح", cashBasis: "الأساس النقدي. تُعرض المعاملات عند دخول المال إلى المحفظة أو خروجه منها.",
     sourceDescription: "المصدر: تصدير Budget Tracker للحساب المسجّل دخوله.",
-    currencyRule: "تبقى عملات USD وLBP وSYP منفصلة. لا يُطبّق أي سعر صرف.",
+    currencyRule: "تبقى جميع العملات منفصلة. لا يُطبّق أي سعر صرف. تُحفظ قيم المصدر الدقيقة كنص؛ قد تُقرّب الخلايا الرقمية بعد ١٥ رقماً معنويّاً.",
     limitation: "هذا المصنف ليس دفتر أستاذ مزدوج القيد ولا ميزان مراجعة ولا إقراراً ضريبياً ولا قوائم مالية.",
     exportedAt: "وقت التصدير", cutoff: "تاريخ القطع", timezone: "المنطقة الزمنية", workbookTitle: "تصدير محاسبي من Budget Tracker",
     recordCounts: "أعداد السجلات", records: "سجلات", reconciliationChecks: "فحوص تسوية المحافظ",

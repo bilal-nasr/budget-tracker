@@ -27,7 +27,9 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { Link, usePathname } from "@/i18n/navigation";
-import { CURRENCIES, currencyPrefix, type Currency } from "@/lib/money";
+import { SEED_CURRENCY_DEFINITIONS, requireCurrency, type CurrencyDefinition } from "@/lib/currency";
+const sampleDefinitions = [...SEED_CURRENCY_DEFINITIONS, { code: "BTC", symbol: "₿", decimalPlaces: 8, disabled: false, firstUsed: false }];
+const sampleDefinition = (code: string) => requireCurrency(code, sampleDefinitions);
 
 type Kind = "expense" | "income" | "move";
 
@@ -55,7 +57,7 @@ function Row({
   name: string;
   sub: string;
   minor: number;
-  currency: Currency;
+  currency: string;
 }) {
   return (
     <li className="flex min-h-[60px] items-center gap-3 border-b border-border px-3.5 py-2 last:border-b-0">
@@ -66,7 +68,7 @@ function Row({
         </p>
         <p className="truncate text-[13px] text-muted-foreground">{sub}</p>
       </div>
-      <Amount minor={minor} currency={currency} className="font-semibold" />
+      <Amount minor={minor} currency={sampleDefinition(currency)} className="font-semibold" />
     </li>
   );
 }
@@ -77,7 +79,7 @@ export function KitchenSink() {
   const [kind, setKind] = useState<Kind>("expense");
   const [pick, setPick] = useState("groceries");
   const [typed, setTyped] = useState("54.2");
-  const [currency, setCurrency] = useState<Currency>("USD");
+  const [currency, setCurrency] = useState<CurrencyDefinition>(sampleDefinition("USD"));
   // The <html> class is the source of truth (set before paint by the layout script).
   const dark = useSyncExternalStore(
     (notify) => {
@@ -108,7 +110,7 @@ export function KitchenSink() {
         </div>
         <p className="text-[15px] text-shell-muted">{t("lead")}</p>
         <p className="mt-1 text-[40px] leading-[1.1] font-bold tracking-tight">
-          <Amount minor={41200} currency="USD" />
+          <Amount minor={41200} currency={sampleDefinition("USD")} />
         </p>
         <TileBar
           tone="shell"
@@ -118,17 +120,17 @@ export function KitchenSink() {
         />
         <p className="mt-2 flex justify-between text-[13px] text-shell-muted">
           <span>
-            {t("spent")} <Amount minor={78800} currency="USD" />
+            {t("spent")} <Amount minor={78800} currency={sampleDefinition("USD")} />
           </span>
           <span>
-            {t("of")} <Amount minor={120000} currency="USD" />
+            {t("of")} <Amount minor={120000} currency={sampleDefinition("USD")} />
           </span>
         </p>
         <p className="mt-5 text-[28px] leading-tight font-bold tracking-tight">
-          <Amount minor={3150000} currency="LBP" />
+          <Amount minor={3150000} currency={sampleDefinition("LBP")} />
         </p>
         <p className="mt-3 text-[28px] leading-tight font-bold tracking-tight">
-          <Amount minor={1250} currency="SYP" />
+          <Amount minor={1250} currency={sampleDefinition("SYP")} />
         </p>
         <TileBar
           tone="shell"
@@ -145,7 +147,7 @@ export function KitchenSink() {
         >
           <TriangleAlert aria-hidden className="size-5 shrink-0 text-over" />
           <span>
-            {t("overAlert")} <Amount minor={4000} currency="USD" />
+            {t("overAlert")} <Amount minor={4000} currency={sampleDefinition("USD")} />
           </span>
           <button
             type="button"
@@ -176,7 +178,7 @@ export function KitchenSink() {
             ].map((w) => (
               <div key={w.name} className="min-h-[72px] min-w-[140px] snap-start rounded-xl border border-border bg-card px-3.5 py-3">
                 <p className="text-[13px] text-muted-foreground">{w.name}</p>
-                <Amount minor={w.minor} currency={w.c} className="text-lg font-semibold" />
+                <Amount minor={w.minor} currency={sampleDefinition(w.c)} className="text-lg font-semibold" />
               </div>
             ))}
           </div>
@@ -288,12 +290,12 @@ export function KitchenSink() {
               />
               <div className="flex items-center justify-between gap-3 py-3.5">
                 <p className={`amount flex items-baseline gap-1 text-[46px] leading-none font-bold tracking-tight ${typed === "" ? "text-muted-foreground" : ""}`}>
-                  <span className="text-[28px] font-semibold text-muted-foreground">{currencyPrefix(currency)}</span>
+                  <span className="text-[28px] font-semibold text-muted-foreground">{currency.symbol}</span>
                   {typed === "" ? "0" : typed}
                 </p>
-                <Button variant="outline" className="rounded-full" onClick={() => setCurrency(CURRENCIES[(CURRENCIES.indexOf(currency) + 1) % CURRENCIES.length])}>
+                <Button variant="outline" className="rounded-full" onClick={() => setCurrency(sampleDefinitions[(sampleDefinitions.indexOf(currency) + 1) % sampleDefinitions.length])}>
                   <span className="size-2.5 rounded-full bg-primary" aria-hidden />
-                  <bdi dir="ltr">{currency}</bdi>
+                  <bdi dir="ltr">{currency.code}</bdi>
                   <ChevronDown aria-hidden />
                 </Button>
               </div>

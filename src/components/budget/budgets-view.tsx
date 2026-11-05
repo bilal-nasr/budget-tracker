@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { TileBar } from "@/components/budget/tile-bar";
 import { Amount } from "@/components/money/amount";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { useDisplayPrefs } from "@/components/providers/display-prefs";
 import { useComposer } from "@/components/shell/composer";
 import { EmptyState } from "@/components/shell/empty-state";
@@ -18,7 +18,7 @@ import { isOver } from "@/features/budgets/rows";
 import type { BudgetRow, MonthBudgets } from "@/features/budgets/schema";
 import { categoryName } from "@/features/categories/catalogue";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { formatAmount, type Currency } from "@/lib/money";
+import { formatAmount } from "@/lib/money";
 
 function monthRange(month: string): { from: string; to: string } {
   const [y, m] = month.split("-").map(Number);
@@ -29,13 +29,13 @@ function monthRange(month: string): { from: string; to: string } {
 function Row({ row, data }: { row: BudgetRow; data: MonthBudgets }) {
   const t = useTranslations("Budgets");
   const locale = useLocale();
-  const { categoryById } = useAppData();
+  const { categoryById, definition } = useRuntimeBalances();
   const { openAdd } = useComposer();
   const { digits } = useDisplayPrefs();
   const category = categoryById(row.categoryId);
   if (!category) return null;
   const name = categoryName(category, locale);
-  const money = (v: number) => `⁦${formatAmount(v, data.currency, { digits })}⁩`;
+  const money = (v: number) => `⁦${formatAmount(v, definition(data.currency), { digits })}⁩`;
   const over = isOver(row);
   const range = monthRange(data.month);
 
@@ -94,11 +94,12 @@ export function BudgetsView({
   salaryAfterMinor,
 }: {
   data: MonthBudgets;
-  currencies: Currency[];
+  currencies: string[];
   salaryAfterMinor: number | null;
 }) {
   const t = useTranslations("Budgets");
   const nav = useTranslations("Nav");
+  const { definition } = useRuntimeBalances();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -109,24 +110,24 @@ export function BudgetsView({
   const overCount = budgeted.filter(isOver).length;
   const left = data.totalLimitMinor - data.totalSpentMinor;
   const hasBudgets = budgeted.length > 0;
-  const edit = () => openBudgets({ data, salaryAfterMinor });
+  const edit = () => { if (!definition(data.currency).disabled) openBudgets({ data, salaryAfterMinor }); };
 
   return (
     <>
       <ScreenHeader title={nav("budgets")} month>
         <p className="text-[15px] text-shell-muted">{t("spent")}</p>
-        <p className={`mt-0.5 leading-tight font-bold tracking-tight ${formatAmount(data.totalSpentMinor, data.currency).length > 16 ? "text-xl" : "text-[34px]"}`}>
+        <p className={`mt-0.5 leading-tight font-bold tracking-tight ${formatAmount(data.totalSpentMinor, definition(data.currency)).length > 16 ? "text-xl" : "text-[34px]"}`}>
           <Amount minor={data.totalSpentMinor} currency={data.currency} />
         </p>
         <p className="mt-0.5 text-[15px] text-shell-muted">
           {hasBudgets ? (
             left >= 0 ? (
               t("spentOf", {
-                limit: `⁦${formatAmount(data.totalLimitMinor, data.currency)}⁩`,
-                left: `⁦${formatAmount(left, data.currency)}⁩`,
+                limit: `⁦${formatAmount(data.totalLimitMinor, definition(data.currency))}⁩`,
+                left: `⁦${formatAmount(left, definition(data.currency))}⁩`,
               })
             ) : (
-              t("overBy", { amount: `⁦${formatAmount(-left, data.currency)}⁩` })
+              t("overBy", { amount: `⁦${formatAmount(-left, definition(data.currency))}⁩` })
             )
           ) : (
             t("noBudgetsMonth")
@@ -150,7 +151,7 @@ export function BudgetsView({
           <EmptyState
             title={t("emptyTitle")}
             body={t("emptyBody")}
-            action={<Button onClick={edit}>{t("set")}</Button>}
+            action={<Button onClick={edit} disabled={definition(data.currency).disabled}>{t("set")}</Button>}
           />
         ) : (
           <>
@@ -177,7 +178,7 @@ export function BudgetsView({
                 </ul>
               </section>
             ) : null}
-            <Button variant="outline" size="lg" onClick={edit}>
+            <Button variant="outline" size="lg" onClick={edit} disabled={definition(data.currency).disabled}>
               {t("edit")}
             </Button>
           </>

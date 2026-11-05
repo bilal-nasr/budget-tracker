@@ -5,14 +5,14 @@ import { useLocale, useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shell/empty-state";
 import { deletePendingPayment } from "@/features/pending-payments/actions";
 import { pendingErrorKey } from "@/features/pending-payments/errors";
 import type { PendingPayment } from "@/features/pending-payments/schema";
 import { todayIn } from "@/features/transactions/group";
-import { CURRENCIES, sumMinor } from "@/lib/money";
+import { sumMinor } from "@/lib/money";
 import { Link } from "@/i18n/navigation";
 import { PendingReceiptHistory } from "./pending-receipt-history";
 
@@ -24,7 +24,7 @@ const ConfirmSheet = dynamic(() => import("@/components/ui/confirm-sheet").then(
 export function PendingPaymentsView({ payments }: { payments: PendingPayment[] }) {
   const t = useTranslations("PendingPayments");
   const locale = useLocale();
-  const { timezone } = useAppData();
+  const { timezone, currencies } = useRuntimeBalances();
   const [sheet, setSheet] = useState<{ mode: "create" | "edit" | "receive" | "delete"; id?: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function PendingPaymentsView({ payments }: { payments: PendingPayment[] }
       {!payments.length ? <EmptyState title={t("emptyTitle")} body={t("emptyBody")} action={<Button onClick={() => setSheet({ mode: "create" })}><Plus aria-hidden />{t("add")}</Button>} /> : <>
         {outstanding.length ? <section aria-label={t("outstanding")} className="flex flex-col gap-2 border-b border-border pb-4">
           <h2 className="text-[17px] font-semibold">{t("outstanding")}</h2>
-          {CURRENCIES.filter((currency) => outstanding.some((item) => item.currency === currency)).map((currency) => {
+          {currencies.map((currency) => currency.code).filter((currency) => outstanding.some((item) => item.currency === currency)).map((currency) => {
             let total: number;
             try { total = sumMinor(outstanding.filter((item) => item.currency === currency).map((item) => item.remainingMinor)); }
             catch { return <p key={currency} role="status" className="text-sm">{currency}: {t("totalsUnavailable")}</p>; }

@@ -1,3 +1,4 @@
+import { requireCurrency, SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
 import {
@@ -31,7 +32,7 @@ describe("expense item input", () => {
     });
 
   it("rejects financial ownership, currency and hierarchy on a descriptive item", () => {
-    for (const key of ["userId", "walletId", "currency", "items", "parentId", "categoryId"]) {
+    for (const key of ["userId", "balanceId", "currency", "items", "parentId", "categoryId"]) {
       expect(expenseItemInputSchema.safeParse({ ...item(1), [key]: "forged" }).success).toBe(false);
     }
   });
@@ -88,31 +89,31 @@ describe("summarizeBreakdown", () => {
 
 describe("parseExpenseItemDrafts", () => {
   it("parses Arabic-Indic money through the currency money parser", () => {
-    expect(parseExpenseItemDrafts("USD", 5000, [draft("٢٠٫٠٠", "  رصيد الهاتف  ")]))
+    expect(parseExpenseItemDrafts(requireCurrency("USD", SEED_CURRENCY_DEFINITIONS), 5000, [draft("٢٠٫٠٠", "  رصيد الهاتف  ")]))
       .toEqual({
         valid: true,
         items: [{ description: "رصيد الهاتف", amountMinor: 2000 }],
         summary: { valid: true, itemizedMinor: 2000, remainderMinor: 3000 },
       });
-    expect(parseExpenseItemDrafts("LBP", 5000, [draft("١٬٢٠٠")]).valid).toBe(true);
-    expect(parseExpenseItemDrafts("LBP", 5000, [draft("1.5")]).valid).toBe(false);
+    expect(parseExpenseItemDrafts(requireCurrency("LBP", SEED_CURRENCY_DEFINITIONS), 5000, [draft("١٬٢٠٠")]).valid).toBe(true);
+    expect(parseExpenseItemDrafts(requireCurrency("LBP", SEED_CURRENCY_DEFINITIONS), 5000, [draft("1.5")]).valid).toBe(false);
   });
 
   it("never silently drops a blank, incomplete, zero or invalid line", () => {
     for (const row of [draft(""), draft("20", " "), draft("0"), draft("1."), draft("-20"), draft("1e2")]) {
-      expect(parseExpenseItemDrafts("USD", 5000, [draft(), { ...row, key: "two" }]))
+      expect(parseExpenseItemDrafts(requireCurrency("USD", SEED_CURRENCY_DEFINITIONS), 5000, [draft(), { ...row, key: "two" }]))
         .toMatchObject({ valid: false, reason: "invalidItem" });
     }
   });
 
   it("recomputes parent validity, remainder, excess and the item limit", () => {
-    expect(parseExpenseItemDrafts("USD", null, []).valid).toBe(false);
-    expect(parseExpenseItemDrafts("USD", 3000, [draft()])).toMatchObject({
+    expect(parseExpenseItemDrafts(requireCurrency("USD", SEED_CURRENCY_DEFINITIONS), null, []).valid).toBe(false);
+    expect(parseExpenseItemDrafts(requireCurrency("USD", SEED_CURRENCY_DEFINITIONS), 3000, [draft()])).toMatchObject({
       valid: true, summary: { remainderMinor: 1000 },
     });
-    expect(parseExpenseItemDrafts("USD", 1000, [draft()]))
+    expect(parseExpenseItemDrafts(requireCurrency("USD", SEED_CURRENCY_DEFINITIONS), 1000, [draft()]))
       .toEqual({ valid: false, reason: "exceedsParent" });
-    expect(parseExpenseItemDrafts("USD", 5000, Array.from({ length: 51 }, (_, i) => ({
+    expect(parseExpenseItemDrafts(requireCurrency("USD", SEED_CURRENCY_DEFINITIONS), 5000, Array.from({ length: 51 }, (_, i) => ({
       ...draft("0.01"), key: String(i),
     }))).valid).toBe(false);
   });

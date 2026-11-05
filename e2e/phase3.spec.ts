@@ -5,14 +5,19 @@ import { expectNoHorizontalOverflow } from "./support";
 
 const addButton = (page: Page) => page.getByRole("button", { name: "Add", exact: true }).filter({ visible: true });
 
-test("wallets are grouped by currency with separate totals", async ({ page }) => {
+test("global Currency view shows the same wallets without combined totals", async ({ page }) => {
   await page.goto("/en/wallets");
-  await expect(page.getByRole("heading", { name: "USD", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "LBP", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "SYP", exact: true })).toBeVisible();
-  // Never a combined total: exactly one "Total" per currency group.
-  await expect(page.getByText(/^Total/)).toHaveCount(3);
-  await expectNoHorizontalOverflow(page);
+  const currency = page.getByRole("combobox", { name: "Display currency", exact: true });
+  const wallets = page.getByRole("list", { name: "Wallets", exact: true });
+  const names = await wallets.getByRole("button", { name: /^Edit / }).allTextContents();
+  expect(names.length).toBeGreaterThan(0);
+  for (const code of ["USD", "LBP", "SYP"]) {
+    await currency.selectOption(code);
+    await expect(wallets.getByRole("listitem")).toHaveCount(names.length);
+    await expect(wallets).not.toContainText("Balance unavailable");
+    await expect(page.getByText(/^Total/)).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+  }
 });
 
 test("home shows money per currency, recent activity and wallets", async ({ page }) => {
@@ -35,13 +40,13 @@ for (const locale of ["en", "ar"] as const) {
     await expect(sheet).toBeVisible();
     await expect(sheet.getByRole("radio", { name: ar ? "كل المحافظ" : "All wallets" })).toHaveAttribute("aria-checked", "true");
     await page.screenshot({ path: testInfo.outputPath(`activity-filters-${locale}.png`), animations: "disabled" });
-    await sheet.getByRole("radio", { name: "Bank · USD" }).click();
+    await sheet.getByRole("radio", { name: "Bank · USD", exact: true }).click();
     await sheet.getByRole("button", { name: ar ? "تطبيق" : "Apply", exact: true }).click();
-    await expect(page).toHaveURL(/walletId=/);
+    await expect(page).toHaveURL(/balanceId=/);
     await expect(sheet).toBeHidden();
     // Reopening re-syncs from the URL.
     await open.click();
-    await expect(page.getByRole("dialog").getByRole("radio", { name: "Bank · USD" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("dialog").getByRole("radio", { name: "Bank · USD", exact: true })).toHaveAttribute("aria-checked", "true");
     await expectNoHorizontalOverflow(page);
   });
 }
@@ -125,7 +130,7 @@ test("add sheet: switching to LBP drops decimals and shows a 000 key", async ({ 
   const dialog = page.getByRole("dialog");
   for (const key of ["1", ".", "5"]) await dialog.getByRole("button", { name: key, exact: true }).click();
   await dialog.getByRole("button", { name: /USD/ }).click();
-  await dialog.getByRole("radio", { name: /LBP/ }).click();
+  await dialog.getByRole("combobox", { name: "Wallet currency", exact: true }).selectOption({ label: "LBP" });
   await expect(dialog.getByLabel("Amount")).not.toContainText(".");
   await expect(dialog.getByRole("button", { name: "000", exact: true })).toBeVisible();
 });
@@ -139,35 +144,31 @@ test("arabic activity: RTL, amounts stay LTR and aligned", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
-test("archived wallets are listed separately and can be restored", async ({ page }) => {
+test("deleted wallets stay out of ordinary lists and the Add picker", async ({ page }) => {
   await page.goto("/en/wallets");
-  const toggle = page.getByRole("button", { name: "Archived wallets (1)" });
-  await expect(toggle).toBeVisible();
-  await expect(page.getByText("Old savings")).toHaveCount(0);
-  await toggle.click();
-  await page.getByRole("button", { name: /Old savings/ }).click();
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Restore wallet" })).toBeVisible();
-  // Archived wallets never count toward totals or the Add wallet picker.
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Archive wallet" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Old savings/ })).toHaveCount(0);
+  await addButton(page).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("combobox", { name: "Wallet", exact: true }).getByRole("option", { name: /Old savings/ })).toHaveCount(0);
 });
 
-test("archived wallet can be deleted after a confirmation (preview reports it cannot save)", async ({ page }) => {
+test("wallet deletion inspection blocks preview confirmation", async ({ page }) => {
   await page.goto("/en/wallets");
-  await page.getByRole("button", { name: "Archived wallets (1)" }).click();
-  await page.getByRole("button", { name: /Old savings/ }).click();
+  await page.getByRole("button", { name: "Edit Syrian bank", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete wallet permanently", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Delete wallet" }).click();
-  await expect(dialog.getByText(/cannot be undone/i)).toBeVisible();
-  await dialog.getByRole("button", { name: "Delete wallet" }).click();
-  await expect(dialog.getByText(/preview without a database/i)).toBeVisible();
+  await expect(dialog.getByRole("alert")).toContainText(/preview/i);
+  await expect(dialog.getByRole("button", { name: "Settle and delete permanently", exact: true })).toBeDisabled();
+  await expectNoHorizontalOverflow(page);
 });
 
-test("active wallets have no delete button, only archive", async ({ page }) => {
+test("active wallets expose explicit deletion and editable defaults", async ({ page }) => {
   await page.goto("/en/wallets");
-  await page.getByRole("button", { name: /^Cash/ }).first().click();
+  await page.getByRole("button", { name: "Edit Pocket", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("button", { name: "Archive wallet" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Delete wallet" })).toHaveCount(0);
+  await expect(dialog.getByRole("combobox", { name: "Default currency", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Delete wallet permanently", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Archive wallet", exact: true })).toHaveCount(0);
 });
 
 test("category is a dropdown and Name is visible in the Add sheet", async ({ page }) => {

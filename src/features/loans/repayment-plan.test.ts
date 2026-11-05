@@ -5,7 +5,7 @@ import { loanCreateSchema, loanEditSchema } from "./schema";
 
 const input = {
   requestId: "20000000-0000-4000-8000-000000000001", name: "Monthly example", direction: "borrowed",
-  principalMinor: 200000, feeBps: 0, walletId: "20000000-0000-4000-8000-000000000002",
+  principalMinor: 200000, feeBps: 0, balanceId: "20000000-0000-4000-8000-000000000002",
   feeCategoryId: "20000000-0000-4000-8000-000000000003", openedOn: "2026-01-01", creationMode: "existing",
   principalPaidBeforeMinor: 0, feePaidBeforeMinor: 0,
 };
@@ -61,7 +61,7 @@ describe("loan repayment preferences", () => {
     }
   });
   it("distinguishes omitted edits from explicitly clearing both fields", () => {
-    const edit = { name: input.name, walletId: input.walletId, feeCategoryId: input.feeCategoryId };
+    const edit = { name: input.name, balanceId: input.balanceId, feeCategoryId: input.feeCategoryId };
     expect(loanEditSchema.parse(edit)).not.toHaveProperty("monthlyPaymentMinor");
     expect(loanEditSchema.parse({ ...edit, monthlyPaymentMinor: null, paymentCount: null })).toMatchObject({ monthlyPaymentMinor: null, paymentCount: null });
     expect(loanEditSchema.safeParse({ ...edit, monthlyPaymentMinor: null, paymentCount: 7 }).success).toBe(false);

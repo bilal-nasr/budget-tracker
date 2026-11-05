@@ -1,3 +1,4 @@
+import { readMinor } from "@/lib/money";
 import "server-only";
 import { demoFixed } from "@/lib/demo-data";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +15,7 @@ export async function getFixedExpenses(timezone: string): Promise<FixedExpense[]
   const [items, paid] = await Promise.all([
     supabase
       .from("fixed_expenses")
-      .select("id, name, amount_minor, wallet_id, category_id, due_day, items")
+      .select("id, name, amount_minor, balance_id, category_id, due_day, items")
       .order("position")
       .order("created_at"),
     supabase
@@ -37,8 +38,8 @@ export async function getFixedExpenses(timezone: string): Promise<FixedExpense[]
   return items.data.map((f) => ({
     id: f.id,
     name: f.name,
-    amountMinor: Number(f.amount_minor),
-    walletId: f.wallet_id,
+    amountMinor: readMinor(f.amount_minor),
+    balanceId: f.balance_id,
     categoryId: f.category_id,
     dueDay: f.due_day,
     paidOn: paidOn.get(f.id) ?? null,

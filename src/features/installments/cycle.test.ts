@@ -9,13 +9,13 @@ import {
 } from "./cycle";
 
 const base: InstallmentBase = {
-  id: "laptop", name: "Laptop", currency: "USD", walletId: "bank", categoryId: "shopping",
+  id: "laptop", name: "Laptop", currency: "USD", balanceId: "bank", categoryId: "shopping",
   totalMinor: 120000, paidBeforeMinor: 0, monthlyMinor: 10000, dueDay: 15,
 };
 const pay = (
   transactionId: string, amountMinor: number, salaryCycleId: string | null,
   occurredOn = "2026-11-01", createdAt = "2026-11-01T12:00:00.000000Z",
-): InstallmentPayment => ({ transactionId, amountMinor, salaryCycleId, occurredOn, createdAt, walletId: "bank", revision: 1 });
+): InstallmentPayment => ({ transactionId, amountMinor, salaryCycleId, occurredOn, createdAt, balanceId: "bank", revision: 1 });
 
 describe("actual salary receipt cycles", () => {
   it("keeps an old-calendar-month payment paid until another receipt, without resetting principal", () => {

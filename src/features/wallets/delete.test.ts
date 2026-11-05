@@ -2,7 +2,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), ctx: vi.fn(), invalidate: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.invalidate }));
-vi.mock("@/lib/supabase/action", () => ({ actionClient: mocks.ctx }));
+vi.mock("@/lib/supabase/action", async (original) => ({
+  ...await original<typeof import("@/lib/supabase/action")>(),
+  actionClient: mocks.ctx,
+}));
 vi.mock("@/features/profile/queries", () => ({ getProfile: vi.fn() }));
 import { deleteWallet } from "./actions";
 const id = "aaaaaaaa-0000-4000-8000-000000000001";

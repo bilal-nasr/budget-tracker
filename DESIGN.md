@@ -229,7 +229,7 @@ Eight SVG motifs (diamond, flower, nested squares, star, chevrons, four circles,
 `<bdi dir="ltr" class="amount">`: tabular, LTR, isolated, no wrap, in every locale. Names use plain `<bdi>`.
 
 ### AmountKeypad
-3-column grid, 6px gap, keys 56px tall, 12px radius, Sage Mist fill, 24px semibold, `dir="ltr"` so it never mirrors. Bottom row is "." (USD) or "000" (LBP), 0, then a backspace icon in muted ink.
+3-column grid, 6px gap, keys 56px tall, 12px radius, Sage Mist fill, 24px semibold, `dir="ltr"` so it never mirrors. Bottom row is "." for currencies with fractional precision or "000" for zero-decimal currencies, 0, then a backspace icon in muted ink.
 
 ### Segmented
 Native radio group in a Sage Mist track (16px radius, 4px padding); segments 44px, 15px; selected is Teal Shell with Shell Paper semibold text. Arrow keys follow RTL from the browser.
@@ -264,3 +264,11 @@ Short, functional: 300ms cell colour, 450ms sheet, `--ease-out-expo` token defin
 - **Don't** replace the tile bar with a smooth progress bar, or lead with a hero-metric card.
 - **Don't** add or compare USD with LBP in any visual treatment; each currency has its own bar.
 - **Don't** treat the dark tokens as final, or the planned tile-pattern band and tile ornament empty state as built (planned for Phase 2, absent from the build).
+
+## Currency and wallet interaction
+
+The Wallets screen presents a global Currency selector and one shared wallet list. Each row shows that currency's amount and the wallet's saved default; the selected display currency never changes that default. Every enabled currency is present in every ordinary wallet, using catalog order consistently. Reordering uses a dedicated 44px handle with pointer, keyboard pickup/move/drop/cancel and localized live announcements. A failed save restores the complete authoritative order.
+
+Money pickers first choose the wallet container, then its exact currency balance. Move excludes the source container; Exchange stays within it and excludes the source currency. The keypad and editable amounts follow the runtime 0–8-place definition. Format money as isolated LTR text in both locales, without a combined currency total. Kitchen-sink samples include an eight-place BTC definition.
+
+Currency disable presents explicit blockers or a confirmation before switching defaults. Re-enable retains identities. Permanent wallet deletion presents each nonzero balance and its required same-currency counterpart, including negative balances, with one atomic confirmation. Disabled and deleted history remains readable. These screens must remain usable in Arabic RTL and English at 320px without horizontal overflow.

@@ -1,4 +1,6 @@
 "use client";
+import { useRouter } from "@/i18n/navigation";
+import { currencyIntent } from "@/lib/currency-intent";
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
@@ -7,298 +9,97 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
-import { archiveWallet, createWallet, deleteWallet, unarchiveWallet, updateWallet } from "@/features/wallets/actions";
-import type { Wallet, WalletKind } from "@/features/wallets/schema";
-import { CURRENCIES, CURRENCY_DECIMALS, parseAmount, toInputText, type Currency } from "@/lib/money";
+import { createWallet, setDefaultWalletBalance, updateWallet } from "@/features/wallets/actions";
+import type { WalletContainer, WalletKind } from "@/features/wallets/schema";
+import { parseAmount } from "@/lib/money";
+import type { CurrencyDefinition } from "@/lib/currency";
+import { CurrencySelector } from "./currency-selector";
+import { WalletDeleteSheet } from "./wallet-delete-sheet";
 
-export type WalletSheetState = { wallet: Wallet | null };
+export type WalletSheetState = { wallet: WalletContainer | null };
 
-export function WalletForm({
-  wallet,
-  onDone,
-  submitLabel,
-  onAddMoney,
-}: {
-  wallet: Wallet | null;
+export function WalletForm({ wallet, onDone, submitLabel, currencies: catalog, onAddMoney }: {
+  wallet: WalletContainer | null;
   onDone: () => void;
   submitLabel?: string;
-  /** Edit mode only: opens the Add sheet to put money into this wallet. */
-  onAddMoney?: (wallet: Wallet) => void;
+  /** Explicit catalog for onboarding, which sits outside AppDataProvider. */
+  currencies?: readonly CurrencyDefinition[];
+  onAddMoney?: (wallet: WalletContainer) => void;
 }) {
+  const router = useRouter();
   const t = useTranslations("Wallets");
-  const tCurrencies = useTranslations("Currencies");
   const app = useAppDataOptional();
-  const sources = (app?.wallets ?? []).filter((w) => !w.archived);
+  const currencies = (catalog ?? app?.enabledCurrencies ?? []).filter((item) => !item.disabled);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(wallet?.name ?? "");
   const [kind, setKind] = useState<WalletKind>(wallet?.kind ?? "cash");
-  const [currency, setCurrency] = useState<Currency>(wallet?.currency ?? "USD");
-  const [owe, setOwe] = useState((wallet?.openingBalanceMinor ?? 0) < 0);
-  const [amount, setAmount] = useState(
-    wallet ? toInputText(wallet.openingBalanceMinor, wallet.currency) : "",
-  );
-  // Create mode only: is the starting balance new money, or taken from another wallet?
-  const [fromWallet, setFromWallet] = useState(false);
-  const [sourceId, setSourceId] = useState(sources[0]?.id ?? "");
-  const [takenText, setTakenText] = useState("");
-  const [confirmArchive, setConfirmArchive] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const originalDefault = wallet?.balances.find((balance) => balance.id === wallet.defaultBalanceId);
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const currency = currencies.find((item) => item.code === (selectedCode ?? originalDefault?.currency)) ?? currencies[0];
+  const [owe, setOwe] = useState(false);
+  const [amountDraft, setAmountDraft] = useState<{ text: string; code: string; decimalPlaces: number } | null>(null);
+  const draftMatchesCurrency = amountDraft?.code === currency?.code && amountDraft?.decimalPlaces === currency?.decimalPlaces;
+  // Discard incompatible drafts so later catalog refreshes cannot revive them.
+  if (amountDraft && !draftMatchesCurrency) setAmountDraft(null);
+  const amount = draftMatchesCurrency ? amountDraft?.text ?? "" : "";
   const [error, setError] = useState<string | null>(null);
-
-  const parsedAmount = amount.trim() === "" ? 0 : parseAmount(amount, currency);
+  const parsedAmount = !wallet && amount.trim() !== "" ? currency ? parseAmount(amount, currency) : null : 0;
   const nameOk = name.trim().length > 0;
-  const amountError = parsedAmount === null ? t("errorAmount") : null;
-  const source = sources.find((s) => s.id === sourceId);
-  const canFund = !wallet && !owe && parsedAmount !== null && parsedAmount > 0 && sources.length > 0;
-  const funding = canFund && fromWallet;
-  const sameCurrency = source !== undefined && source.currency === currency;
-  const takenMinor = !funding || !source ? null : sameCurrency ? parsedAmount : takenText.trim() === "" ? null : parseAmount(takenText, source.currency);
-  const takenError = funding && !sameCurrency && takenText.trim() !== "" && takenMinor === null ? t("errorAmount") : null;
-  const fundingReady = !funding || (source !== undefined && takenMinor !== null && takenMinor > 0);
-
-  const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
-    setError(null);
-    startTransition(async () => {
-      const result = await action();
-      if (!result.ok) {
-        setError(
-          result.error === "notConfigured"
-            ? t("errorPreview")
-            : result.error === "hasTransactions"
-              ? t("errorHasTransactions")
-              : result.error === "inUse"
-                ? t("errorInUse")
-                : t("errorFailed"),
-        );
-        return;
-      }
-      onDone();
-    });
-  };
+  const selectedBalance = wallet?.balances.find((balance) => balance.currency === currency?.code && !balance.detached);
+  const ready = nameOk && !!currency && parsedAmount !== null && (!wallet || !!selectedBalance) && !wallet?.deleted;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!nameOk || parsedAmount === null || !fundingReady) return;
-    const input = {
-      name: name.trim(),
-      kind,
-      currency,
-      openingBalanceMinor: owe ? -parsedAmount : parsedAmount,
-    };
-    run(() =>
-      wallet
-        ? updateWallet(wallet.id, input)
-        : funding && source && takenMinor !== null
-          ? createWallet(input, { fromWalletId: source.id, takenMinor })
-          : createWallet(input),
-    );
+    if (!ready || !currency || parsedAmount === null) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        let result: { ok: boolean; error?: string };
+        if (!wallet) {
+          result = await createWallet({ expectedUnits: currencyIntent(currency), name: name.trim(), kind, currency: currency.code, openingBalanceMinor: owe ? -parsedAmount : parsedAmount });
+        } else {
+          result = name.trim() === wallet.name && kind === wallet.kind ? { ok: true } : await updateWallet(wallet.id, { name: name.trim(), kind });
+          if (result.ok && selectedBalance && selectedBalance.id !== wallet.defaultBalanceId) result = await setDefaultWalletBalance(wallet.id, selectedBalance.id);
+        }
+        if (!result.ok) {
+        if (result.error === "conflict") { setAmountDraft(null); router.refresh(); } setError(result.error === "notConfigured" ? t("errorPreview") : t("errorFailed")); return; }
+        onDone();
+      } catch { setError(t("errorFailed")); }
+    });
   };
 
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-      <TextField
-        label={t("name")}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={40}
-        placeholder={t("namePlaceholder")}
-        autoComplete="off"
-        required
-      />
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">{t("kind")}</span>
-        <Segmented
-          label={t("kind")}
-          value={kind}
-          onChange={setKind}
-          options={[
-            { value: "cash", label: t("cash") },
-            { value: "bank", label: t("bank") },
-            { value: "card", label: t("card") },
-          ]}
-        />
+  return <form onSubmit={submit} className="flex min-w-0 flex-col gap-4" noValidate>
+    <TextField label={t("name")} value={name} onChange={(event) => setName(event.target.value)} maxLength={40} placeholder={t("namePlaceholder")} autoComplete="off" required disabled={pending} />
+    <div className="flex flex-col gap-1.5"><span className="text-sm font-medium">{t("kind")}</span>
+      <Segmented label={t("kind")} value={kind} onChange={setKind} options={[{ value: "cash", label: t("cash") }, { value: "bank", label: t("bank") }, { value: "card", label: t("card") }]} />
+    </div>
+    <CurrencySelector label={t("defaultCurrency")} currencies={currencies} value={currency?.code ?? ""} disabled={pending}
+      onChange={(code) => { setSelectedCode(code); setAmountDraft(null); }} />
+    <p className="text-sm text-muted-foreground">{t(wallet ? "defaultHelp" : "globalCreateHelp")}</p>
+    {!wallet ? <>
+      <div className="flex flex-col gap-1.5"><span className="text-sm font-medium">{t("opening")}</span>
+        <Segmented label={t("opening")} value={owe ? "owe" : "have"} onChange={(next) => setOwe(next === "owe")} options={[{ value: "have", label: t("have") }, { value: "owe", label: t("owe") }]} />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">{t("currency")}</span>
-        {wallet ? <p className="min-h-11 py-2.5 font-semibold"><bdi dir="ltr">{currency}</bdi></p> : <Segmented
-          label={t("currency")}
-          value={currency}
-          onChange={(next) => {
-            if (next !== currency) {
-              setAmount("");
-              setTakenText("");
-            }
-            setCurrency(next);
-          }}
-          options={CURRENCIES.map((value) => ({ value, label: <bdi dir="ltr">{value}</bdi> }))}
-        />}
-        {wallet ? <p className="text-[13px] text-muted-foreground">{t("currencyLocked")}</p> : null}
-        {!wallet ? <p className="text-[13px] text-muted-foreground">{tCurrencies("reenterAmount", { currency })}</p> : null}
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">{t("opening")}</span>
-        <Segmented
-          label={t("opening")}
-          value={owe ? "owe" : "have"}
-          onChange={(next) => setOwe(next === "owe")}
-          options={[
-            { value: "have", label: t("have") },
-            { value: "owe", label: t("owe") },
-          ]}
-        />
-      </div>
-      <TextField
-        label={t("amount")}
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        inputMode={CURRENCY_DECIMALS[currency] === 0 ? "numeric" : "decimal"}
-        placeholder="0"
-        autoComplete="off"
-        dir="ltr"
-        error={amountError}
-      />
-
-      {error ? (
-        <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">
-          {error}
-        </p>
-      ) : null}
-
-      {canFund ? (
-        <div className="flex flex-col gap-3 rounded-xl border border-border p-3.5">
-          <span id="w-source" className="text-sm font-medium">{t("sourceTitle")}</span>
-          <Segmented
-            label={t("sourceTitle")}
-            value={fromWallet ? "wallet" : "new"}
-            onChange={(next) => setFromWallet(next === "wallet")}
-            options={[
-              { value: "new", label: t("sourceNew") },
-              { value: "wallet", label: t("sourceWallet") },
-            ]}
-          />
-          {fromWallet ? (
-            <>
-              <div role="radiogroup" aria-label={t("sourcePick")} className="flex flex-wrap gap-2">
-                {sources.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={s.id === sourceId}
-                    onClick={() => {
-                      if (source?.currency !== s.currency) setTakenText("");
-                      setSourceId(s.id);
-                    }}
-                    className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent"
-                  >
-                    <bdi>{s.name}</bdi> · {s.currency}
-                  </button>
-                ))}
-              </div>
-              {source && !sameCurrency ? (
-                <div className="flex flex-col gap-1">
-                  <TextField
-                    label={t("takenFrom", { currency: source.currency })}
-                    value={takenText}
-                    onChange={(e) => setTakenText(e.target.value)}
-                    inputMode={CURRENCY_DECIMALS[source.currency] === 0 ? "numeric" : "decimal"}
-                    placeholder="0"
-                    autoComplete="off"
-                    dir="ltr"
-                    error={takenError}
-                  />
-                  <p className="text-[13px] text-muted-foreground">{t("takenHelp")}</p>
-                </div>
-              ) : (
-                <p className="text-[13px] text-muted-foreground">{t("takenSame")}</p>
-              )}
-            </>
-          ) : (
-            <p className="text-[13px] text-muted-foreground">{t("newMoneyHelp")}</p>
-          )}
-        </div>
-      ) : null}
-
-      <Button type="submit" size="lg" disabled={pending || !nameOk || parsedAmount === null || !fundingReady} className="w-full">
-        {submitLabel ?? (wallet ? t("saveChanges") : t("create"))}
-      </Button>
-
-      {wallet && !wallet.archived && onAddMoney ? (
-        <Button type="button" variant="outline" onClick={() => onAddMoney(wallet)}>
-          {t("addMoney")}
-        </Button>
-      ) : null}
-
-      {wallet?.archived ? (
-        <>
-          <Button type="button" variant="outline" disabled={pending} onClick={() => run(() => unarchiveWallet(wallet.id))}>
-            {t("restore")}
-          </Button>
-          {confirmDelete ? (
-            <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
-              <p className="text-[15px]">{t("deleteConfirm")}</p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>
-                  {t("cancel")}
-                </Button>
-                <Button type="button" variant="destructive" disabled={pending} onClick={() => run(() => deleteWallet(wallet.id))}>
-                  {t("deleteWallet")}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button type="button" variant="ghost" className="text-over" onClick={() => setConfirmDelete(true)}>
-              {t("deleteWallet")}
-            </Button>
-          )}
-        </>
-      ) : wallet ? (
-        confirmArchive ? (
-          <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
-            <p className="text-[15px]">{t("archiveConfirm")}</p>
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" onClick={() => setConfirmArchive(false)}>
-                {t("cancel")}
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={pending}
-                onClick={() => run(() => archiveWallet(wallet.id))}
-              >
-                {t("archive")}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button type="button" variant="ghost" onClick={() => setConfirmArchive(true)}>
-            {t("archive")}
-          </Button>
-        )
-      ) : null}
-    </form>
-  );
+      <TextField label={t("amount")} value={amount} onChange={(event) => setAmountDraft(currency ? { text: event.target.value, code: currency.code, decimalPlaces: currency.decimalPlaces } : null)} inputMode={currency?.decimalPlaces === 0 ? "numeric" : "decimal"} placeholder="0" autoComplete="off" dir="ltr" error={parsedAmount === null ? t("errorAmount") : null} disabled={pending} />
+    </> : null}
+    {error ? <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p> : null}
+    <Button type="submit" size="lg" disabled={pending || !ready} className="w-full">{submitLabel ?? t(wallet ? "saveChanges" : "create")}</Button>
+    {wallet && !wallet.deleted && !wallet.needsAttention && onAddMoney ? <Button type="button" variant="outline" disabled={pending} onClick={() => onAddMoney(wallet)}>{t("addMoney")}</Button> : null}
+  </form>;
 }
 
-export function WalletSheet({
-  state,
-  onClose,
-  onAddMoney,
-}: {
+export function WalletSheet({ state, onClose, onAddMoney }: {
   state: WalletSheetState | null;
   onClose: () => void;
-  onAddMoney?: (wallet: Wallet) => void;
+  onAddMoney?: (wallet: WalletContainer) => void;
 }) {
   const t = useTranslations("Wallets");
-  return (
-    <SheetShell
-      open={state !== null}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      title={state?.wallet ? t("editTitle") : t("newTitle")}
-    >
-      {state ? <WalletForm key={state.wallet?.id ?? "new"} wallet={state.wallet} onDone={onClose} onAddMoney={onAddMoney} /> : null}
-    </SheetShell>
-  );
+  const app = useAppDataOptional();
+  const wallet = state?.wallet ? app?.walletById(state.wallet.id) ?? state.wallet : null;
+  const [deleting, setDeleting] = useState<string | null>(null);
+  if (wallet && !wallet.deleted && deleting === wallet.id && app) return <WalletDeleteSheet key={wallet.id} wallet={wallet} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); onClose(); }} />;
+  return <SheetShell open={state !== null} onOpenChange={(open) => { if (!open) onClose(); }} title={wallet ? t("editTitle") : t("newTitle")}>
+    {state ? <WalletForm key={wallet?.id ?? "new"} wallet={wallet} onDone={onClose} onAddMoney={onAddMoney} /> : null}
+    {wallet && !wallet.deleted && app ? <Button variant="destructive" className="mt-4 w-full" onClick={() => setDeleting(wallet.id)}>{t("deleteWallet")}</Button> : null}
+  </SheetShell>;
 }

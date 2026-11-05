@@ -11,14 +11,14 @@ import {
 import { transactionWriteInputSchema, type TransactionWriteInput } from "./mutation-input";
 
 const id = "aaaaaaaa-0000-4000-8000-000000000001";
-const walletId = "aaaaaaaa-0000-4000-8000-000000000002";
+const balanceId = "aaaaaaaa-0000-4000-8000-000000000002";
 const categoryId = "aaaaaaaa-0000-4000-8000-000000000003";
 const input: TransactionWriteInput = {
-  kind: "expense", occurredOn: "2026-11-04", walletId, categoryId,
+  kind: "expense", occurredOn: "2026-11-04", balanceId: balanceId, categoryId,
   amountMinor: 5000, note: "  Sister  ", items: [{ description: " Phone credits ", amountMinor: 2000 }],
 };
 const parentInput = {
-  kind: "expense", occurredOn: "2026-11-04", walletId, categoryId, amountMinor: 5000, note: "Sister",
+  kind: "expense", occurredOn: "2026-11-04", balanceId: balanceId, categoryId, amountMinor: 5000, note: "Sister",
 };
 const mutation = { id, revision: 8 };
 
@@ -41,7 +41,7 @@ describe("canonical transaction input", () => {
       { ...input, items: [{ description: "x", amountMinor: 5001 }] },
       { ...input, items: [{ description: "x", amountMinor: 1, currency: "USD" }] },
       { ...input, settlement: { tenderMinor: 6000, changes: [], source: "forged" } },
-      { ...input, settlement: { tenderMinor: 6000, changes: [{ walletId, amountMinor: 0 }] } },
+      { ...input, settlement: { tenderMinor: 6000, changes: [{ balanceId, amountMinor: 0 }] } },
       { ...input, kind: "income", items: [], settlement: { tenderMinor: 5000, changes: [] } },
     ]) expect(transactionWriteInputSchema.safeParse(value).success).toBe(false);
   });
@@ -80,22 +80,22 @@ describe("create/update transaction core", () => {
 
   it("forwards the exact validated settlement snapshot in the same aggregate RPC", async () => {
     const settlement = { tenderMinor: 6000, changes: [
-      { walletId, amountMinor: 500 },
-      { walletId: id, amountMinor: 447500 },
+      { balanceId, amountMinor: 500 },
+      { balanceId: id, amountMinor: 447500 },
     ] };
     await createTransactionCore({ ...input, settlement }, id);
-    expect(mock.rpc.mock.calls[0][1].p_settlement).toEqual(settlement);
+    expect(mock.rpc.mock.calls[0][1].p_settlement).toEqual({ tenderMinor: 6000, changes: settlement.changes.map(({ balanceId, amountMinor }) => ({ balanceId: balanceId, amountMinor })) });
     expect(mock.rpc.mock.calls[0][1].p_input).not.toHaveProperty("settlement");
     expect(mock.rpc.mock.calls[0][1].p_input).not.toHaveProperty("items");
     expect(mock.rpc).toHaveBeenCalledTimes(1);
   });
 
   it("forwards an explicit purchase currency without deriving a rate or amount", async () => {
-    const settlement = { tenderMinor: 500, changes: [{ walletId, amountMinor: 110000 }] };
+    const settlement = { tenderMinor: 500, changes: [{ balanceId, amountMinor: 110000 }] };
     await createTransactionCore({ ...input, amountMinor: 340000, costCurrency: "LBP", settlement }, id);
     expect(mock.rpc.mock.calls[0][1]).toMatchObject({
       p_input: { amountMinor: 340000, costCurrency: "LBP" },
-      p_settlement: settlement,
+      p_settlement: { tenderMinor: settlement.tenderMinor, changes: settlement.changes.map(({ balanceId, ...change }) => ({ ...change, balanceId: balanceId })) },
     });
     expect(mock.rpc.mock.calls[0][1].p_input).not.toHaveProperty("rate");
   });
@@ -129,7 +129,7 @@ describe("create/update transaction core", () => {
   });
 
   it("does not claim success for missing/malformed/foreign mutation results", async () => {
-    for (const data of [null, [], [mutation, mutation], [{ id, revision: 0 }], [{ id, revision: "8" }], [{ id: walletId, revision: 8 }]]) {
+    for (const data of [null, [], [mutation, mutation], [{ id, revision: 0 }], [{ id, revision: "8" }], [{ id: balanceId, revision: 8 }]]) {
       mock.rpc.mockResolvedValue({ data, error: null });
       expect(await createTransactionCore(input, id)).toEqual({ ok: false, error: "failed" });
     }
@@ -193,8 +193,16 @@ describe("finite transaction mutation errors", () => {
     [{ message: "salary cycle changed" }, "cycleChanged"], [{ message: "installment payment changed" }, "paymentChanged"],
     [{ message: "transaction request already used" }, "requestAlreadyUsed"], [{ message: "loan.managedTransaction" }, "managedTransaction"],
     [{ code: "22023", message: "invalid transaction input" }, "invalid"],
+    [{ message: "balance.unavailable" }, "walletUnavailable"], [{ message: "balance.detached" }, "walletUnavailable"],
+    [{ message: "wallet.deleted" }, "walletUnavailable"], [{ message: "wallet.needsAttention" }, "walletUnavailable"],
+    [{ message: "currency.disabled" }, "walletUnavailable"], [{ message: "currency.unavailable" }, "walletUnavailable"],
     [{ message: "unexpected private database detail" }, "failed"],
   ] as const)("maps %j to %s without exposing database text", (error, expected) => {
     expect(transactionMutationError(error)).toBe(expected);
   });
+});
+
+it("transports exactly the caller's cost, tender and return units with its transaction mutation",async()=>{
+ const draft={...input,expectedUnits:{USD:2,LBP:0,TOKEN8:8}};
+ await createTransactionCore(draft,id);expect(mock.actionClient).toHaveBeenCalledWith(draft.expectedUnits);expect(mock.rpc.mock.calls[0][1].p_input).not.toHaveProperty("expectedUnits");
 });

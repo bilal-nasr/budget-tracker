@@ -8,18 +8,18 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }));
 import { getCycleSnapshot, parseCycleSnapshot, parseCycleSummary } from "./cycle-queries";
 
 const itemId = "a1000000-0000-4000-8000-000000000001";
-const walletId = "a2000000-0000-4000-8000-000000000001";
+const balanceId = "a2000000-0000-4000-8000-000000000001";
 const categoryId = "a3000000-0000-4000-8000-000000000001";
 const receiptId = "a4000000-0000-4000-8000-000000000001";
 const payId = "a5000000-0000-4000-8000-000000000001";
 const oldId = "a5000000-0000-4000-8000-000000000002";
-const storedItem = { id: itemId, name: "Synthetic laptop", currency: "USD", wallet_id: walletId, category_id: categoryId,
+const storedItem = { id: itemId, name: "Synthetic laptop", currency: "USD", balance_id: balanceId, category_id: categoryId,
   total_minor: "100000", paid_before_minor: "20000", monthly_minor: "10000", due_day: 15, position: 1 };
-const currentPayment = { id: payId, installment_id: itemId, wallet_id: walletId, amount_minor: "4000", occurred_on: "2026-09-01",
+const currentPayment = { id: payId, installment_id: itemId, balance_id: balanceId, amount_minor: "4000", occurred_on: "2026-09-01",
   created_at: "2026-11-04T10:00:00.000002+00:00", salary_cycle_id: receiptId, revision: 1,
   kind: "expense", currency: "USD", category_id: categoryId, note: "Synthetic payment name", deleted_at: null,
-  to_wallet_id: null, to_amount_minor: null, source: "installment", fixed_expense_id: null, loan_id: null, loan_flow: null,
-  tender_minor: null, change_wallet_id: null, change_minor: null, change_currency: null,
+  to_balance_id: null, to_amount_minor: null, source: "installment", fixed_expense_id: null, loan_id: null, loan_flow: null,
+  tender_minor: null, change_balance_id: null, change_minor: null, change_currency: null,
   change_rate_base: null, change_rate_quote: null, change_rate_numerator: null, change_rate_denominator: null,
   expense_items: [] as { id: string; description: string; amount_minor: number | string; position: number }[] };
 const data = () => ({
@@ -81,8 +81,8 @@ describe("coherent installment snapshot", () => {
     expect(payment.revision).toBe(6);
     expect(payment.transaction).toMatchObject({
       id: payId, kind: "expense", note: "Synthetic payment name", revision: 6, source: "installment", installmentId: itemId,
-      amountMinor: 4000, currency: "USD", categoryId, walletId, loanId: null, loanFlow: null, fixedExpenseId: null,
-      toWalletId: null, toAmountMinor: null,
+      amountMinor: 4000, currency: "USD", categoryId, balanceId, loanId: null, loanFlow: null, fixedExpenseId: null,
+      toBalanceId: null, toAmountMinor: null,
       items: [
         { id: line1.id, description: "First part", amountMinor: 1500, position: 0 },
         { id: line2.id, description: "Second part", amountMinor: 2000, position: 1 },
@@ -157,4 +157,11 @@ describe("coherent installment snapshot", () => {
     });
     expect(snapshot.installments.find((i) => i.name === "Fridge")?.cycleStatus).toBe("paidOff");
   });
+});
+
+it("reads renamed exact-balance snapshot columns and custom historical currency without losing cycle facts",()=>{
+ const value=data();const canonical=JSON.parse(JSON.stringify(value).replaceAll('"USD"','"TOKEN8"'));
+ const result=parseCycleSnapshot(canonical).installments[0];
+ expect(result).toMatchObject({currency:"TOKEN8",balanceId,paidThisCycleMinor:4000,remainingMinor:66000});
+ expect(result.payments[0].transaction).toMatchObject({currency:"TOKEN8",balanceId,amountMinor:4000});
 });

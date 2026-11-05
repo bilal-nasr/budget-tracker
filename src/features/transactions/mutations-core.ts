@@ -16,6 +16,7 @@ const mutationRowsSchema = z.array(z.strictObject({
 })).length(1);
 
 const errorMessages = new Map<string, ActionError>([
+  ["currency.intentConflict", "conflict"],
   ["pending.exceedsRemaining", "exceedsRemaining"],
   ["pending.walletUnavailable", "walletUnavailable"],
   ["pending.conflict", "conflict"],
@@ -24,6 +25,12 @@ const errorMessages = new Map<string, ActionError>([
   ["breakdown currency locked", "breakdownCurrencyLocked"],
   ["transaction conflict", "conflict"],
   ["category unavailable", "categoryUnavailable"],
+  ["balance.unavailable", "walletUnavailable"],
+  ["balance.detached", "walletUnavailable"],
+  ["wallet.deleted", "walletUnavailable"],
+  ["wallet.needsAttention", "walletUnavailable"],
+  ["currency.disabled", "walletUnavailable"],
+  ["currency.unavailable", "walletUnavailable"],
   ["wallet unavailable", "walletUnavailable"],
   ["wallet not found", "walletUnavailable"],
   ["wallet is archived", "walletUnavailable"],
@@ -75,7 +82,7 @@ async function save(
     return { ok: false, error: "invalid" };
   }
   try {
-    const ctx = await actionClient();
+    const ctx = await actionClient(parsedInput.data.expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
     const { data, error } = await ctx.supabase.rpc("save_transaction",
       transactionSaveArgs(parsedId.data, expectedRevision, parsedInput.data));

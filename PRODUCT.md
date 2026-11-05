@@ -23,7 +23,7 @@ Anyone can create an account with email and password; it works once they confirm
 
 ## Product Purpose
 
-A personal budget tracker that makes logging income and expenses fast on a phone and shows, per month, how much was spent per category against a simple monthly limit, separately for USD, LBP and SYP.
+A personal budget tracker that makes logging income and expenses fast on a phone and shows, per month, how much was spent per category against a simple monthly limit, separately for each configured currency.
 
 Success means:
 - Logging an expense takes under 10 seconds from opening the app.
@@ -32,7 +32,7 @@ Success means:
 
 ## Positioning
 
-A calm, fast, bilingual (English/Arabic) tracker built for life with multiple currencies: every wallet holds one currency (USD, LBP or SYP), totals are never silently mixed, and supported reference conversions are clearly labelled. Simpler than envelope budgeting apps (YNAB-style "give every dollar a job"); deliberately so.
+A calm, fast, bilingual (English/Arabic) tracker built for life with multiple currencies: every wallet holds an exact balance for every enabled global currency, totals are never silently mixed, and supported reference conversions are clearly labelled. Simpler than envelope budgeting apps (YNAB-style "give every dollar a job"); deliberately so.
 
 ## Operating Context
 
@@ -44,7 +44,7 @@ A calm, fast, bilingual (English/Arabic) tracker built for life with multiple cu
 ## Capabilities and Constraints
 
 v1 scope:
-- Wallets (cash, bank, card), each in exactly one currency: USD, LBP or SYP. Opening balance; derived current balance.
+- Wallets (cash, bank, card), each covering the enabled global currency catalog. Opening balance; derived current balance.
 - Transactions: expense, income and transfers with actual sent/received amounts. Automatic Move calculations are restricted to USD/LBP; SYP exchanges use explicit actual amounts.
 - Categories (income/expense), seeded with editable bilingual defaults. Archive used categories to retain history, delete unused ones, and reassign live templates before removal. Existing category hierarchy is protected; hierarchy editing/reordering remains future scope.
 - Optional one-level expense items describe a parent payment without another debit or category allocation. An unitemized remainder is allowed.
@@ -58,7 +58,7 @@ v1 scope:
 - Installable PWA with an "Add expense" shortcut.
 
 Constraints:
-- Money is stored as integer minor units (USD cents, LBP whole lira, SYP whole pounds). Never floats. Never add different currencies. No automatic old/new SYP redenomination.
+- Money is stored as integer minor units with runtime precision from 0 to 8 decimal places (seeded USD cents, LBP whole lira and SYP whole pounds). Never floats. Never add different currencies. No automatic old/new SYP redenomination.
 - All data is private to its owner; Row Level Security on every table.
 - Open sign-up with email verification and password recovery (Supabase Auth). No owner allowlist. Persistent login uses a 30-day absolute session policy where configured; hosted Auth must be configured separately (see `docs/ARCHITECTURE.md` §3).
 - Every user-visible string ships in English and Arabic in the same change.
@@ -81,7 +81,7 @@ No real user data, testimonials, or assets. Do not fabricate any. Demo/seed data
 
 1. **Ten-second logging.** The add flow is the product. Every screen has a way to it within one tap.
 2. **One question per screen.** Each screen leads with one answer (e.g. "left to spend this month") and reveals detail on request — the reference app's main failure was showing everything at once.
-3. **Currencies stay honest.** USD, LBP and SYP are always shown separately; reference conversions never combine ledger totals.
+3. **Currencies stay honest.** Configured currencies are always shown separately; reference conversions never combine ledger totals.
 4. **Plain words.** "Spent", "Left", "Budget", "Move money" — no accounting or envelope jargon.
 5. **Phone first, always.** A feature is not done until it works at 360px wide, one-handed, in Arabic.
 
@@ -91,3 +91,11 @@ No real user data, testimonials, or assets. Do not fabricate any. Demo/seed data
 - Full RTL support; numbers and amounts never mirror.
 - Respect `prefers-reduced-motion` and `prefers-color-scheme`.
 - State is never conveyed by color alone (over-budget has an icon and text).
+
+## Global catalog behavior
+
+Currency setup is global, never attached or detached per wallet. A new enabled currency appears in all live and Needs-attention wallets at exact zero; a new wallet receives all enabled currency balances. Each wallet stores one default balance ID. Currency view changes presentation only. Catalog order is creation time then code; wallet order is shared across currency views and selectors.
+
+Move uses different wallet containers and explicit balance IDs. Exchange uses one container and different currencies. Amounts are literal ledger facts, with no synthesized totals, conversions or balance rows. Cashier, breakdowns, salary, fixed expenses, installments, loans, receivables and export retain their exact balance references and runtime precision.
+
+Disabling requires zero balances and no active blockers, switches affected defaults, and preserves history. Re-enabling preserves existing balance IDs and defaults. Unused currencies can be deleted after their zero references are removed safely. Deleting a wallet requires explicit same-currency settlement for all positive and negative nonzero rows in one atomic transaction; history keeps the retained IDs and name snapshots. Deleted/Needs-attention wallets and disabled currencies are unavailable for ordinary actions, while history remains accessible.

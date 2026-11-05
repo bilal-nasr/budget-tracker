@@ -6,7 +6,6 @@ import { expectNoHorizontalOverflow } from "./support";
 // This suite uses the existing read-only demo runner. Preview failures are
 // asserted explicitly; persistent repayment/void/replay behavior belongs to SQL
 // and the separately provisioned authenticated local concurrency checks.
-test.use({ viewport: { width: 390, height: 844 } });
 test.beforeEach(async ({ page }) => {
   // The development indicator overlaps short footer links at phone widths.
   // Isolate that developer-only overlay, never force clicks through application UI.
@@ -19,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 const catalogs = { en, ar };
 async function chooseCategory(page: Page, dialog: Locator, label: string) {
   await dialog.getByRole("combobox", { name: label }).click();
-  await page.getByRole("option").first().click();
+  await page.getByRole("listbox").getByRole("option").first().click();
 }
 
 for (const locale of ["en", "ar"] as const) {
@@ -83,7 +82,7 @@ for (const locale of ["en", "ar"] as const) {
     await page.goto(`/${locale}/loans?loanId=00000000-0000-4000-8000-000000007001`);
     await page.getByRole("dialog", { name: "Workshop loan", exact: true }).getByRole("button", { name: t.record, exact: true }).click();
     const dialog = page.getByRole("dialog", { name: t.record, exact: true });
-    await expect(dialog.getByRole("radio", { name: /LBP|SYP/ })).toHaveCount(0);
+    await expect(dialog.getByLabel((locale === "ar" ? ar : en).Add.walletCurrency, { exact: true }).locator("option")).toHaveText(["USD"]);
     const amount = dialog.getByLabel(t.amount, { exact: true });
     await amount.fill("672.51");
     await expect(dialog.getByRole("button", { name: t.recordPayment, exact: true })).toBeDisabled();

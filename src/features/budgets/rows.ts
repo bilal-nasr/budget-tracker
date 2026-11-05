@@ -1,5 +1,5 @@
 import type { Category } from "@/features/categories/schema";
-import { CURRENCIES, sumMinor, type Currency } from "@/lib/money";
+import { sumMinor } from "@/lib/money";
 import type { BudgetLimit, BudgetRow, CategorySpend, MonthBudgets } from "./schema";
 
 /**
@@ -8,7 +8,7 @@ import type { BudgetLimit, BudgetRow, CategorySpend, MonthBudgets } from "./sche
  */
 export function buildMonthBudgets(
   month: string,
-  currency: Currency,
+  currency: string,
   categories: readonly Category[],
   budgets: readonly BudgetLimit[],
   spend: readonly CategorySpend[],
@@ -47,9 +47,8 @@ export const isOver = (row: BudgetRow) => row.leftMinor !== null && row.leftMino
 
 /** Historical spending/budgets remain visible when the last wallet is archived. */
 export function availableBudgetCurrencies(
-  wallets: readonly { currency: Currency; archived: boolean }[],
+  catalog: readonly { code: string; disabled: boolean }[],
   months: readonly MonthBudgets[],
-): Currency[] {
-  return CURRENCIES.filter((currency) => wallets.some((wallet) => !wallet.archived && wallet.currency === currency)
-    || months.some((month) => month.currency === currency && month.rows.length > 0));
+): string[] {
+  return catalog.filter((currency) => !currency.disabled || months.some((month) => month.currency === currency.code && month.rows.length > 0)).map((currency) => currency.code);
 }

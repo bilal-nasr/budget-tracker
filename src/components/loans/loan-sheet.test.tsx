@@ -1,5 +1,7 @@
+import { SEED_CURRENCY_DEFINITIONS } from "@/lib/currency";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { runtimeAppFixture } from "@/test/runtime-app-fixture";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
@@ -8,7 +10,7 @@ import { demoLoans } from "@/lib/demo-data";
 vi.mock("server-only", () => ({}));
 const state = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), wallets: [] as { id: string; name: string; currency: string; archived: boolean }[], categories: [] as { id: string; kind: string; parentId: null; archivedAt: null; nameEn: string }[] }));
 vi.mock("@/features/loans/actions", () => ({ createLoan: state.create, updateLoan: state.update }));
-vi.mock("@/components/providers/app-data", () => ({ useAppData: () => ({ wallets: state.wallets, categories: state.categories, timezone: "Asia/Beirut" }) }));
+vi.mock("@/components/providers/app-data", async (importOriginal) => ({ ...await importOriginal<typeof import("@/components/providers/app-data")>(),  useAppDataOptional: () => ({ currencyByCode: (code: string) => SEED_CURRENCY_DEFINITIONS.find((definition) => definition.code === code) }), useAppData: () => runtimeAppFixture({ fixtureBalances: state.wallets, categories: state.categories, timezone: "Asia/Beirut" }) }));
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ children, footer, onOpenChange }: { children: ReactNode; footer: ReactNode; onOpenChange: (open: boolean) => void }) => <section><button onClick={() => onOpenChange(false)}>Dismiss</button>{children}{footer}</section> }));
 vi.mock("@/components/categories/category-select", () => ({ CategorySelect: ({ label, value, onChange, categories }: { label: string; value: string; onChange: (value: string) => void; categories: { id: string; nameEn: string }[] }) => <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}><option value="" />{categories.map((c) => <option key={c.id} value={c.id}>{c.nameEn}</option>)}</select> }));
@@ -21,8 +23,8 @@ beforeEach(() => {
 afterEach(cleanup);
 it("loads a saved plan for editing and clears it only when both inputs are empty", async () => {
   state.update.mockResolvedValue({ ok: false, error: "notConfigured" });
-  const loan = { ...demoLoans().find((item) => item.monthlyPaymentMinor !== null)!, walletId: state.wallets[0].id, feeCategoryId: state.categories[0].id };
-  render(<NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanSheet item={loan} onClose={vi.fn()} /></NextIntlClientProvider>);
+  const loan = { ...demoLoans().find((item) => item.monthlyPaymentMinor !== null)!, balanceId: state.wallets[0].id, feeCategoryId: state.categories[0].id };
+  render(<NextIntlClientProvider locale="en" messages={en}><LoanSheet item={loan} onClose={vi.fn()} /></NextIntlClientProvider>);
   const monthly = screen.getByLabelText(en.Loans.monthlyPayment) as HTMLInputElement;
   const count = screen.getByLabelText(en.Loans.paymentCount) as HTMLInputElement;
   expect(monthly.value).toBe("285");
@@ -32,11 +34,11 @@ it("loads a saved plan for editing and clears it only when both inputs are empty
   fireEvent.change(count, { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: en.Loans.saveChanges }));
   await waitFor(() => expect(state.update).toHaveBeenCalledOnce());
-  expect(state.update.mock.calls[0]).toEqual([loan.id, { name: loan.name, walletId: loan.walletId, feeCategoryId: loan.feeCategoryId, monthlyPaymentMinor: null, paymentCount: null }]);
+  expect(state.update.mock.calls[0]).toEqual([loan.id, { expectedUnits: { USD: 2 }, name: loan.name, balanceId: loan.balanceId, feeCategoryId: loan.feeCategoryId, monthlyPaymentMinor: null, paymentCount: null }]);
 });
 it("calculates the final payment and submits the inclusive count instead of a manual final amount", async () => {
   state.create.mockResolvedValue({ ok: true, id: "aaaaaaaa-0000-4000-8000-000000000003" });
-  render(<NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanSheet item={null} onClose={vi.fn()} /></NextIntlClientProvider>);
+  render(<NextIntlClientProvider locale="en" messages={en}><LoanSheet item={null} onClose={vi.fn()} /></NextIntlClientProvider>);
   fireEvent.change(screen.getByLabelText(en.Loans.name), { target: { value: "Monthly example" } });
   fireEvent.change(screen.getByLabelText(en.Loans.principal), { target: { value: "2000" } });
   fireEvent.change(screen.getByLabelText("Monthly payment (optional)"), { target: { value: "285" } });
@@ -55,7 +57,7 @@ it.each(["failed", "throw"])("freezes and retries the exact %s loan creation eve
   else state.create.mockResolvedValueOnce({ ok: false, error: "failed" });
   state.create.mockResolvedValueOnce({ ok: true, id: "aaaaaaaa-0000-4000-8000-000000000003" });
   const close = vi.fn();
-  const sheet = () => <NextIntlClientProvider locale="en" messages={{ Loans: en.Loans }}><LoanSheet item={null} onClose={close} /></NextIntlClientProvider>;
+  const sheet = () => <NextIntlClientProvider locale="en" messages={en}><LoanSheet item={null} onClose={close} /></NextIntlClientProvider>;
   const view = render(sheet());
   fireEvent.change(screen.getByLabelText(en.Loans.name), { target: { value: "Synthetic loan" } });
   fireEvent.change(screen.getByLabelText(en.Loans.principal), { target: { value: "1000" } });

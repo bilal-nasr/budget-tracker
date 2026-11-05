@@ -19,7 +19,7 @@ const row = (input: InstallmentInput) => ({
   name: input.name,
   total_minor: input.totalMinor,
   paid_before_minor: input.paidBeforeMinor,
-  wallet_id: input.walletId,
+  balance_id: input.balanceId,
   category_id: input.categoryId,
   monthly_minor: input.monthlyMinor,
   due_day: input.dueDay,
@@ -27,6 +27,7 @@ const row = (input: InstallmentInput) => ({
 
 /** Maps the database's rule messages to codes the UI can explain. */
 function dbError(message: string): ActionError {
+  if (message === "currency.intentConflict") return "conflict";
   const categoryError = categoryReferenceError({ message });
   if (categoryError) return categoryError;
   if (message.includes("exceeds remaining")) return "exceedsRemaining";
@@ -37,12 +38,12 @@ function dbError(message: string): ActionError {
 export async function createInstallment(input: InstallmentInput): Promise<ActionResult> {
   const parsed = installmentInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const ctx = await actionClient();
+  const ctx = await actionClient(parsed.data.expectedUnits);
   if (ctx.error) return { ok: false, error: ctx.error };
-  // `currency` comes from the default wallet via the database trigger.
+  // The database derives the currency snapshot from this exact balance.
   const { error } = await ctx.supabase
     .from("installments")
-    .insert({ ...row(parsed.data), currency: "USD", position: Math.floor(Date.now() / 1000) });
+    .insert({ ...row(parsed.data), position: Math.floor(Date.now() / 1000) });
   if (error) return { ok: false, error: dbError(error.message) };
   revalidatePath("/", "layout");
   return { ok: true };
@@ -51,7 +52,7 @@ export async function createInstallment(input: InstallmentInput): Promise<Action
 export async function updateInstallment(id: string, input: InstallmentInput): Promise<ActionResult> {
   const parsed = installmentInputSchema.safeParse(input);
   if (!parsed.success || !idSchema.safeParse(id).success) return { ok: false, error: "invalid" };
-  const ctx = await actionClient();
+  const ctx = await actionClient(parsed.data.expectedUnits);
   if (ctx.error) return { ok: false, error: ctx.error };
   const { error } = await ctx.supabase.from("installments").update(row(parsed.data)).eq("id", id);
   if (error) return { ok: false, error: dbError(error.message) };

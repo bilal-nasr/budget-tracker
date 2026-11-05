@@ -9,13 +9,15 @@ import { WalletForm } from "@/components/wallets/wallet-sheet";
 import { useRouter } from "@/i18n/navigation";
 import { completeOnboarding, updateProfile } from "@/features/profile/actions";
 
+import type { CurrencyDefinition } from "@/lib/currency";
+
 type Lang = "en" | "ar";
 
 /**
  * First run. Step 1: language. Step 2: first wallet (skippable).
  * A budgets step follows in a later phase.
  */
-export function OnboardingForm() {
+export function OnboardingForm({ currencies }: { currencies: CurrencyDefinition[] }) {
   const t = useTranslations("Onboarding");
   const current = useLocale() as Lang;
   const router = useRouter();
@@ -83,7 +85,7 @@ export function OnboardingForm() {
           </>
         ) : (
           <>
-            <WalletForm wallet={null} onDone={finish} submitLabel={t("createStart")} />
+            <WalletForm currencies={currencies} wallet={null} onDone={finish} submitLabel={t("createStart")} />
             {error ? <p role="alert" className="text-sm text-over">{t("failed")}</p> : null}
             <Button variant="ghost" onClick={finish} disabled={pending}>
               {t("skip")}

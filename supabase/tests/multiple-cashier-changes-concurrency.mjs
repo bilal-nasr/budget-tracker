@@ -10,8 +10,8 @@ import { promisify } from "node:util";
 const container = process.env.MULTI_CASH_TEST_DOCKER_CONTAINER;
 const database = process.env.MULTI_CASH_TEST_DATABASE;
 if (process.env.MULTI_CASH_TEST_ALLOW_FIXTURES !== "1"
-    || container !== "supabase_db_budget-tracker-round3-check"
-    || !/^round3_check_\d+$/.test(database ?? "")) {
+    || !((container === "supabase_db_budget-tracker-round3-check" && /^round3_check_\d+$/.test(database ?? ""))
+      || (container === "supabase_db_CODEX-BUDGET-MULTIWALLET-SYSTEM-20261105" && database === "postgres"))) {
   throw new Error("Multi-change concurrency requires the designated disposable PG17 container/database and explicit fixture opt-in");
 }
 
@@ -24,7 +24,7 @@ const payer = randomUUID();
 const usdChange = randomUUID();
 const lbpChange = randomUUID();
 const transaction = randomUUID();
-const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true);`;
+const claims = `set local role authenticated; select set_config('request.jwt.claims','{"sub":"${owner}","role":"authenticated"}',true); select set_config('request.headers',jsonb_build_object('x-budget-units','{"USD":2,"LBP":0,"SYP":0}')::text,true);`;
 const active = new Set();
 
 async function sql(statement) {
@@ -79,13 +79,15 @@ try {
     .split(/\r?\n/).find((line) => /^[a-f0-9-]{36}$/.test(line));
   assert.ok(category);
   await sql(`begin; ${claims}
-    insert into public.wallets(id,name,kind,currency) values
-      ('${payer}','Concurrency payer','cash','USD'),
+    with fixture(id,name,kind,currency) as (values ('${payer}','Concurrency payer','cash','USD'),
       ('${usdChange}','Concurrency USD change','cash','USD'),
-      ('${lbpChange}','Concurrency LBP change','cash','LBP');
+      ('${lbpChange}','Concurrency LBP change','cash','LBP')), containers as (
+    insert into public.wallets(id,name,kind,default_balance_id) select id::uuid,name,kind::public.wallet_kind,id::uuid from fixture returning id,user_id
+    ) insert into public.wallet_balances(id,user_id,wallet_id,currency,position)
+    select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
     select * from public.save_transaction('${transaction}',null,
-      '{"kind":"expense","occurredOn":"2026-11-05","walletId":"${payer}","amountMinor":340000,"costCurrency":"LBP","categoryId":"${category}"}',null,
-      '{"tenderMinor":500,"changes":[{"walletId":"${lbpChange}","amountMinor":110000}]}');
+      '{"kind":"expense","occurredOn":"2026-11-05","balanceId":"${payer}","amountMinor":340000,"costCurrency":"LBP","categoryId":"${category}"}',null,
+      '{"tenderMinor":500,"changes":[{"balanceId":"${lbpChange}","amountMinor":110000}]}');
     commit;`);
   const revision = Number((await sql(`begin; ${claims} select revision from public.transactions where id='${transaction}'; commit;`))
     .split(/\r?\n/).find((line) => /^\d+$/.test(line)));
@@ -94,8 +96,8 @@ try {
   const editor = session();
   editor.send(`begin; ${claims}
     select * from public.save_transaction('${transaction}',${revision},
-      '{"kind":"expense","occurredOn":"2026-11-05","walletId":"${payer}","amountMinor":340000,"costCurrency":"SYP","categoryId":"${category}"}',null,
-      '{"tenderMinor":500,"changes":[{"walletId":"${lbpChange}","amountMinor":110000}]}');
+      '{"kind":"expense","occurredOn":"2026-11-05","balanceId":"${payer}","amountMinor":340000,"costCurrency":"SYP","categoryId":"${category}"}',null,
+      '{"tenderMinor":500,"changes":[{"balanceId":"${lbpChange}","amountMinor":110000}]}');
     select 'EDIT_READY';`);
   await editor.wait("EDIT_READY");
 
@@ -108,19 +110,19 @@ try {
       exception when lock_not_available then null; end;
     end $$;
     select 'CURRENCY_CONTENDED';
-    update public.wallets set currency='SYP' where id='${lbpChange}'; commit;`);
+    update public.wallet_balances set currency='SYP' where id='${lbpChange}'; commit;`);
   await currency.wait("CURRENCY_CONTENDED");
   const editResult = await editor.end("commit;\n");
   const currencyResult = await currency.end();
   assert.equal(editResult.code, 0, editResult.errors);
   assert.notEqual(currencyResult.code, 0, "referenced receiver currency update must fail after waiting");
-  assert.match(currencyResult.errors, /wallet currency cannot change/);
+  assert.match(currencyResult.errors, /balance.immutable/);
 
   const result = await sql(`begin; ${claims}
-    select amount_minor||'|'||cost_currency::text||'|'||tender_minor||'|'||change_wallet_ids::text from public.transactions where id='${transaction}';
+    select amount_minor||'|'||cost_currency::text||'|'||tender_minor||'|'||change_balance_ids::text from public.transactions where id='${transaction}';
     select string_agg(position||':'||currency::text||':'||amount_minor,',' order by position)
       from public.cashier_changes where transaction_id='${transaction}';
-    select currency::text from public.wallets where id='${lbpChange}'; commit;`);
+    select currency::text from public.wallet_balances where id='${lbpChange}'; commit;`);
   const lines = result.split(/\r?\n/);
   assert.ok(lines.some((line) => line.startsWith(`340000|SYP|500|{${lbpChange}}`)), "one winning cross-cost parent snapshot remains");
   assert.ok(lines.includes("0:LBP:110000"), "the winning returned-cash leg remains once");

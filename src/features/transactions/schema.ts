@@ -1,5 +1,6 @@
+import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { z } from "zod";
-import { MAX_MINOR, MAX_RATE, type Currency } from "@/lib/money";
+import { MAX_MINOR, MAX_RATE } from "@/lib/money";
 import type { ExpenseItem } from "./breakdown";
 import type { SettlementSnapshot } from "./settlement-serialization";
 export { transactionWriteInputSchema as transactionInputSchema } from "./mutation-input";
@@ -12,26 +13,26 @@ export { signedMinor, reportingMinor } from "./amounts";
 export const txnKindSchema = z.enum(["expense", "income"]);
 export type TxnKind = z.infer<typeof txnKindSchema>;
 
-/** Every kind a stored row can have. A transfer moves money between two wallets. */
+/** Stored transfers include both between-wallet Move and within-wallet Exchange. */
 export type RowKind = TxnKind | "transfer" | "loan";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-/**
- * Moving money from one wallet to another. Same currency: both amounts are
- * equal. Different currencies (an exchange): the amounts are what you actually
- * sent and received, so no exchange rate is guessed.
- */
-export const transferInputSchema = z.object({
-  occurredOn: isoDate,
-  fromWalletId: z.uuid(),
-  toWalletId: z.uuid(),
-  fromAmountMinor: z.number().int().min(1).max(MAX_MINOR),
-  toAmountMinor: z.number().int().min(1).max(MAX_MINOR),
-  /** The USD to LBP rate used (LBP per 1 USD); saved so the next exchange starts from it. */
+/** Exact existing ledger rows; same-wallet currency changes are Exchange. */
+export function classifyBalanceTransfer(source: { id: string; walletId: string; currency: string }, destination: { id: string; walletId: string; currency: string }): "move" | "exchange" {
+  if (source.id === destination.id || (source.walletId === destination.walletId && source.currency === destination.currency)) throw new RangeError("Same balance");
+  return source.walletId === destination.walletId ? "exchange" : "move";
+}
+export const transferInputSchema = z.strictObject({
+  requestId: z.uuid(),
+  expectedUnits: expectedUnitsSchema.optional(),
+  occurredOn: z.iso.date().refine((date) => date >= "2000-01-01"),
+  sourceBalanceId: z.uuid(), destinationBalanceId: z.uuid(),
+  sentMinor: z.number().int().min(1).max(MAX_MINOR),
+  receivedMinor: z.number().int().min(1).max(MAX_MINOR),
   rate: z.number().int().min(1).max(MAX_RATE).optional(),
   note: z.string().trim().max(140).optional(),
-});
+}).refine((input) => input.sourceBalanceId !== input.destinationBalanceId);
 
 export type TransferInput = z.infer<typeof transferInputSchema>;
 
@@ -41,13 +42,15 @@ export type Transaction = {
   occurredOn: string;
   /** For a transfer: what left the source wallet, in the source wallet's currency. */
   amountMinor: number;
-  currency: Currency;
-  /** The wallet the money is in, or for a transfer the one it leaves. */
-  walletId: string;
+  currency: string;
+  /** Exact source balance ID. */
+  balanceId: string;
+  walletNameSnapshot?: string | null;
+  toWalletNameSnapshot?: string | null;
   /** Null for transfers. */
   categoryId: string | null;
-  /** Transfers only: the wallet the money arrives in, and how much arrives. */
-  toWalletId: string | null;
+  /** Transfers only: exact destination balance ID and actual amount received. */
+  toBalanceId: string | null;
   toAmountMinor: number | null;
   note: string | null;
   createdAt: string;
@@ -88,7 +91,7 @@ export type Cursor = z.infer<typeof cursorSchema>;
 export const filtersSchema = z.object({
   q: z.string().trim().max(60).optional(),
   kind: z.enum(["expense", "income", "transfer", "loan"]).optional(),
-  walletId: z.uuid().optional(),
+  balanceId: z.uuid().optional(),
   categoryId: z.uuid().optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),

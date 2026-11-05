@@ -17,7 +17,7 @@ function parseFilters(params: SearchParams) {
   const parsed = filtersSchema.safeParse({
     q: pick("q"),
     kind: pick("kind"),
-    walletId: pick("walletId"),
+    balanceId: pick("balanceId"),
     categoryId: pick("categoryId"),
     from: pick("from"),
     to: pick("to"),

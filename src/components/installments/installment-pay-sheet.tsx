@@ -1,11 +1,13 @@
 "use client";
+import { currencyIntent } from "@/lib/currency-intent";
 
+import { BalancePicker } from "@/components/add/balance-picker";
 import { useRef, useState, useTransition } from "react";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useDisplayPrefs } from "@/components/providers/display-prefs";
-import { useAppData } from "@/components/providers/app-data";
+import { useRuntimeBalances, useMoneyDraftUnit } from "@/components/add/runtime-balances";
 import { Amount } from "@/components/money/amount";
 import { Button } from "@/components/ui/button";
 import { ConfirmSheet } from "@/components/ui/confirm-sheet";
@@ -17,7 +19,7 @@ import { cyclePaymentInputSchema, type CyclePaymentInput } from "@/features/inst
 import { deleteTransaction } from "@/features/transactions/actions";
 import { todayIn } from "@/features/transactions/group";
 import { useRouter } from "@/i18n/navigation";
-import { CURRENCY_DECIMALS, formatAmount, parseAmount, toInputText } from "@/lib/money";
+import { formatAmount, parseAmount, toInputText } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 export type InstallmentPayState = { item: Installment; intent: "normal" | "again"; requestId: string };
@@ -25,10 +27,12 @@ export type InstallmentPayState = { item: Installment; intent: "normal" | "again
 function Form({ state, onClose, onBusy }: { state: InstallmentPayState; onClose: () => void; onBusy: (busy: boolean) => void }) {
   const { item, intent, requestId } = state;
   const t = useTranslations("Installments");
+  const tBalance = useTranslations("Add");
+  const currencyLabel = tBalance("walletCurrency");
   const tb = useTranslations("Breakdown");
   const tc = useTranslations("Categories");
   const router = useRouter();
-  const { wallets, timezone } = useAppData();
+  const { balanceChoices: wallets, timezone, definition, walletContainers, enabledCurrencies, defaultBalanceId } = useRuntimeBalances();
   const { digits } = useDisplayPrefs();
   const [pending, startTransition] = useTransition();
   const inFlight = useRef(false);
@@ -36,23 +40,23 @@ function Form({ state, onClose, onBusy }: { state: InstallmentPayState; onClose:
   const [frozen, setFrozen] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [confirmation, setConfirmation] = useState<CyclePaymentInput | null>(null);
-  const usable = wallets.filter((w) => !w.archived && w.currency === item.currency)
-    .sort((a,b) => Number(b.id === item.walletId) - Number(a.id === item.walletId));
+  const usable = wallets.filter((w) => !w.archived && w.currency === item.currency);
   const today = todayIn(timezone);
-  const [walletId, setWalletId] = useState(usable[0]?.id ?? "");
-  const [amount, setAmount] = useState(() => toInputText(paymentAmountDefault(item), item.currency));
+  const [balanceId, setBalanceId] = useState((usable.find((balance) => balance.id === item.balanceId) ?? usable.find((balance) => balance.id === defaultBalanceId) ?? usable[0])?.id ?? "");
+  const [amount, setAmount] = useState(() => toInputText(paymentAmountDefault(item), definition(item.currency)));
   const [date, setDate] = useState(today);
   const [showDate, setShowDate] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const minor = amount.trim() === "" ? null : parseAmount(amount, item.currency);
-  const money = (value: number) => `⁦${formatAmount(value, item.currency, { digits })}⁩`;
+  useMoneyDraftUnit(definition(item.currency), () => { setAmount(""); }, usable.some((balance) => balance.id === balanceId));
+  const minor = amount.trim() === "" ? null : parseAmount(amount, definition(item.currency));
+  const money = (value: number) => `⁦${formatAmount(value, definition(item.currency), { digits })}⁩`;
   const tooMuch = minor !== null && minor > item.remainingMinor;
   const amountError = amount.trim() !== "" && minor === null ? t("errorAmount")
     : tooMuch ? t("tooMuch", { amount: money(item.remainingMinor) }) : null;
-  const input = { requestId, installmentId: item.id, walletId, amountMinor: minor ?? 0, occurredOn: date,
+  const input = { expectedUnits: currencyIntent(definition(item.currency)), requestId, installmentId: item.id, balanceId: balanceId, amountMinor: minor ?? 0, occurredOn: date,
     salaryCycleId: item.salaryCycleId, overrideOfTransactionId: intent === "again" ? item.cycleLatestPaymentId : null };
   const validIntent = item.remainingMinor > 0 && (intent === "again" ? item.cycleLatestPaymentId !== null : canPayNormally(item));
-  const canSave = validIntent && !tooMuch && date <= today && cyclePaymentInputSchema.safeParse(input).success;
+  const canSave = usable.some((balance) => balance.id === balanceId) && validIntent && !tooMuch && date <= today && cyclePaymentInputSchema.safeParse(input).success;
 
   const submit = (payload: CyclePaymentInput) => {
     if (inFlight.current || blocked) return;
@@ -104,18 +108,12 @@ function Form({ state, onClose, onBusy }: { state: InstallmentPayState; onClose:
     <p className="text-[13px] text-muted-foreground">{t(item.salaryCycleId === null ? "initialCycleHelp" : "cycleHelp")}</p>
     <fieldset disabled={pending || frozen || blocked} className="flex min-w-0 flex-col gap-4 border-0 p-0">
       <TextField label={t("amount")} value={amount} onChange={(e) => setAmount(e.target.value)}
-        inputMode={CURRENCY_DECIMALS[item.currency] === 0 ? "numeric" : "decimal"} autoComplete="off" dir="ltr" error={amountError} />
+        inputMode={definition(item.currency).decimalPlaces === 0 ? "numeric" : "decimal"} autoComplete="off" dir="ltr" error={amountError} />
       <p className="-mt-2 text-[13px] text-muted-foreground">{t.rich("leftAfterRich", {
         amount: () => <Amount minor={Math.max(0,item.remainingMinor-(minor ?? 0))} currency={item.currency} />,
       })}</p>
       <div className="flex flex-col gap-1.5">
-        <span id="pay-wallet" className="text-sm font-medium">{t("paidFrom")}</span>
-        <div role="radiogroup" aria-labelledby="pay-wallet" className="flex flex-wrap gap-2">
-          {usable.map((w) => <button key={w.id} type="button" role="radio" aria-checked={w.id === walletId} onClick={() => setWalletId(w.id)}
-            className="min-h-11 rounded-full border border-border bg-card px-4 text-sm font-medium aria-checked:border-2 aria-checked:border-foreground aria-checked:bg-accent">
-            <bdi>{w.name}</bdi> · {w.currency}
-          </button>)}
-        </div>
+<BalancePicker currencyLabel={currencyLabel} label={t("paidFrom")} wallets={walletContainers} currencies={enabledCurrencies.filter((entry) => entry.code === item.currency)} value={balanceId} onChange={setBalanceId} />
       </div>
       <div className="flex flex-col gap-1">
         <button type="button" aria-expanded={showDate} onClick={() => setShowDate((v) => !v)} className="flex min-h-12 items-center justify-between text-start text-sm text-muted-foreground">

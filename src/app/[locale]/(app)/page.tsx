@@ -9,14 +9,15 @@ import { salaryStatusFromReceipt } from "@/features/salary/schema";
 import { todayIn } from "@/features/transactions/group";
 import { fetchTransactions } from "@/features/transactions/queries";
 import { timed } from "@/lib/timing";
-import { CURRENCIES } from "@/lib/money";
+import { getCurrencies } from "@/features/currencies/queries";
 
 type ProfilePromise = ReturnType<typeof getProfile>;
 
 async function BudgetData({ profile }: { profile: ProfilePromise }) {
   const { timezone } = await profile;
   const month = todayIn(timezone).slice(0, 7);
-  const budgets = await Promise.all(CURRENCIES.map((c) => timed("home.budgets", () => getMonthBudgets(month, c))));
+  const currencies = await getCurrencies();
+  const budgets = await Promise.all(currencies.filter((currency) => !currency.disabled).map((c) => timed("home.budgets", () => getMonthBudgets(month, c.code))));
   return <HomeBudgetSummary budgets={budgets.filter((b) => b.totalLimitMinor > 0)} />;
 }
 

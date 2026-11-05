@@ -2,12 +2,11 @@ import { Amount } from "@/components/money/amount";
 import type { ExpenseBreakdownLabels } from "@/components/add/expense-breakdown-labels";
 import { summarizeBreakdown } from "@/features/transactions/breakdown-summary";
 import type { ExpenseItem } from "@/features/transactions/breakdown";
-import type { Currency } from "@/lib/money";
 
 export type ExpenseBreakdownProps = {
   items: readonly ExpenseItem[];
   parentMinor: number;
-  currency: Currency;
+  currency: string;
   labels: Pick<ExpenseBreakdownLabels, "title" | "itemizedTotal" | "remainder" | "fullyItemized">;
 };
 

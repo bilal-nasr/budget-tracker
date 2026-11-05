@@ -20,7 +20,7 @@ export default defineConfig({
     url: `http://localhost:${PORT}/en`,
     reuseExistingServer: !process.env.CI,
     // Run without Supabase keys so screens render without a session.
-    env: { NEXT_PUBLIC_SUPABASE_URL: "", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "" },
+    env: { NEXT_PUBLIC_SUPABASE_URL: "", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "", NEXT_PUBLIC_SUPABASE_ANON_KEY: "", SUPABASE_SERVICE_ROLE_KEY: "", SUPABASE_SECRET_KEY: "" },
     timeout: 120_000,
   },
 });

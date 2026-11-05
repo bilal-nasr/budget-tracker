@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { withoutCurrencyIntent, type ExpectedUnits } from "@/lib/currency-intent";
 import { actionClient, type ActionError, type ActionResult } from "@/lib/supabase/action";
 import { getProfile } from "@/features/profile/queries";
 import { todayIn } from "@/features/transactions/group";
@@ -11,12 +12,13 @@ async function mutate(name: string, args: Record<string, unknown>, withId: true)
 async function mutate(name: string, args: Record<string, unknown>, withId?: false): Promise<ActionResult>;
 async function mutate(name: string, args: Record<string, unknown>, withId = false): Promise<ActionResult<{ id?: string }>> {
   try {
-    const ctx = await actionClient();
+    const input = args.p_input as { expectedUnits?: ExpectedUnits } | undefined;
+  const ctx = await actionClient(input?.expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
-    const { data, error } = await ctx.supabase.rpc(name, args);
+    const { data, error } = await ctx.supabase.rpc(name, input ? { ...args, p_input: withoutCurrencyIntent(input) } : args);
     if (error) {
       const known: ActionError[] = ["invalid", "conflict", "exceedsRemaining", "totalBelowPaid", "inUse", "walletUnavailable", "categoryUnavailable"];
-      return { ok: false, error: known.find((code) => error.message === `pending.${code}`) ?? "failed" };
+      return { ok: false, error: error.message === "currency.intentConflict" ? "conflict" : known.find((code) => error.message === `pending.${code}`) ?? "failed" };
     }
     const id = withId ? z.uuid().safeParse(Array.isArray(data) && data.length === 1 ? data[0]?.id : null) : null;
     if (id && !id.success) return { ok: false, error: "failed" };
