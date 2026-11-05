@@ -29,7 +29,7 @@ with fixture(id,name,kind,currency) as (values ('c1000000-0000-4000-8000-0000000
  select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
 )
 insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
-select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then 0::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
 create temp table cashier_input as select jsonb_build_object('kind','expense','occurredOn','2026-11-04','balanceId','c1000000-0000-4000-8000-000000000001','amountMinor',1250,'categoryId',id,'note','Groceries') as value
 from public.categories where kind='expense' and parent_id is null order by position limit 1;
 grant all on cashier_input to authenticated;
@@ -98,7 +98,7 @@ with fixture(id,name,kind,currency) as (values ('c1000000-0000-4000-8000-0000000
  select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
 )
 insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
-select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then 0::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000006',null,(select value from cashier_input),null,
 '{"tenderMinor":2000,"changes":[{"balanceId":"c1000000-0000-4000-8000-000000000005","amountMinor":97500}]}')$$,'SYP actual change uses whole-pound scale without a profile-rate fallback');
 select is((select balance_minor from public.wallet_balance_totals where balance_id='c1000000-0000-4000-8000-000000000005'),97500::numeric,'actual pounds credited exactly');
@@ -135,7 +135,7 @@ with fixture(id,name,kind,currency) as (values ('c1000000-0000-4000-8000-0000000
  select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
 )
 insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
-select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then 0::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
 select throws_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000003',null,
 jsonb_build_object('kind','expense','occurredOn','2026-11-04','balanceId','c1000000-0000-4000-8000-000000000004','amountMinor',1250,'categoryId',(select id from public.categories where kind='expense' limit 1)),null,
 '{"tenderMinor":2000,"changes":[{"balanceId":"c1000000-0000-4000-8000-000000000003","amountMinor":750}]}')$$,'P0001','wallet unavailable','B cannot receive change in A wallet');

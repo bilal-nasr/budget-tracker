@@ -84,7 +84,7 @@ try {
       ('${lbpChange}','Concurrency LBP change','cash','LBP')), containers as (
     insert into public.wallets(id,name,kind,default_balance_id) select id::uuid,name,kind::public.wallet_kind,id::uuid from fixture returning id,user_id
     ) insert into public.wallet_balances(id,user_id,wallet_id,currency,position)
-    select c.id,c.user_id,c.id,f.currency,0 from fixture f join containers c on c.id=f.id::uuid;
+    select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
     select * from public.save_transaction('${transaction}',null,
       '{"kind":"expense","occurredOn":"2026-11-05","balanceId":"${payer}","amountMinor":340000,"costCurrency":"LBP","categoryId":"${category}"}',null,
       '{"tenderMinor":500,"changes":[{"balanceId":"${lbpChange}","amountMinor":110000}]}');

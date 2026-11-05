@@ -106,28 +106,29 @@ try {
   assert.equal(await scalar("select count(*)=count(distinct position) and min(position)=0 and max(position)=count(*)-1 from public.wallets where deleted_at is null;"), "t");
   for (const operation of ["edit", "delete"]) {
     const code = operation === "edit" ? "EDITCOIN" : "DELETECOIN";
-    await owned(`insert into public.currencies(code,symbol,decimal_places) values('${code}','T',4);`);
-    await race(`first currency use versus ${operation}`, `select public.add_wallet_balance('${a.id}','${code}');`,
+    await owned(`select public.create_currency('${code}','T',4);`);
+    await race(`first currency use versus ${operation}`, `insert into public.fixed_expenses(name,amount_minor,balance_id,category_id) select 'First use',1,b.id,c.id from public.wallet_balances b cross join public.categories c where b.wallet_id='${a.id}' and b.currency='${code}' and c.kind='expense' and c.parent_id is null order by c.position limit 1;`,
       `perform 1 from public.currencies where user_id='${owner}' and code='${code}' for update nowait`,
-      operation === "edit" ? `update public.currencies set decimal_places=5 where code='${code}';` : `delete from public.currencies where code='${code}';`, /currency.used/);
+      operation === "edit" ? `select public.update_currency('${code}','${code}','T',5);` : `select public.delete_currency('${code}');`, /currency.used/);
   }
+  await owned('delete from public.fixed_expenses;');
   const disabled = await scalar(`select id from public.wallet_balances where wallet_id='${a.id}' and currency='EDITCOIN';`);
   const income = await scalar("select id from public.categories where kind='income' and parent_id is null order by position limit 1;");
   await race("disable versus new money", "select public.set_currency_disabled('EDITCOIN',true);",
     `perform 1 from public.currencies where user_id='${owner}' and code='EDITCOIN' for update nowait`,
     `insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id) values('income','2026-11-05','${disabled}',1,'EDITCOIN','${income}');`, /currency.disabled/);
-  const lbp = await scalar(`select public.add_wallet_balance('${b.id}','LBP');`);
-  await race("transfer versus detach", `select public.record_balance_transfer('2026-11-05','${a.balance}','${lbp}',1,1000);`,
+  const lbp = await scalar(`select id from public.wallet_balances where wallet_id='${b.id}' and currency='LBP';`);
+  await race("transfer versus disable", `select public.record_balance_transfer('2026-11-05','${a.balance}','${lbp}',1,1000);`,
     `perform 1 from public.wallet_balances where id='${lbp}' for update nowait`,
-    `select public.detach_wallet_balance('${lbp}');`, /balance.nonzero/);
+    `select public.set_currency_disabled('LBP',true);`, /currency.nonzero/);
   assert.equal(await scalar(`select balance_minor from public.wallet_balance_totals where balance_id='${lbp}';`), "1000");
   const zero = await wallet("Synthetic zero");
   const category = await scalar("select id from public.categories where kind='expense' and parent_id is null order by position limit 1;");
   await race("new reference versus tombstone", `insert into public.fixed_expenses(name,amount_minor,balance_id,category_id) values('Synthetic reference',1,'${zero.balance}','${category}');`,
     `perform 1 from public.wallets where id='${zero.id}' for update nowait`, `select public.delete_wallet('${zero.id}');`, /wallet.inUse/);
-  const syp = await scalar(`select public.add_wallet_balance('${zero.id}','SYP');`);
-  await race("default versus detach", `select public.set_wallet_default('${zero.id}','${syp}');`,
-    `perform 1 from public.wallets where id='${zero.id}' for update nowait`, `select public.detach_wallet_balance('${syp}');`, /wallet.invalidDefault/);
+  const syp = await scalar(`select id from public.wallet_balances where wallet_id='${zero.id}' and currency='SYP';`);
+  await race("default versus disable", `select public.set_wallet_default('${zero.id}','${syp}');`,
+    `perform 1 from public.wallets where id='${zero.id}' for update nowait`, `select public.set_currency_disabled('SYP',true);`, null);
   const removable = await wallet("Synthetic removable");
   await race("reorder versus delete", "select public.reorder_wallets((select array_agg(id order by position desc) from public.wallets where deleted_at is null));",
     `perform 1 from public.profiles where user_id='${owner}' for update nowait`, `select public.delete_wallet('${removable.id}');`, null);

@@ -1277,7 +1277,7 @@ export type Database = {
             "wallets": {
                 Row: {
                     "created_at": string;
-                    "default_balance_id": string;
+                    "default_balance_id": string | null;
                     "deleted_at": string | null;
                     "id": string;
                     "kind": Database["public"]['Enums']["wallet_kind"];
@@ -1289,7 +1289,7 @@ export type Database = {
                 ComputedFields: never;
                 Insert: {
                     "created_at"?: string;
-                    "default_balance_id": string;
+                    "default_balance_id"?: string | null;
                     "deleted_at"?: string | null;
                     "id"?: string;
                     "kind": Database["public"]['Enums']["wallet_kind"];
@@ -1300,7 +1300,7 @@ export type Database = {
                 };
                 Update: {
                     "created_at"?: string;
-                    "default_balance_id"?: string;
+                    "default_balance_id"?: string | null;
                     "deleted_at"?: string | null;
                     "id"?: string;
                     "kind"?: Database["public"]['Enums']["wallet_kind"];
@@ -1675,6 +1675,14 @@ export type Database = {
                 };
                 Returns: string;
             };
+            "create_currency": {
+                Args: {
+                    "p_code": string;
+                    "p_decimal_places": number;
+                    "p_symbol": string;
+                };
+                Returns: undefined;
+            };
             "create_loan": {
                 Args: {
                     "p_input": Json;
@@ -1693,12 +1701,18 @@ export type Database = {
             };
             "create_wallet": {
                 Args: {
-                    "p_currency": string;
+                    "p_default_currency": string;
                     "p_kind": Database["public"]['Enums']["wallet_kind"];
                     "p_name": string;
                     "p_opening_minor"?: number;
                 };
                 Returns: string;
+            };
+            "delete_currency": {
+                Args: {
+                    "p_code": string;
+                };
+                Returns: undefined;
             };
             "delete_installment": {
                 Args: {
@@ -1946,6 +1960,15 @@ export type Database = {
                     "p_request_id": string;
                     "p_settlements": Json;
                     "p_wallet_id": string;
+                };
+                Returns: undefined;
+            };
+            "update_currency": {
+                Args: {
+                    "p_code": string;
+                    "p_current_code": string;
+                    "p_decimal_places": number;
+                    "p_symbol": string;
                 };
                 Returns: undefined;
             };

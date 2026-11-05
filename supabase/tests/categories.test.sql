@@ -95,7 +95,7 @@ with fixture(id,name,kind,currency) as (values ('ca300000-0000-4000-8000-0000000
  select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
 )
 insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
-select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then 0::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
 insert into public.budgets(category_id,currency,starts_month,limit_minor) values('ca100000-0000-4000-8000-000000000002','USD','2026-10-01',5000);
 select throws_ok($$delete from public.categories where id='ca100000-0000-4000-8000-000000000002'$$,'P0001','category_in_use','direct DELETE cannot cascade budget-only history');
 select is(public.remove_category('ca100000-0000-4000-8000-000000000002'),'archived','a budget-only category archives');

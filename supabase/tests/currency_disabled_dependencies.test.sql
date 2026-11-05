@@ -12,10 +12,8 @@ set local role authenticated;
 create temp table dependency_categories as
  select id,row_number() over(order by position,id) n from public.categories
  where kind='expense' and parent_id is null;
-insert into public.currencies(code,symbol,decimal_places) values
- ('INST','I',2),('BDATE','D',2),('BCAT','C',2),('BDEL','X',2);
+select public.create_currency(code,symbol,2) from (values('INST','I'),('BDATE','D'),('BCAT','C'),('BDEL','X')) c(code,symbol);
 create temp table dependency_wallet as select public.create_wallet('Resolved installment','cash','INST',0) id;
-select public.add_wallet_balance((select id from dependency_wallet),'USD');
 insert into public.installments(id,name,total_minor,paid_before_minor,currency,balance_id,category_id)
  select 'cdb10000-0000-4000-8000-000000000001','Completed before tracking',100,100,'INST',
  w.default_balance_id,c.id from public.wallets w cross join dependency_categories c

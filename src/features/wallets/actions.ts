@@ -51,7 +51,7 @@ export async function createWallet(
     const { data, error } = await ctx.supabase.rpc("create_wallet", {
       p_name: parsed.data.name,
       p_kind: parsed.data.kind,
-      p_currency: parsed.data.currency,
+      p_default_currency: parsed.data.currency,
       p_opening_minor: parsed.data.openingBalanceMinor,
     });
     if (error || typeof data !== "string") return { ok: false, error: error ? databaseActionError(error) : "failed" };

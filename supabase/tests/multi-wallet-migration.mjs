@@ -62,6 +62,40 @@ try {
  select ok(not exists(select 1 from pg_type where typnamespace='public'::regnamespace and typname='currency'),'enum removed without CASCADE');
  select * from finish();rollback;`);
  console.log(result);assert.doesNotMatch(result,/(?:^|\n)not ok |Looks like you failed/);console.log('PASS populated migration preservation: 15 assertions.');
+ // Populate the committed per-wallet schema with sparse, detached and disabled
+ // catalog states before applying the global revision.
+ sql(`select set_config('request.jwt.claims','{"sub":"ce000000-0000-4000-8000-000000000001","role":"authenticated"}',false);set role authenticated;
+ insert into public.currencies(code,symbol,decimal_places) values('BACKFILL','B',4),('DORMANT','D',0);
+ select public.add_wallet_balance('ce100000-0000-4000-8000-000000000001','LBP');
+ select public.detach_wallet_balance((select id from public.wallet_balances where wallet_id='ce100000-0000-4000-8000-000000000001' and currency='LBP'));
+ select public.set_currency_disabled('DORMANT',true);
+ reset role;
+ create table fixture_private.pre_global_balances as select * from public.wallet_balances;
+ create table fixture_private.pre_global_wallets as select * from public.wallets;
+ create table fixture_private.pre_global_transactions as select * from public.transactions;
+ create table fixture_private.pre_global_changes as select * from public.cashier_changes;`);
+ sql(readFileSync(new URL('20261124000000_global_currencies_all_wallets.sql',folder),'utf8'));
+ const globalResult=sql(`set search_path=public,extensions;begin;select set_config('request.jwt.claims','{"sub":"ce000000-0000-4000-8000-000000000001","role":"authenticated"}',true);select no_plan();
+ select is((select count(*) from public.wallet_balances b join public.wallets w on w.id=b.wallet_id where w.deleted_at is null),20::bigint,'all five live and Needs-attention wallets get four enabled balances');
+ select is((select count(*) from fixture_private.pre_global_balances old left join public.wallet_balances b using(id) where b.id is null or (old.user_id,old.wallet_id,old.currency,old.opening_balance_minor,old.created_at) is distinct from (b.user_id,b.wallet_id,b.currency,b.opening_balance_minor,b.created_at)),0::bigint,'existing balance IDs, amounts and metadata preserved');
+ select is((select count(*) from fixture_private.pre_global_wallets old join public.wallets w using(id) where to_jsonb(old) is distinct from to_jsonb(w)),0::bigint,'all wallet defaults, order, Needs-attention and tombstones unchanged');
+ select is((select count(*) from public.wallet_balances b join public.wallets w on w.id=b.wallet_id where w.deleted_at is not null),2::bigint,'tombstones receive no migration additions');
+ select is((select count(*) from public.wallet_balances b join public.currencies c on(c.user_id,c.code)=(b.user_id,b.currency) join public.wallets w on w.id=b.wallet_id where w.deleted_at is null and c.disabled_at is null and b.detached_at is not null),0::bigint,'enabled detach state normalized without replacing IDs');
+ select results_eq($$select b.currency,b.position from public.wallet_balances b where wallet_id='ce100000-0000-4000-8000-000000000004' order by b.position$$,$$values ('LBP'::text,0),('SYP',1),('USD',2),('BACKFILL',3)$$,'Needs-attention balances use catalog addition order');
+ select is((select count(*) from fixture_private.pre_global_transactions old full join public.transactions t using(id) where to_jsonb(old) is distinct from to_jsonb(t)),0::bigint,'all historical transactions and snapshots byte-for-byte preserved');
+ select is((select count(*) from fixture_private.pre_global_changes old full join public.cashier_changes c using(id) where to_jsonb(old) is distinct from to_jsonb(c)),0::bigint,'all cashier history and snapshots preserved');
+ select is((select count(*) from fixture_private.totals old join public.wallet_balance_totals b on b.balance_id=old.id where old.balance_minor is distinct from b.balance_minor),0::bigint,'all old exact totals unchanged');
+ select is((select count(*) from public.wallet_balance_totals b where not exists(select 1 from fixture_private.pre_global_balances old where old.id=b.balance_id) and b.balance_minor<>0),0::bigint,'all new balances are exact zero');
+ select ok((select first_used_at is null from public.currencies where code='BACKFILL'),'backfilled zero rows do not mark unused catalog used');
+ set role authenticated;
+ select lives_ok($$select public.create_currency('AFTER','A',0)$$,'global add also reaches Needs-attention wallets');
+ select is((select count(*) from public.wallet_balances where currency='AFTER'),5::bigint,'global add reaches exactly five nondeleted wallets');
+ select lives_ok($$select public.set_currency_disabled('DORMANT',false)$$,'re-enable repairs exceptional missing rows');
+ select is((select count(*) from public.wallet_balances where currency='DORMANT'),5::bigint,'re-enable fills every nondeleted wallet');
+ select is((select count(*) from public.wallet_balances b join public.wallets w on w.id=b.wallet_id where w.deleted_at is not null),2::bigint,'later add and enable leave tombstones unchanged');
+ set constraints all immediate;
+ select * from finish();rollback;`);
+ console.log(globalResult);assert.doesNotMatch(globalResult,/(?:^|\n)not ok |Looks like you failed/);console.log('PASS populated global migration preservation: 16 assertions.');
  sql("delete from auth.users where id in('ce000000-0000-4000-8000-000000000001','ce000000-0000-4000-8000-000000000002');");
  let assertions=0;
  for(const file of readdirSync(new URL('./',import.meta.url)).filter(f=>f.endsWith('.test.sql')).sort()) {

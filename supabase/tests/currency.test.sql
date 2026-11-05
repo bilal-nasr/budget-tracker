@@ -39,7 +39,7 @@ with fixture(id,user_id,name,kind,currency) as (values ('c6200000-0000-4000-8000
  select f.id::uuid,f.user_id::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
 )
 insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
-select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then 0::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
 update public.profiles set usd_lbp_rate = 72000
 where user_id = 'c6000000-0000-4000-8000-000000000002';
 
@@ -64,7 +64,7 @@ with fixture(id,name,kind,currency,opening_balance_minor) as (values ('c6100000-
  select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
 )
 insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
-select c.id,c.user_id,c.id,f.currency,f.opening_balance_minor::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,case when cc.code=f.currency then f.opening_balance_minor::bigint else 0 end,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
 select pg_temp.seed_needs_attention('c6100000-0000-4000-8000-000000000009',true);
 update public.profiles set usd_lbp_rate = 89500, salary_amount_minor = 1250,
   salary_balance_id = 'c6100000-0000-4000-8000-000000000005';
@@ -244,7 +244,7 @@ select is((select usd_lbp_rate from public.profiles), 90000, 'failed memo retain
 select set_config('request.jwt.claims', '{"sub":"c6000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
 select is((select count(*) from public.wallets), 1::bigint, 'tenant B sees only its own SYP wallet');
 select is((select count(*) from public.transactions), 0::bigint, 'tenant B sees no tenant A events');
-select is((select count(*) from public.wallet_balances), 1::bigint, 'tenant B sees no tenant A balances');
+select is((select count(*) from public.wallet_balances), 3::bigint, 'tenant B sees only its three global balances');
 select is((select count(*) from public.fixed_expenses), 0::bigint, 'tenant B sees no tenant A SYP fixed templates');
 select is((select count(*) from public.installments), 0::bigint, 'tenant B sees no tenant A SYP installments');
 select is((select count(*) from public.month_budgets('2026-11-01')), 0::bigint, 'tenant B sees no tenant A budgets');

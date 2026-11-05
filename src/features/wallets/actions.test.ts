@@ -37,11 +37,11 @@ beforeEach(() => {
 });
 
 describe("wallet balance actions", () => {
-  it("creates a container and its first exact balance through one RPC", async () => {
+  it("creates a fully covered container with a chosen default through one RPC", async () => {
     const result = await createWallet({ name: " Pocket ", kind: "cash", currency: " eur ", openingBalanceMinor: 125 });
     expect(result).toEqual({ ok: true, id: balanceId });
     expect(mocks.rpc).toHaveBeenCalledWith("create_wallet", {
-      p_name: "Pocket", p_kind: "cash", p_currency: "EUR", p_opening_minor: 125,
+      p_name: "Pocket", p_kind: "cash", p_default_currency: "EUR", p_opening_minor: 125,
     });
     expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");
   });

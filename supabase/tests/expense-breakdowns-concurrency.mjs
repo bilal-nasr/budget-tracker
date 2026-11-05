@@ -116,7 +116,7 @@ try {
     with fixture(id,name,kind,currency) as (values ('${wallet}','Concurrency fixture','cash','USD')), containers as (
     insert into public.wallets(id,name,kind,default_balance_id) select id::uuid,name,kind::public.wallet_kind,id::uuid from fixture returning id,user_id
     ) insert into public.wallet_balances(id,user_id,wallet_id,currency,position)
-    select c.id,c.user_id,c.id,f.currency,0 from fixture f join containers c on c.id=f.id::uuid;
+    select case when cc.code=f.currency then c.id else gen_random_uuid() end,c.user_id,c.id,cc.code,0 from fixture f join containers c on c.id=f.id::uuid join public.currencies cc on cc.user_id=c.user_id and cc.disabled_at is null;
     commit;`);
   fixtureCreated = true;
   const category = (await sql(`begin; ${asOwner}

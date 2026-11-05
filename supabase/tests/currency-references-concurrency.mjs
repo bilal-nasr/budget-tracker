@@ -77,7 +77,7 @@ function reference(kind, wallet, id, mode = "insert") {
 async function makeWallet() {
   const output = await owned("select public.create_wallet('Synthetic reference','cash','USD',0);");
   const wallet = output.split(/\r?\n/).find((line) => /^[a-f0-9-]{36}$/.test(line));
-  const balanceOutput = await owned(`select public.add_wallet_balance('${wallet}','SYP');`);
+  const balanceOutput = await owned(`select id from public.wallet_balances where wallet_id='${wallet}' and currency='SYP';`);
   return balanceOutput.split(/\r?\n/).find((line) => /^[a-f0-9-]{36}$/.test(line));
 }
 
@@ -108,17 +108,18 @@ try {
         exception when lock_not_available then null; end;
       end $$;
       select 'REFERENCE_LOCK_CONFIRMED';
-      select public.detach_wallet_balance('${wallet}'); commit;`);
+      select public.set_currency_disabled('SYP',true); commit;`);
     try { await editor.wait("REFERENCE_LOCK_CONFIRMED"); }
     catch (error) { await writer.end("rollback;\n"); await editor.end(); throw error; }
     const first = await writer.end("commit;\n");
     const second = await editor.end();
     assert.equal(first.code, 0, first.errors);
-    assert.notEqual(second.code, 0, "referenced balance detach must be rejected after the writer commits");
-    assert.match(second.errors, /balance.inUse/);
+    assert.notEqual(second.code, 0, "referenced global disable must be rejected after the writer commits");
+    assert.match(second.errors, /currency.inUse/);
     assert.equal((await owned(`select currency::text from public.wallet_balances where id='${wallet}';`)).split(/\r?\n/).at(-1), "SYP");
-    console.log(`PASS reference-first ${kind} ${mode}: conflicting lock, rejected detach, balance retained`);
+    console.log(`PASS reference-first ${kind} ${mode}: conflicting lock, rejected disable, balance retained`);
     passed++;
+    await owned(`delete from public.fixed_expenses; delete from public.installments; update public.profiles set salary_balance_id=null,salary_amount_minor=null where user_id='${owner}'; select public.set_currency_disabled('SYP',false);`);
   }
 
   for (const kind of ["installments", "fixed_expenses", "salary"]) {
@@ -126,7 +127,7 @@ try {
     const id = randomUUID();
     const application = `currency-reference-${randomUUID()}`;
     const editor = session();
-    editor.send(`begin; ${claims} select public.detach_wallet_balance('${wallet}'); select 'CURRENCY_READY';`);
+    editor.send(`begin; ${claims} select public.set_currency_disabled('SYP',true); select 'CURRENCY_READY';`);
     await editor.wait("CURRENCY_READY");
     const writer = session();
     writer.send(`set application_name='${application}'; begin; ${claims} select 'WRITER_READY'; ${reference(kind, wallet, id)} commit;`);
@@ -141,7 +142,7 @@ try {
         if waiting then exit; end if;
         if not exists(select 1 from pg_stat_activity where application_name='${application}')
            or exists(select 1 from pg_stat_activity where application_name='${application}' and state='idle' and query ~* '^commit') then
-          raise exception 'reference writer did not wait for the balance detach';
+          raise exception 'reference writer did not wait for the global disable';
         end if;
         if clock_timestamp()>deadline then raise exception 'currency reference wait barrier timed out'; end if;
         perform pg_sleep(0.005);
@@ -152,11 +153,12 @@ try {
     const first = await editor.end("commit;\n");
     const second = await writer.end();
     assert.equal(first.code, 0, first.errors);
-    assert.notEqual(second.code, 0, "new references must reject the committed detach");
-    assert.match(second.errors, /balance.detached/);
-    assert.equal((await owned(`select detached_at is not null from public.wallet_balances where id='${wallet}';`)).split(/\r?\n/).at(-1), "t");
-    console.log(`PASS detach-first ${kind}: writer waits and rejects the detached exact balance`);
+    assert.notEqual(second.code, 0, "new references must reject the committed disable");
+    assert.match(second.errors, /currency.disabled/);
+    assert.equal((await owned(`select disabled_at is not null from public.currencies where code='SYP';`)).split(/\r?\n/).at(-1), "t");
+    console.log(`PASS disable-first ${kind}: writer waits and rejects the disabled exact balance`);
     passed++;
+    await owned(`delete from public.fixed_expenses; delete from public.installments; update public.profiles set salary_balance_id=null,salary_amount_minor=null where user_id='${owner}'; select public.set_currency_disabled('SYP',false);`);
   }
   console.log(`PASS: ${passed}/9 wallet balance/reference concurrency cases on the designated PG17 fixture.`);
 } catch (error) {
