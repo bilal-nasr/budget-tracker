@@ -6,10 +6,6 @@ const colors = {
   muted: "FFB2C2D2", accent: "FF85DDCA", border: "FF304257",
 };
 
-// A tiled, solid canvas keeps unused worksheet space dark without creating
-// thousands of styled empty rows. Cell fills also retain the theme in print.
-const canvasImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGMQkFAHAACLAFC6vEf/AAAAAElFTkSuQmCC";
-
 function displayText(cell: ExcelJS.Cell): string {
   if (cell.value instanceof Date) return cell.numFmt.includes("hh") ? "05-Nov-2026 08:00" : "05-Nov-2026";
   return cell.text;
@@ -43,7 +39,6 @@ function mergedWidth(sheet: ExcelJS.Worksheet, cell: ExcelJS.Cell): number {
 }
 
 export function applyExportWorkbookStyle(workbook: ExcelJS.Workbook, locale: "en" | "ar"): void {
-  const background = workbook.addImage({ base64: canvasImage, extension: "png" });
   // ExcelJS caches serialized styles by object identity. Reusing these keeps
   // large exports fast and avoids thousands of duplicate formatting objects.
   const styles = new Map<string, Partial<ExcelJS.Style>>();
@@ -68,7 +63,6 @@ export function applyExportWorkbookStyle(workbook: ExcelJS.Workbook, locale: "en
     const lastColumn = Math.max(cover ? 8 : 2, sheet.columnCount);
     const lastRow = sheet.rowCount;
     sheet.mergeCells(2, 1, 2, Math.min(cover ? 8 : 6, lastColumn));
-    sheet.addBackgroundImage(background);
     sheet.properties.tabColor = { argb: summary || cover ? colors.accent : colors.header };
     sheet.properties.defaultRowHeight = 28;
     sheet.views = [{
