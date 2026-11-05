@@ -19,12 +19,15 @@ function mount(locale: "en" | "ar" = "en", categories: Category[] = [category]) 
 }
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-it("opens a compact editor with a single-language name and all eight existing motifs", async () => {
+it("opens a compact editor with all existing motifs and meaningful category icons", async () => {
   mock.createCategory.mockResolvedValue({ ok: false, error: "notConfigured" });
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Add category" }));
   await screen.findByRole("dialog"); // the editor loads on first open
-  expect(screen.getAllByRole("radio").length).toBe(13); // 2 kind + 8 tile + 3 color
+  expect(screen.getAllByRole("radio").length).toBe(20); // 2 kind + 15 icon choices + 3 color
+  for (const name of ["Groceries", "Bills", "Shopping", "Car", "Savings", "Transportation", "Eating out"]) {
+    expect(screen.getByRole("radio", { name })).toBeTruthy();
+  }
   fireEvent.change(screen.getByLabelText("Arabic name"), { target: { value: "هدايا" } });
   fireEvent.click(screen.getByRole("button", { name: "Save category" }));
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("preview without a database"));

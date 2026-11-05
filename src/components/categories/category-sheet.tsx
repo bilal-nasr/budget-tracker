@@ -5,12 +5,12 @@ import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
-import { CategoryGlyph, type TileColor, type TileId } from "@/components/tiles/tile-glyph";
+import { CategoryGlyph, TILE_IDS, type TileColor, type TileId } from "@/components/tiles/tile-glyph";
 import { createCategory, removeCategory, updateCategory } from "@/features/categories/actions";
 import { categoryErrorMessageKey } from "@/features/categories/messages";
 import { categoryCreateSchema, categoryEditSchema, categoryName, type Category } from "@/features/categories/schema";
 
-const tiles: TileId[] = [1, 2, 3, 4, 5, 6, 7, 8];
+const tiles: readonly TileId[] = TILE_IDS;
 const colors: TileColor[] = ["teal", "oxblood", "ochre"];
 const inputClass = "h-12 w-full rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
 

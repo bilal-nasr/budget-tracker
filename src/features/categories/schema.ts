@@ -11,7 +11,7 @@ const nameSchema = z.string().nullable().transform(normalizeCategoryName).refine
 const editableFields = {
   nameEn: nameSchema,
   nameAr: nameSchema,
-  tile: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8)]),
+  tile: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10), z.literal(11), z.literal(12), z.literal(13), z.literal(14), z.literal(15)]),
   color: z.enum(["teal", "oxblood", "ochre"]),
 };
 const hasName = (input: { nameEn: string | null; nameAr: string | null }) => input.nameEn !== null || input.nameAr !== null;

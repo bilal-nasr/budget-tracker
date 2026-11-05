@@ -19,14 +19,14 @@ import type { BudgetLimit, CategorySpend } from "@/features/budgets/schema";
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 export const DEMO_CATEGORIES: Category[] = [
-  { id: id(101), kind: "expense", nameEn: "Groceries", nameAr: "بقالة", tile: 3, color: "teal", position: 1, parentId: null, archivedAt: null },
-  { id: id(102), kind: "expense", nameEn: "Transport", nameAr: "مواصلات", tile: 2, color: "oxblood", position: 2, parentId: null, archivedAt: null },
-  { id: id(103), kind: "expense", nameEn: "Eating out", nameAr: "مطاعم", tile: 4, color: "ochre", position: 3, parentId: null, archivedAt: null },
-  { id: id(104), kind: "expense", nameEn: "Bills", nameAr: "فواتير", tile: 1, color: "teal", position: 4, parentId: null, archivedAt: null },
+  { id: id(101), kind: "expense", nameEn: "Groceries", nameAr: "بقالة", tile: 9, color: "teal", position: 1, parentId: null, archivedAt: null },
+  { id: id(102), kind: "expense", nameEn: "Transport", nameAr: "مواصلات", tile: 14, color: "oxblood", position: 2, parentId: null, archivedAt: null },
+  { id: id(103), kind: "expense", nameEn: "Eating out", nameAr: "مطاعم", tile: 15, color: "ochre", position: 3, parentId: null, archivedAt: null },
+  { id: id(104), kind: "expense", nameEn: "Bills", nameAr: "فواتير", tile: 10, color: "teal", position: 4, parentId: null, archivedAt: null },
   { id: id(105), kind: "expense", nameEn: "Health", nameAr: "صحة", tile: 6, color: "oxblood", position: 5, parentId: null, archivedAt: null },
   { id: id(106), kind: "expense", nameEn: "Rent", nameAr: "إيجار", tile: 7, color: "ochre", position: 6, parentId: null, archivedAt: null },
   { id: id(107), kind: "expense", nameEn: "Fun", nameAr: "ترفيه", tile: 8, color: "teal", position: 7, parentId: null, archivedAt: null },
-  { id: id(108), kind: "expense", nameEn: "Shopping", nameAr: "تسوق", tile: 5, color: "oxblood", position: 8, parentId: null, archivedAt: null },
+  { id: id(108), kind: "expense", nameEn: "Shopping", nameAr: "تسوق", tile: 11, color: "oxblood", position: 8, parentId: null, archivedAt: null },
   { id: id(109), kind: "expense", nameEn: "Education", nameAr: "تعليم", tile: 3, color: "ochre", position: 9, parentId: null, archivedAt: null },
   { id: id(110), kind: "expense", nameEn: "Other", nameAr: "أخرى", tile: 6, color: "teal", position: 10, parentId: null, archivedAt: null },
   { id: id(201), kind: "income", nameEn: "Salary", nameAr: "راتب", tile: 7, color: "teal", position: 1, parentId: null, archivedAt: null },

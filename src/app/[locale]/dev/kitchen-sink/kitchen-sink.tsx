@@ -9,6 +9,7 @@ import { TileBar } from "@/components/budget/tile-bar";
 import { Amount } from "@/components/money/amount";
 import {
   CategoryGlyph,
+  TILE_IDS,
   TileGlyph,
   type TileColor,
   type TileId,
@@ -31,10 +32,10 @@ import { CURRENCIES, currencyPrefix, type Currency } from "@/lib/money";
 type Kind = "expense" | "income" | "move";
 
 const CATEGORIES: { key: string; tile: TileId; color: TileColor }[] = [
-  { key: "groceries", tile: 3, color: "teal" },
-  { key: "transport", tile: 2, color: "oxblood" },
-  { key: "eatingOut", tile: 4, color: "ochre" },
-  { key: "bills", tile: 1, color: "teal" },
+  { key: "groceries", tile: 9, color: "teal" },
+  { key: "transport", tile: 14, color: "oxblood" },
+  { key: "eatingOut", tile: 15, color: "ochre" },
+  { key: "bills", tile: 10, color: "teal" },
   { key: "health", tile: 6, color: "oxblood" },
   { key: "rent", tile: 7, color: "ochre" },
   { key: "fun", tile: 8, color: "teal" },
@@ -185,9 +186,9 @@ export function KitchenSink() {
           <h2 id="k-budget" className="text-[17px] font-semibold">{t("categories")}</h2>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             {[
-              { tile: 3 as TileId, color: "teal" as TileColor, name: t("groceries"), value: 1.13, label: "$340 / $300" },
-              { tile: 2 as TileId, color: "oxblood" as TileColor, name: t("transport"), value: 0.52, label: "$62 / $120" },
-              { tile: 1 as TileId, color: "teal" as TileColor, name: t("bills"), value: 0.9, label: "$180 / $200" },
+              { tile: 9 as TileId, color: "teal" as TileColor, name: t("groceries"), value: 1.13, label: "$340 / $300" },
+              { tile: 14 as TileId, color: "oxblood" as TileColor, name: t("transport"), value: 0.52, label: "$62 / $120" },
+              { tile: 10 as TileId, color: "teal" as TileColor, name: t("bills"), value: 0.9, label: "$180 / $200" },
             ].map((b) => (
               <div key={b.name} className="border-b border-border px-3.5 py-3 last:border-b-0">
                 <div className="mb-2.5 flex items-center gap-3">
@@ -244,7 +245,7 @@ export function KitchenSink() {
         <section aria-labelledby="k-tiles" className="flex flex-col gap-2">
           <h2 id="k-tiles" className="text-[17px] font-semibold">{t("categories")}</h2>
           <div className="grid grid-cols-8 gap-1.5 rounded-xl border border-border bg-card p-3 text-tile-teal">
-            {([1, 2, 3, 4, 5, 6, 7, 8] as TileId[]).map((id) => (
+            {TILE_IDS.map((id) => (
               <TileGlyph key={id} tile={id} className="size-full" />
             ))}
           </div>

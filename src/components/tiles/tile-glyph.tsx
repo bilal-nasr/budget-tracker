@@ -1,12 +1,15 @@
 import type { SVGProps } from "react";
+import { BusFront, CarFront, PiggyBank, ReceiptText, ShoppingBag, ShoppingBasket, Utensils, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Eight encaustic tile motifs. A category stores a number 1-8 and a colour. */
-export const TILE_COUNT = 8;
-export type TileId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+/** Eight decorative motifs plus seven meaningful category icons. */
+export const TILE_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+export const TILE_COUNT = TILE_IDS.length;
+export type TileId = (typeof TILE_IDS)[number];
 export type TileColor = "teal" | "oxblood" | "ochre";
+type MotifId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
-const PATHS: Record<TileId, React.ReactNode> = {
+const PATHS: Record<MotifId, React.ReactNode> = {
   1: <path fillRule="evenodd" d="M12 2 22 12 12 22 2 12Z M12 7 17 12 12 17 7 12Z" />,
   2: (
     <path d="M12 3c3 0 3 6 0 9 3-3 9-3 9 0s-6 3-9 0c3 3 3 9 0 9s-3-6 0-9c-3 3-9 3-9 0s6-3 9 0c-3-3-3-9 0-9Z" />
@@ -31,6 +34,16 @@ const PATHS: Record<TileId, React.ReactNode> = {
   8: <path d="M2 2h9v9H2Z M13 13h9v9h-9Z M13 2h9v9Z M2 13h9v9Z" />,
 };
 
+const CATEGORY_ICONS: Partial<Record<TileId, LucideIcon>> = {
+  9: ShoppingBasket,
+  10: ReceiptText,
+  11: ShoppingBag,
+  12: CarFront,
+  13: PiggyBank,
+  14: BusFront,
+  15: Utensils,
+};
+
 const COLOR_VAR: Record<TileColor, string> = {
   teal: "var(--tile-teal)",
   oxblood: "var(--tile-oxblood)",
@@ -42,6 +55,10 @@ export function TileGlyph({
   className,
   ...props
 }: { tile: TileId } & SVGProps<SVGSVGElement>) {
+  const Icon = CATEGORY_ICONS[tile];
+  if (Icon) {
+    return <Icon aria-hidden="true" strokeWidth={1.8} className={cn("size-8", className)} {...props} />;
+  }
   return (
     <svg
       viewBox="0 0 24 24"
@@ -50,12 +67,12 @@ export function TileGlyph({
       className={cn("size-8", className)}
       {...props}
     >
-      {PATHS[tile]}
+      {PATHS[tile as MotifId]}
     </svg>
   );
 }
 
-/** The category chip: a tile motif on a tinted square. Decorative; the name sits beside it. */
+/** The category chip: an icon on a tinted square. Decorative; the name sits beside it. */
 export function CategoryGlyph({
   tile,
   color,

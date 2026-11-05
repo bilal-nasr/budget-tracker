@@ -17,8 +17,10 @@ describe("category names and validation", () => {
     expect(categoryCreateSchema.safeParse({ ...input, nameEn: "🍎".repeat(40) }).success).toBe(true);
     expect(categoryCreateSchema.safeParse({ ...input, nameEn: "🍎".repeat(41) }).success).toBe(false);
   });
-  it("rejects arbitrary identity fields, motifs, colors and kinds", () => {
-    for (const patch of [{ tile: 9 }, { tile: 1.5 }, { color: "#fff" }, { kind: "transfer" }, { userId: "other" }, { parentId: "other" }, { position: 9 }]) {
+  it("accepts semantic icons and rejects arbitrary identity fields, icons, colors and kinds", () => {
+    expect(categoryCreateSchema.safeParse({ ...input, tile: 9 }).success).toBe(true);
+    expect(categoryCreateSchema.safeParse({ ...input, tile: 15 }).success).toBe(true);
+    for (const patch of [{ tile: 16 }, { tile: 1.5 }, { color: "#fff" }, { kind: "transfer" }, { userId: "other" }, { parentId: "other" }, { position: 9 }]) {
       expect(categoryCreateSchema.safeParse({ ...input, ...patch }).success).toBe(false);
     }
     expect(categoryEditSchema.safeParse(input).success).toBe(false);

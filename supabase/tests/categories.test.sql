@@ -9,6 +9,40 @@ insert into auth.users (id, instance_id, aud, role, email) values
 select set_config('request.jwt.claims','{"sub":"ca000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 set local role authenticated;
 select is((select count(*) from public.categories),12::bigint,'each account receives its own 12 editable defaults');
+select is((select tile from public.categories where name_en='Groceries'),9::smallint,'new accounts receive the meaningful groceries icon');
+
+reset role;
+update public.categories
+set tile = case name_en
+  when 'Groceries' then 3
+  when 'Transport' then 2
+  when 'Eating out' then 4
+  when 'Bills' then 1
+  when 'Shopping' then 5
+  else tile
+end,
+created_at = '2026-01-01 00:00:00+00'
+where user_id in (
+  'ca000000-0000-4000-8000-000000000001',
+  'cb000000-0000-4000-8000-000000000002'
+);
+update public.categories
+set created_at = '2026-01-02 00:00:00+00'
+where user_id = 'cb000000-0000-4000-8000-000000000002'
+  and name_en = 'Groceries';
+select public.upgrade_default_category_icons();
+select is(
+  (select tile from public.categories where user_id='ca000000-0000-4000-8000-000000000001' and name_en='Groceries'),
+  9::smallint,
+  'a complete original bootstrap cohort upgrades'
+);
+select is(
+  (select tile from public.categories where user_id='cb000000-0000-4000-8000-000000000002' and name_en='Groceries'),
+  3::smallint,
+  'a recreated or otherwise incomplete cohort keeps its chosen icon'
+);
+select set_config('request.jwt.claims','{"sub":"ca000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
 select lives_ok($test$
   select public.reorder_categories(
     'expense',
@@ -42,7 +76,8 @@ select throws_ok($$insert into public.categories(kind,name_ar,tile,color) values
 select throws_ok($$insert into public.categories(kind,name_en,name_ar,tile,color) values('expense','  ',null,1,'teal')$$,'23514',null,'a nonblank name is required');
 select lives_ok($$insert into public.categories(kind,name_en,tile,color) values('expense',repeat('🍎',40),1,'teal')$$,'40 Unicode code points are accepted');
 select throws_ok($$insert into public.categories(kind,name_en,tile,color) values('expense',repeat('🍎',41),1,'teal')$$,'23514',null,'41 code points are rejected');
-select throws_ok($$insert into public.categories(kind,name_en,tile,color) values('expense','Bad tile',9,'teal')$$,'23514',null,'unknown motifs are rejected');
+select lives_ok($$insert into public.categories(kind,name_en,tile,color) values('expense','Semantic icon',15,'teal')$$,'meaningful category icons are accepted');
+select throws_ok($$insert into public.categories(kind,name_en,tile,color) values('expense','Bad tile',16,'teal')$$,'23514',null,'unknown icons are rejected');
 select throws_ok($$insert into public.categories(kind,name_en,tile,color) values('expense','Bad color',1,'#fff')$$,'23514',null,'arbitrary colors are rejected');
 select throws_ok($$update public.categories set kind='income' where id='ca100000-0000-4000-8000-000000000001'$$,'P0001','category_identity_immutable','kind cannot rewrite historical identity');
 select throws_ok($$update public.categories set user_id='cb000000-0000-4000-8000-000000000002' where id='ca100000-0000-4000-8000-000000000001'$$,'P0001','category_identity_immutable','category ownership is immutable');
