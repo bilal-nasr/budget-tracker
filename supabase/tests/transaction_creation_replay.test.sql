@@ -24,7 +24,7 @@ from creation_variants where name like 'plain-%';
 insert into creation_variants
 select replace(name,'plain','settlement'),('e2200000-0000-4000-8000-'||lpad((6+row_number() over(order by name))::text,12,'0'))::uuid,
  input,'[{"description":"Phone credits","amountMinor":2000}]',
- '{"tenderMinor":6000,"change":{"walletId":"e2100000-0000-4000-8000-000000000001","amountMinor":1000}}',null
+ '{"tenderMinor":6000,"changes":[{"walletId":"e2100000-0000-4000-8000-000000000001","amountMinor":1000}]}',null
 from creation_variants where name like 'plain-%';
 create function pg_temp.creation_call(p_variant uuid) returns text language sql as $$
  select format('select * from public.save_transaction(%L,null,%L::jsonb,%L::jsonb,%L::jsonb)',id,input,items,settlement)

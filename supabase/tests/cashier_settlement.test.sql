@@ -16,7 +16,7 @@ from public.categories where kind='expense' and parent_id is null order by posit
 grant all on cashier_input to authenticated;
 
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000001',null,(select value from cashier_input),'[{"description":"Food","amountMinor":1000}]',
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250,"rate":{"base":"USD","quote":"LBP","quoteMajorNumerator":89500,"quoteMajorDenominator":1}}}')$$,'save exact cross-currency purchase with partial breakdown');
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250}]}')$$,'save exact cross-currency purchase with partial breakdown');
 set constraints all immediate;
 set constraints all deferred;
 select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000001'),-2000::numeric,'tender leaves USD once');
@@ -28,12 +28,12 @@ select is((select count(*) from public.transactions where kind='income'),0::bigi
 create temp table cashier_revision as select revision as value from public.transactions where id='c2000000-0000-4000-8000-000000000001';
 grant all on cashier_revision to authenticated;
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000001',null,(select value from cashier_input),'[{"description":"Food","amountMinor":1000}]',
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250,"rate":{"base":"USD","quote":"LBP","quoteMajorNumerator":89500,"quoteMajorDenominator":1}}}')$$,'identical create replay succeeds');
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250}]}')$$,'identical create replay succeeds');
 select is((select revision from public.transactions where id='c2000000-0000-4000-8000-000000000001'),(select value from cashier_revision),'replay does not touch revision or items');
 select throws_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000001',null,(select value from cashier_input),'[{"description":"Food","amountMinor":1000}]','{}')$$,'BT003','transaction conflict','different settlement replay fails');
 
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000001',(select value from cashier_revision),(select value from cashier_input),null,
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000003","amountMinor":750}}')$$,'edit atomically switches receiving wallet and currency');
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000003","amountMinor":750}]}')$$,'edit atomically switches receiving wallet and currency');
 set constraints all immediate;
 set constraints all deferred;
 select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000002'),0::numeric,'old change contribution removed');
@@ -60,7 +60,7 @@ select is((select balance_minor from public.wallet_balances where wallet_id='c10
 -- Deferred invariants must reject direct authenticated writes, not merely bad RPCs.
 set constraints all immediate;
 select throws_ok($$update public.transactions set tender_minor=2000 where id='c2000000-0000-4000-8000-000000000001'$$,'P0001','settlement mismatch','direct inconsistent tender blocked');
-select throws_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000002',null,(select value from cashier_input),'[{"description":"Too much","amountMinor":1500}]','{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000001","amountMinor":750}}')$$,null,null,'items below tender but above cost fail atomically');
+select throws_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000002',null,(select value from cashier_input),'[{"description":"Too much","amountMinor":1500}]','{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000001","amountMinor":750}]}')$$,null,null,'items below tender but above cost fail atomically');
 select is((select count(*) from public.transactions where id='c2000000-0000-4000-8000-000000000002'),0::bigint,'invalid items leave no parent');
 select is(public.cashier_convert_minor(1,'LBP','USD','USD','LBP',200,1),1::bigint,'SQL half-up rounding matches domain helper');
 select is(public.cashier_convert_minor(9999994999999,'SYP','USD','USD','SYP',999999999999999,1000000),999999::bigint,
@@ -69,36 +69,37 @@ select is(public.cashier_convert_minor(9999995000000,'SYP','USD','USD','SYP',999
   'adjacent SYP quote boundary rounds up once');
 
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000004',null,(select value from cashier_input),null,
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000001","amountMinor":750}}')$$,'same-wallet same-currency purchase');
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000001","amountMinor":750}]}')$$,'same-wallet same-currency purchase');
 select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000001'),-2500::numeric,'same-wallet tender and change net to cost');
-select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000005',null,(select value from cashier_input),null,'{"tenderMinor":1250,"change":null}')$$,'exact tender with no change');
+select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000005',null,(select value from cashier_input),null,'{"tenderMinor":1250,"changes":[]}')$$,'exact tender with no change');
 select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000001'),-3750::numeric,'no-change tender is one cost debit');
 insert into public.wallets(id,name,kind,currency) values ('c1000000-0000-4000-8000-000000000005','SYP pounds','cash','SYP');
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000006',null,(select value from cashier_input),null,
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000005","amountMinor":97500,"rate":{"base":"USD","quote":"SYP","quoteMajorNumerator":13000,"quoteMajorDenominator":1}}}')$$,'SYP direct quote uses whole-pound scale without a profile-rate fallback');
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000005","amountMinor":97500}]}')$$,'SYP actual change uses whole-pound scale without a profile-rate fallback');
 select is((select balance_minor from public.wallet_balances where wallet_id='c1000000-0000-4000-8000-000000000005'),97500::numeric,'actual pounds credited exactly');
 select is(public.cashier_convert_minor(500,'SYP','LBP','LBP','SYP',1,100),50000::bigint,'fractional LBP/SYP quote uses exact rational math');
 select is(public.cashier_convert_minor(750,'USD','SYP','USD','SYP',13000,1),97500::bigint,'reverse SYP conversion is explicit and scale-aware');
 select throws_ok($$select public.cashier_convert_minor(100,'SYP','USD','USD','LBP',89500,1)$$,'P0001','invalid settlement rate','legacy USD/LBP quote cannot value SYP');
-select throws_ok($$update public.transactions set change_currency='USD' where id='c2000000-0000-4000-8000-000000000006'$$,'P0001','settlement currency mismatch','direct forged receiving currency rejected');
+select throws_ok($$update public.transactions set change_currency='USD' where id='c2000000-0000-4000-8000-000000000006'$$,'P0001','invalid settlement','legacy parent change fields cannot be forged');
 
 -- Archived receiver metadata edits retain precisely the existing money. Use an
 -- independent fixture so the replay/lifecycle regression sequence above stays unchanged.
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000008',null,(select value from cashier_input),
 '[{"description":"Food","amountMinor":1000}]',
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250,"rate":{"base":"USD","quote":"LBP","quoteMajorNumerator":89500,"quoteMajorDenominator":1}}}')$$,'create archived-receiver metadata fixture');
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250}]}')$$,'create archived-receiver metadata fixture');
 update public.wallets set archived_at=now() where id='c1000000-0000-4000-8000-000000000002';
 select lives_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000008',
 (select revision from public.transactions where id='c2000000-0000-4000-8000-000000000008'),
 (select value || '{"note":"Metadata edited","occurredOn":"2026-11-03"}'::jsonb from cashier_input),
 '[{"description":"Updated food","amountMinor":900}]',
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250,"rate":{"base":"USD","quote":"LBP","quoteMajorNumerator":89500,"quoteMajorDenominator":1}}}')$$,'archived receiver allows name/date/items edits with identical cash snapshot');
-select is((select jsonb_build_array(amount_minor,tender_minor,change_minor) from public.transactions where id='c2000000-0000-4000-8000-000000000008'),
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250}]}')$$,'archived receiver allows name/date/items edits with identical cash snapshot');
+select is((select jsonb_build_array(t.amount_minor,t.tender_minor,c.amount_minor) from public.transactions t
+  join public.cashier_changes c on c.transaction_id=t.id where t.id='c2000000-0000-4000-8000-000000000008'),
 '[1250,2000,671250]'::jsonb,'metadata edit preserves cost, tender and actual change exactly');
 select throws_ok($$update public.transactions set amount_minor=1350,tender_minor=2100 where id='c2000000-0000-4000-8000-000000000008'$$,
 'P0001','wallet unavailable','financially changed settlement still requires an active receiver');
 select throws_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000009',null,(select value from cashier_input),null,
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250,"rate":{"base":"USD","quote":"LBP","quoteMajorNumerator":89500,"quoteMajorDenominator":1}}}')$$,
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000002","amountMinor":671250}]}')$$,
 'P0001','wallet unavailable','new/duplicated purchase cannot reuse an archived receiver');
 
 select set_config('request.jwt.claims','{"sub":"cbbbbbbb-0000-4000-8000-000000000002","role":"authenticated"}',true);
@@ -107,6 +108,6 @@ select throws_ok($$select * from public.set_transaction_deleted('c2000000-0000-4
 insert into public.wallets(id,name,kind,currency) values ('c1000000-0000-4000-8000-000000000004','B cash','cash','USD');
 select throws_ok($$select * from public.save_transaction('c2000000-0000-4000-8000-000000000003',null,
 jsonb_build_object('kind','expense','occurredOn','2026-11-04','walletId','c1000000-0000-4000-8000-000000000004','amountMinor',1250,'categoryId',(select id from public.categories where kind='expense' limit 1)),null,
-'{"tenderMinor":2000,"change":{"walletId":"c1000000-0000-4000-8000-000000000003","amountMinor":750}}')$$,'P0001','wallet unavailable','B cannot receive change in A wallet');
+'{"tenderMinor":2000,"changes":[{"walletId":"c1000000-0000-4000-8000-000000000003","amountMinor":750}]}')$$,'P0001','wallet unavailable','B cannot receive change in A wallet');
 select * from finish();
 rollback;

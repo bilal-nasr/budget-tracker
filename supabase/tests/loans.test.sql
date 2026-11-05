@@ -134,8 +134,10 @@ insert into public.wallets(id,name,kind,currency) values
 ('ca100000-0000-4000-8000-000000000008','Deleted transfer receiver','bank','USD'),
 ('ca100000-0000-4000-8000-000000000009','Fixed-only wallet','bank','USD'),
 ('ca100000-0000-4000-8000-000000000010','Installment-only wallet','bank','USD');
-insert into public.transactions(kind,occurred_on,wallet_id,amount_minor,currency,category_id,tender_minor,change_wallet_id,change_minor)
-select 'expense',public.loan_today(),'ca100000-0000-4000-8000-000000000006',500,'USD',fee_category_id,1000,'ca100000-0000-4000-8000-000000000007',500
+select public.save_transaction('ca200000-0000-4000-8000-000000000099',null,
+  jsonb_build_object('kind','expense','occurredOn',public.loan_today(),'walletId','ca100000-0000-4000-8000-000000000006',
+    'amountMinor',500,'categoryId',fee_category_id),null,
+  '{"tenderMinor":1000,"changes":[{"walletId":"ca100000-0000-4000-8000-000000000007","amountMinor":500}]}'::jsonb)
 from public.loans where name='Synthetic loan 1';
 insert into public.transactions(kind,occurred_on,wallet_id,amount_minor,currency,to_wallet_id,to_amount_minor)
 values('transfer',public.loan_today(),'ca100000-0000-4000-8000-000000000001',100,'USD','ca100000-0000-4000-8000-000000000008',100);
