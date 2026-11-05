@@ -15,8 +15,8 @@ vi.mock("@/features/export/workbook", () => ({ writeExportWorkbook: mocks.writeE
 
 import { GET } from "./route";
 
-function request(locale: string) {
-  return GET(new Request(`https://budget.example/${locale}/settings/export`), {
+function request(locale: string, query = "") {
+  return GET(new Request(`https://budget.example/${locale}/settings/export${query}`), {
     params: Promise.resolve({ locale }),
   } as RouteContext<"/[locale]/settings/export">);
 }
@@ -62,4 +62,17 @@ it("returns a generic 500 response with no-store headers when data collection or
   const body = await response.text();
   expect(body).not.toContain("sensitive");
   expect(body).not.toContain("database");
+});
+
+it("passes parsed options to the workbook writer and names the simple file differently", async () => {
+  const response = await request("en", "?mode=simple&period=month&notes=0");
+  expect(mocks.writeExportWorkbook).toHaveBeenCalledWith({ cutoffDate: "2026-11-05" }, { mode: "simple", period: "month", balances: true, notes: false });
+  expect(response.headers.get("content-disposition")).toBe('attachment; filename="budget-summary-2026-11-05.xlsx"');
+});
+
+it("rejects unrecognised options with 400 before reading any data", async () => {
+  const response = await request("en", "?mode=detailed&sections=payroll");
+  expect(response.status).toBe(400);
+  expect(response.headers.get("cache-control")).toContain("no-store");
+  expect(mocks.getExportData).not.toHaveBeenCalled();
 });

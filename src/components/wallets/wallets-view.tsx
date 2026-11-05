@@ -20,7 +20,9 @@ export function WalletsView() {
   const t = useTranslations("Wallets");
   const loans = useTranslations("Loans");
   const payments = useTranslations("PendingPayments");
-  const { walletContainers: wallets, needsAttentionWallets, enabledCurrencies } = useAppData();
+  const { walletContainers: wallets, needsAttentionWallets, enabledCurrencies: catalog, defaultCurrency } = useAppData();
+  // The default currency leads the dropdown and is shown first.
+  const enabledCurrencies = [...catalog].sort((a, b) => Number(b.code === defaultCurrency) - Number(a.code === defaultCurrency));
   const { openWallet } = useComposer();
   const [showInfo, setShowInfo] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);

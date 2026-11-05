@@ -1,6 +1,6 @@
 import type ExcelJS from "exceljs";
 
-const colors = {
+export const exportColors = {
   canvas: "FF101827", surface: "FF172436", alternate: "FF1D2D41",
   header: "FF28574F", title: "FF183D3B", text: "FFE7EEF7",
   muted: "FFB2C2D2", accent: "FF85DDCA", border: "FF304257",
@@ -63,7 +63,7 @@ export function applyExportWorkbookStyle(workbook: ExcelJS.Workbook, locale: "en
     const lastColumn = Math.max(cover ? 8 : 2, sheet.columnCount);
     const lastRow = sheet.rowCount;
     sheet.mergeCells(2, 1, 2, Math.min(cover ? 8 : 6, lastColumn));
-    sheet.properties.tabColor = { argb: summary || cover ? colors.accent : colors.header };
+    sheet.properties.tabColor = { argb: summary || cover ? exportColors.accent : exportColors.header };
     sheet.properties.defaultRowHeight = 28;
     sheet.views = [{
       ...(cover ? {} : { state: "frozen" as const, ySplit: 4 }),
@@ -85,9 +85,9 @@ export function applyExportWorkbookStyle(workbook: ExcelJS.Workbook, locale: "en
       const isHeader = !cover && rowNumber === 4;
       const isTitle = rowNumber === 2;
       const isData = rowNumber >= 5;
-      const fill = isTitle ? colors.title : isHeader ? colors.header :
-        isData ? (rowNumber % 2 === 0 ? colors.alternate : colors.surface) : colors.canvas;
-      const color = isTitle ? colors.accent : cover && rowNumber >= 10 ? colors.muted : colors.text;
+      const fill = isTitle ? exportColors.title : isHeader ? exportColors.header :
+        isData ? (rowNumber % 2 === 0 ? exportColors.alternate : exportColors.surface) : exportColors.canvas;
+      const color = isTitle ? exportColors.accent : cover && rowNumber >= 10 ? exportColors.muted : exportColors.text;
       const bold = isTitle || isHeader || (summary && isData);
       let lines = 1;
       for (let column = 1; column <= lastColumn; column++) {
@@ -101,7 +101,7 @@ export function applyExportWorkbookStyle(workbook: ExcelJS.Workbook, locale: "en
             fill: { type: "pattern", pattern: "solid", fgColor: { argb: fill } },
             font: { name: "Aptos", size: isTitle ? 17 : 11, bold, color: { argb: color } },
             alignment: { horizontal: "center", vertical: "middle", wrapText: true, shrinkToFit: false },
-            ...(isHeader || isData ? { border: { bottom: { style: "thin" as const, color: { argb: colors.border } } } } : {}),
+            ...(isHeader || isData ? { border: { bottom: { style: "thin" as const, color: { argb: exportColors.border } } } } : {}),
           };
           styles.set(key, style);
         }

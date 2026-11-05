@@ -8,6 +8,8 @@ import { historicalExportBalances, type ExportData } from "./model";
 import { requireCurrency } from "@/lib/currency";
 
 import { applyExportWorkbookStyle } from "./workbook-style";
+import { buildSimpleWorkbook } from "./simple";
+import { DEFAULT_DETAILED, SECTION_GROUPS, selectedSheets, type ExportOptions, type SectionGroup } from "./options";
 
 type TableColumn = { key: string; label: string };
 
@@ -19,7 +21,20 @@ function monthValue(value: string): Date {
   return new Date(`${value}-01T00:00:00Z`);
 }
 
-export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
+/** Excel table backing each worksheet that other sheets' formulas read from. */
+const FORMULA_SOURCES: Array<[table: string, sheet: SheetKey]> = [
+  ["WalletLedgerTable", "walletLedger"], ["ReconciliationTable", "reconciliation"],
+  ["MonthlyActivityTable", "monthlyActivity"], ["BudgetActualTable", "budgetActual"],
+  ["LoansTable", "loans"], ["InstallmentsTable", "installments"], ["ReceivablesTable", "receivables"],
+];
+
+/**
+ * The full workbook is always built so every figure is computed the same way,
+ * then worksheets outside `sections` are dropped. A formula that would read a
+ * dropped table keeps its calculated value instead of a broken reference.
+ */
+export function buildExportWorkbook(data: ExportData, sections: readonly SectionGroup[] = SECTION_GROUPS): ExcelJS.Workbook {
+  const kept = selectedSheets(sections);
   const labels = getExportLabels(data.locale);
   const balances = historicalExportBalances(data.wallets, data.currencies);
   const currencies = data.currencies.map((currency) => currency.code);
@@ -369,7 +384,8 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     // ExcelJS 4.4 drops a numeric cached result of exactly zero. A visible
     // string cache plus fullCalcOnLoad preserves the display until Excel
     // replaces it with the calculated numeric result.
-    cell.value = { formula: text, result: result === 0 ? "0" : result };
+    const orphaned = FORMULA_SOURCES.some(([table, sheet]) => text.includes(`${table}[`) && !kept.has(sheet));
+    cell.value = orphaned ? result : { formula: text, result: result === 0 ? "0" : result };
   };
 
   const reconciliationSheet = sheets.get("reconciliation")!;
@@ -538,10 +554,15 @@ export function buildExportWorkbook(data: ExportData): ExcelJS.Workbook {
     });
   }
 
+  for (const [key, sheet] of sheets) if (!kept.has(key)) workbook.removeWorksheet(sheet.id);
   return workbook;
 }
 
-export async function writeExportWorkbook(data: ExportData): Promise<Buffer> {
-  const buffer = await buildExportWorkbook(data).xlsx.writeBuffer();
+export function buildWorkbook(data: ExportData, options: ExportOptions = DEFAULT_DETAILED): ExcelJS.Workbook {
+  return options.mode === "simple" ? buildSimpleWorkbook(data, options) : buildExportWorkbook(data, options.sections);
+}
+
+export async function writeExportWorkbook(data: ExportData, options: ExportOptions = DEFAULT_DETAILED): Promise<Buffer> {
+  const buffer = await buildWorkbook(data, options).xlsx.writeBuffer();
   return Buffer.from(buffer);
 }

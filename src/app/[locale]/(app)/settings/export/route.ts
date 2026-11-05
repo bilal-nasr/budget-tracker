@@ -1,6 +1,7 @@
 import { getExportData } from "@/features/export/data";
 import { writeExportWorkbook } from "@/features/export/workbook";
 import type { ExportLocale } from "@/features/export/model";
+import { parseExportOptions } from "@/features/export/options";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { getUserId } from "@/lib/supabase/user";
 
@@ -22,12 +23,16 @@ function isExportLocale(value: string): value is ExportLocale {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext<"/[locale]/settings/export">,
 ): Promise<Response> {
   const { locale } = await context.params;
   if (!isExportLocale(locale)) {
     return Response.json({ error: "notFound" }, { status: 404, headers: privateHeaders() });
+  }
+  const options = parseExportOptions(new URL(request.url).searchParams);
+  if (!options) {
+    return Response.json({ error: "badRequest" }, { status: 400, headers: privateHeaders() });
   }
   try {
     if (supabaseConfigured() && !(await getUserId())) {
@@ -36,12 +41,12 @@ export async function GET(
     // One cutoff anchors both complete snapshot reads and the serialized workbook.
     const exportedAt = new Date();
     const data = await getExportData(locale, exportedAt);
-    const buffer = await writeExportWorkbook(data);
+    const buffer = await writeExportWorkbook(data, options);
     return new Response(Uint8Array.from(buffer), {
       status: 200,
       headers: privateHeaders({
         "Content-Type": XLSX_TYPE,
-        "Content-Disposition": `attachment; filename="budget-export-${data.cutoffDate}.xlsx"`,
+        "Content-Disposition": `attachment; filename="${options.mode === "simple" ? "budget-summary" : "budget-export"}-${data.cutoffDate}.xlsx"`,
         "Content-Length": String(buffer.byteLength),
         "X-Content-Type-Options": "nosniff",
       }),

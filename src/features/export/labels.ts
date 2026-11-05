@@ -24,6 +24,8 @@ type ExportLabels = {
     string
   >;
   enums: Record<string, string>;
+  /** Labels used only by the one-sheet simple workbook. */
+  simple: Record<"sheet" | "balance" | "total" | "transactions" | "cycle" | "month" | "allTime", string>;
   values: Record<
     "yes" | "no" | "under" | "over" | "on" | "unbudgeted" | "notAvailable" | "cashBasis" |
     "sourceDescription" | "currencyRule" | "limitation" | "exportedAt" | "cutoff" | "timezone" |
@@ -67,6 +69,10 @@ const en: ExportLabels = {
     "cash-change": "Cash change", salary: "Salary", fixed: "Fixed expense", installment: "Installment",
     cash: "Cash", bank: "Bank", card: "Card", paidOff: "Paid off", unpaid: "Unpaid", partial: "Partially paid",
     paid: "Paid", borrowed: "Borrowed", lent: "Lent", disbursement: "Disbursement", repayment: "Repayment",
+  },
+  simple: {
+    sheet: "Cycle & Balance", balance: "Current balance", total: "Total", transactions: "Transactions",
+    cycle: "Payment cycle", month: "Calendar month", allTime: "All time",
   },
   values: {
     yes: "Yes", no: "No", under: "Under budget", over: "Over budget", on: "On budget", unbudgeted: "No budget",
@@ -116,6 +122,10 @@ const ar: ExportLabels = {
     cash: "نقدية", bank: "مصرفية", card: "بطاقة", paidOff: "مسدّد بالكامل", unpaid: "غير مدفوع",
     partial: "مدفوع جزئياً", paid: "مدفوع", borrowed: "مقترض", lent: "مُقرض", disbursement: "صرف",
     repayment: "سداد",
+  },
+  simple: {
+    sheet: "الدورة والرصيد", balance: "الرصيد الحالي", total: "الإجمالي", transactions: "المعاملات",
+    cycle: "دورة الدفع", month: "الشهر الميلادي", allTime: "كل الفترات",
   },
   values: {
     yes: "نعم", no: "لا", under: "أقل من الميزانية", over: "أعلى من الميزانية", on: "مطابق للميزانية", unbudgeted: "بلا ميزانية",
