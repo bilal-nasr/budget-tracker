@@ -4,10 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { actionClient, databaseActionError, type ActionResult } from "@/lib/supabase/action";
 import {
-  walletBalanceInputSchema,
   walletCreateInputSchema,
   walletUpdateInputSchema,
-  type WalletBalanceInput,
   type WalletCreateInput,
   type WalletFunding,
   type WalletUpdateInput,
@@ -24,7 +22,7 @@ async function safeActionClient() {
 }
 
 async function rpcAction(
-  name: "set_wallet_default" | "detach_wallet_balance",
+  name: "set_wallet_default",
   args: Record<string, string>,
 ): Promise<ActionResult> {
   const ctx = await safeActionClient();
@@ -54,7 +52,7 @@ export async function createWallet(
       p_default_currency: parsed.data.currency,
       p_opening_minor: parsed.data.openingBalanceMinor,
     });
-    if (error || typeof data !== "string") return { ok: false, error: error ? databaseActionError(error) : "failed" };
+    if (error || typeof data !== "string" || !uuid.safeParse(data).success) return { ok: false, error: error ? databaseActionError(error) : "failed" };
     revalidatePath("/", "layout");
     return { ok: true, id: data };
   } catch {
@@ -82,32 +80,9 @@ export async function updateWallet(id: string, input: WalletUpdateInput): Promis
   }
 }
 
-export async function addWalletBalance(walletId: string, input: WalletBalanceInput): Promise<ActionResult<{ id: string }>> {
-  const parsed = walletBalanceInputSchema.safeParse(input);
-  if (!uuid.safeParse(walletId).success || !parsed.success) return { ok: false, error: "invalid" };
-  const ctx = await safeActionClient();
-  if (ctx.error) return { ok: false, error: ctx.error };
-  try {
-    const { data, error } = await ctx.supabase.rpc("add_wallet_balance", {
-      p_wallet_id: walletId,
-      p_currency: parsed.data.currency,
-    });
-    if (error || typeof data !== "string") return { ok: false, error: error ? databaseActionError(error) : "failed" };
-    revalidatePath("/", "layout");
-    return { ok: true, id: data };
-  } catch {
-    return { ok: false, error: "failed" };
-  }
-}
-
 export async function setDefaultWalletBalance(walletId: string, balanceId: string): Promise<ActionResult> {
   if (!uuid.safeParse(walletId).success || !uuid.safeParse(balanceId).success) return { ok: false, error: "invalid" };
   return rpcAction("set_wallet_default", { p_wallet_id: walletId, p_balance_id: balanceId });
-}
-
-export async function detachWalletBalance(balanceId: string): Promise<ActionResult> {
-  if (!uuid.safeParse(balanceId).success) return { ok: false, error: "invalid" };
-  return rpcAction("detach_wallet_balance", { p_balance_id: balanceId });
 }
 
 export async function deleteWallet(id: string): Promise<ActionResult> {

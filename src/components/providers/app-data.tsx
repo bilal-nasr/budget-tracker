@@ -84,10 +84,11 @@ export function AppDataProvider({
         if (!currencyIndex.has(balance.currency)) throw new Error("App currency data unavailable");
         balanceIndex.set(balance.id, balance);
       }
-      if (!wallet.balances.some((balance) => balance.id === wallet.defaultBalanceId)) throw new Error("App wallet data unavailable");
+      const emptyTombstone = wallet.deleted && wallet.defaultBalanceId === null && wallet.balances.length === 0;
+      if (!emptyTombstone && !wallet.balances.some((balance) => balance.id === wallet.defaultBalanceId)) throw new Error("App wallet data unavailable");
     }
     const legacyWallets = walletContainers.flatMap((wallet): Wallet[] => {
-      const balance = balanceIndex.get(wallet.defaultBalanceId);
+      const balance = wallet.defaultBalanceId === null ? undefined : balanceIndex.get(wallet.defaultBalanceId);
       if (!balance || !isCurrency(balance.currency)) return [];
       return [{
         id: wallet.id,

@@ -50,7 +50,7 @@ export const DEMO_WALLETS: Wallet[] = [
 export const DEMO_CURRENCIES: CurrencyDefinition[] = DEFAULT_CURRENCIES.map((currency) => ({ ...currency }));
 
 /** Canonical demo containers; legacy single-currency demo rows remain for not-yet-migrated screens. */
-export const DEMO_WALLET_CONTAINERS: WalletContainer[] = [
+const demoStoredWallets: WalletContainer[] = [
   {
     id: id(1), name: "Pocket", kind: "cash", position: 1, deleted: false, needsAttention: false,
     defaultBalanceId: id(1),
@@ -78,6 +78,22 @@ export const DEMO_WALLET_CONTAINERS: WalletContainer[] = [
     }],
   })),
 ];
+
+/** Durable demo seed rows, populated once with deterministic, non-colliding IDs. */
+export const DEMO_WALLET_CONTAINERS: WalletContainer[] = demoStoredWallets.map((wallet, walletIndex) => {
+  if (wallet.deleted) return wallet;
+  return {
+    ...wallet,
+    balances: DEMO_CURRENCIES.filter((currency) => !currency.disabled).map((currency, position) => {
+      const existing = wallet.balances.find((balance) => balance.currency === currency.code);
+      return existing ? { ...existing, position } : {
+        id: id(10000 + walletIndex * DEMO_CURRENCIES.length + position),
+        walletId: wallet.id, currency: currency.code, openingBalanceMinor: 0,
+        balanceMinor: 0, position, detached: false,
+      };
+    }),
+  };
+});
 
 /** One shared, synthetic source for Loans history and corresponding Activity rows. */
 export function demoLoans(): Loan[] {

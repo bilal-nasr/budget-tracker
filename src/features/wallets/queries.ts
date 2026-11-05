@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { getCurrencies } from "@/features/currencies/queries";
 import { DEMO_WALLET_CONTAINERS } from "@/lib/demo-data";
-import { requireCurrency } from "@/lib/currency";
+import { indexCurrencies, requireCurrency, type CurrencyDefinition } from "@/lib/currency";
 import { isCurrency, readMinor } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
@@ -12,6 +12,7 @@ import { walletContainerSchema, type Wallet, type WalletContainer } from "./sche
 export type WalletQueryOptions = {
   includeDeleted?: boolean;
   includeNeedsAttention?: boolean;
+  includeDisabledBalances?: boolean;
 };
 
 type BalanceRow = {
@@ -34,11 +35,12 @@ type TotalRow = {
 const getWalletsCached = cache(async (
   includeDeleted: boolean,
   includeNeedsAttention: boolean,
+  includeDisabledBalances: boolean,
 ): Promise<WalletContainer[]> => {
   if (!supabaseConfigured()) {
-    return DEMO_WALLET_CONTAINERS.filter((wallet) =>
-      (includeDeleted || !wallet.deleted)
-      && (includeNeedsAttention || !wallet.needsAttention));
+    return projectWallets(DEMO_WALLET_CONTAINERS, await getCurrencies(), {
+      includeDeleted, includeNeedsAttention, includeDisabledBalances,
+    });
   }
 
   const supabase = await createClient();
@@ -95,15 +97,6 @@ const getWalletsCached = cache(async (
 
   const mapped = wallets.data.map((row) => {
     const walletBalances = balancesByWallet.get(row.id) ?? [];
-    walletBalances.sort((left, right) => {
-      if (left.id === row.default_balance_id) return -1;
-      if (right.id === row.default_balance_id) return 1;
-      return left.position - right.position || left.id.localeCompare(right.id);
-    });
-    const selected = walletBalances.find((balance) => balance.id === row.default_balance_id);
-    if (row.deleted_at === null && selected && requireCurrency(selected.currency, currencies).disabled) {
-      throw new Error("Invalid wallet data");
-    }
     const parsed = walletContainerSchema.safeParse({
       id: row.id,
       name: row.name,
@@ -118,14 +111,58 @@ const getWalletsCached = cache(async (
     return parsed.data;
   });
 
-  return mapped.filter((wallet) =>
-    (includeDeleted || !wallet.deleted)
-    && (includeNeedsAttention || !wallet.needsAttention));
+  return projectWallets(mapped, currencies, { includeDeleted, includeNeedsAttention, includeDisabledBalances });
 });
+
+/**
+ * Validate complete stored state before applying independent visibility options.
+ * Deleted wallets never require later catalog additions. A hidden disabled default
+ * retains its stored ID; full history callers must include disabled balances.
+ */
+function projectWallets(
+  stored: readonly WalletContainer[],
+  currencies: readonly CurrencyDefinition[],
+  options: WalletQueryOptions,
+): WalletContainer[] {
+  const catalog = indexCurrencies(currencies);
+  const order = new Map(currencies.map((currency, index) => [currency.code, index]));
+  const walletIds = new Set<string>();
+  const balanceIds = new Set<string>();
+  const validated = stored.map((input) => {
+    const parsed = walletContainerSchema.safeParse(input);
+    if (!parsed.success || walletIds.has(input.id)) throw new Error("Invalid wallet data");
+    const wallet = parsed.data;
+    walletIds.add(wallet.id);
+    for (const balance of wallet.balances) {
+      requireCurrency(balance.currency, currencies);
+      if (balanceIds.has(balance.id)) throw new Error("Invalid wallet data");
+      balanceIds.add(balance.id);
+      if (!wallet.deleted && !catalog.get(balance.currency)!.disabled && balance.detached) {
+        throw new Error("Invalid wallet data");
+      }
+    }
+    if (!wallet.deleted) {
+      const selected = wallet.balances.find((balance) => balance.id === wallet.defaultBalanceId);
+      if (!selected || catalog.get(selected.currency)!.disabled
+        || currencies.some((currency) => !currency.disabled && !wallet.balances.some((balance) => balance.currency === currency.code))) {
+        throw new Error("Invalid wallet data");
+      }
+    }
+    return wallet;
+  });
+  return validated
+    .filter((wallet) => (options.includeDeleted || !wallet.deleted) && (options.includeNeedsAttention || !wallet.needsAttention))
+    .map((wallet) => ({
+      ...wallet,
+      balances: wallet.balances
+        .filter((balance) => options.includeDisabledBalances || !catalog.get(balance.currency)!.disabled)
+        .sort((left, right) => order.get(left.currency)! - order.get(right.currency)!),
+    }));
+}
 
 /** Nested wallet containers. Monetary callers must retain the exact balance IDs. */
 export async function getWallets(options: WalletQueryOptions = {}): Promise<WalletContainer[]> {
-  return getWalletsCached(options.includeDeleted === true, options.includeNeedsAttention === true);
+  return getWalletsCached(options.includeDeleted === true, options.includeNeedsAttention === true, options.includeDisabledBalances === true);
 }
 
 /**

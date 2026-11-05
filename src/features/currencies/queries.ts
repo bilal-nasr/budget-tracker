@@ -7,7 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { currencyInputSchema } from "./schema";
 
-/** The signed-in user's catalog in stable addition order. */
+/** Complete owner catalog, including disabled definitions for exact historical reads.
+ * Addition order (created_at, code) also defines balance display order in every wallet.
+ */
 export const getCurrencies = cache(async (): Promise<CurrencyDefinition[]> => {
   if (!supabaseConfigured()) return DEMO_CURRENCIES;
 

@@ -94,3 +94,31 @@ it("rejects a default balance owned by a different container", () => {
   };
   expect(() => render(provider(<Probe />, { walletContainers: [...wallets, other] }))).toThrow("App wallet data unavailable");
 });
+
+function TombstoneProbe() {
+  const data = useAppData();
+  return <output>{JSON.stringify({
+    canonical: data.walletById("empty-deleted"),
+    legacy: data.legacyWalletById("empty-deleted") ?? null,
+    legacyCount: data.legacyWallets.length,
+  })}</output>;
+}
+
+const emptyDeleted: WalletContainer = {
+  id: "empty-deleted", name: "Closed", kind: "bank", position: 1,
+  deleted: true, needsAttention: false, defaultBalanceId: null, balances: [],
+};
+
+it("retains an empty deleted tombstone without inventing a legacy default wallet", () => {
+  render(provider(<TombstoneProbe />, { walletContainers: [...wallets, emptyDeleted] }));
+  expect(JSON.parse(screen.getByRole("status").textContent ?? "{}")).toEqual({
+    canonical: emptyDeleted, legacy: null, legacyCount: 0,
+  });
+});
+
+it("rejects live or nonempty wallets with null defaults", () => {
+  expect(() => render(provider(<TombstoneProbe />, { walletContainers: [{ ...emptyDeleted, deleted: false }] })))
+    .toThrow("App wallet data unavailable");
+  expect(() => render(provider(<TombstoneProbe />, { walletContainers: [{ ...wallets[0], deleted: true, defaultBalanceId: null }] })))
+    .toThrow("App wallet data unavailable");
+});

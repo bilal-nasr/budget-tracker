@@ -33,6 +33,9 @@ export async function actionClient(): Promise<Ctx> {
 type DatabaseError = { code?: string; message?: string } | null | undefined;
 
 const databaseErrors: Readonly<Record<string, ActionError>> = {
+  "currency.lifecycleRequired": "conflict",
+  "currency.incompleteCoverage": "conflict",
+  "balance.globalCurrency": "conflict",
   "currency.unavailable": "currencyUnavailable",
   "currency.disabled": "currencyDisabled",
   "currency.used": "currencyUsed",
@@ -57,6 +60,7 @@ const databaseErrors: Readonly<Record<string, ActionError>> = {
 
 /** Stable public error mapping; unknown database diagnostics never cross the action boundary. */
 export function databaseActionError(error: DatabaseError): ActionError {
+  if (error?.code === "40001" || error?.code === "40P01") return "conflict";
   if (error?.code === "23505") return "duplicateCurrency";
   return error?.message ? (databaseErrors[error.message] ?? "failed") : "failed";
 }

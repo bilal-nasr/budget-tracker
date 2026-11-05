@@ -9,12 +9,12 @@ vi.mock("@/lib/supabase/action", async (original) => {
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 
 import {
-  addWalletBalance,
   createWallet,
-  detachWalletBalance,
   setDefaultWalletBalance,
   updateWallet,
 } from "./actions";
+
+import * as walletActions from "./actions";
 
 const owner = "aaaaaaaa-0000-4000-8000-000000000001";
 const walletId = "aaaaaaaa-0000-4000-8000-000000000002";
@@ -55,18 +55,29 @@ describe("wallet balance actions", () => {
     expect(query.eq).toHaveBeenCalledWith("user_id", owner);
   });
 
-  it("adds or restores a currency at zero without accepting an opening amount", async () => {
-    await expect(addWalletBalance(walletId, { currency: " eur " })).resolves.toEqual({ ok: true, id: balanceId });
-    expect(mocks.rpc).toHaveBeenCalledWith("add_wallet_balance", { p_wallet_id: walletId, p_currency: "EUR" });
-    expect(await addWalletBalance(walletId, { currency: "EUR", openingBalanceMinor: 1 } as never))
-      .toEqual({ ok: false, error: "invalid" });
+  it("does not expose per-wallet currency attachment or detachment", () => {
+    expect(walletActions).not.toHaveProperty("addWalletBalance");
+    expect(walletActions).not.toHaveProperty("detachWalletBalance");
   });
 
-  it("sets and detaches exact balance IDs", async () => {
+  it("sets the exact default balance ID", async () => {
     await expect(setDefaultWalletBalance(walletId, balanceId)).resolves.toEqual({ ok: true });
-    expect(mocks.rpc).toHaveBeenLastCalledWith("set_wallet_default", { p_wallet_id: walletId, p_balance_id: balanceId });
-    await expect(detachWalletBalance(balanceId)).resolves.toEqual({ ok: true });
-    expect(mocks.rpc).toHaveBeenLastCalledWith("detach_wallet_balance", { p_balance_id: balanceId });
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("set_wallet_default", { p_wallet_id: walletId, p_balance_id: balanceId });
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");
+  });
+
+  it("defaults an omitted opening amount to zero", async () => {
+    expect(await createWallet({ name: "Pocket", kind: "cash", currency: "EUR" })).toEqual({ ok: true, id: balanceId });
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("create_wallet", {
+      p_name: "Pocket", p_kind: "cash", p_default_currency: "EUR", p_opening_minor: 0,
+    });
+  });
+
+  it.each([null, {}, "", "not-a-uuid"])("rejects a malformed wallet RPC result %o", async (data) => {
+    mocks.rpc.mockResolvedValue({ data, error: null });
+    expect(await createWallet({ name: "Pocket", kind: "cash", currency: "EUR", openingBalanceMinor: -125 }))
+      .toEqual({ ok: false, error: "failed" });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -81,7 +92,19 @@ describe("wallet balance actions", () => {
     ["private database detail", "failed"],
   ] as const)("maps %s without exposing private details", async (message, error) => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message } });
-    expect(await detachWalletBalance(balanceId)).toEqual({ ok: false, error });
+    expect(await setDefaultWalletBalance(walletId, balanceId)).toEqual({ ok: false, error });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("accepts a signed opening and contains create failures without revalidation", async () => {
+    const input = { name: "Card", kind: "card" as const, currency: "EUR", openingBalanceMinor: -125 };
+    expect(await createWallet(input)).toEqual({ ok: true, id: balanceId });
+    expect(mocks.rpc).toHaveBeenCalledWith("create_wallet", { p_name: "Card", p_kind: "card", p_default_currency: "EUR", p_opening_minor: -125 });
+    mocks.revalidatePath.mockClear();
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: "currency.disabled" } });
+    expect(await createWallet(input)).toEqual({ ok: false, error: "currencyDisabled" });
+    mocks.rpc.mockRejectedValueOnce(new Error("private transport"));
+    expect(await createWallet(input)).toEqual({ ok: false, error: "failed" });
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -90,12 +113,12 @@ describe("wallet balance actions", () => {
     expect(await setDefaultWalletBalance(walletId, "bad")).toEqual({ ok: false, error: "invalid" });
     expect(mocks.actionClient).not.toHaveBeenCalled();
     mocks.actionClient.mockResolvedValue({ error: "notConfigured" });
-    expect(await detachWalletBalance(balanceId)).toEqual({ ok: false, error: "notConfigured" });
+    expect(await setDefaultWalletBalance(walletId, balanceId)).toEqual({ ok: false, error: "notConfigured" });
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("contains an unexpected session transport failure", async () => {
     mocks.actionClient.mockRejectedValue(new Error("private session detail"));
-    await expect(detachWalletBalance(balanceId)).resolves.toEqual({ ok: false, error: "failed" });
+    await expect(setDefaultWalletBalance(walletId, balanceId)).resolves.toEqual({ ok: false, error: "failed" });
   });
 });

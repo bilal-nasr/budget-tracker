@@ -29,8 +29,8 @@ export const walletContainerSchema = z.object({
   position: z.number().int().nonnegative(),
   deleted: z.boolean(),
   needsAttention: z.boolean(),
-  defaultBalanceId: z.string().min(1),
-  balances: z.array(walletBalanceSchema).min(1),
+  defaultBalanceId: z.string().min(1).nullable(),
+  balances: z.array(walletBalanceSchema),
 }).superRefine((wallet, context) => {
   const currencies = new Set<string>();
   const ids = new Set<string>();
@@ -41,6 +41,7 @@ export const walletContainerSchema = z.object({
     currencies.add(balance.currency);
     ids.add(balance.id);
   }
+  if (wallet.deleted && wallet.defaultBalanceId === null && wallet.balances.length === 0) return;
   const selected = wallet.balances.find((balance) => balance.id === wallet.defaultBalanceId);
   if (!selected || (!wallet.deleted && selected.detached)) {
     context.addIssue({ code: "custom", path: ["defaultBalanceId"], message: "Default must be an attached balance owned by this wallet" });
@@ -53,9 +54,9 @@ export const walletCreateInputSchema = z.object({
   name: z.string().trim().min(1).max(40),
   kind: walletKindSchema,
   currency: z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9]{0,11}$/),
-  openingBalanceMinor: minorSchema,
+  openingBalanceMinor: minorSchema.default(0),
 }).strict();
-export type WalletCreateInput = z.infer<typeof walletCreateInputSchema>;
+export type WalletCreateInput = z.input<typeof walletCreateInputSchema>;
 
 export const walletUpdateInputSchema = z.object({
   name: z.string().trim().min(1).max(40),

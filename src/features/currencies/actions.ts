@@ -30,12 +30,11 @@ export async function createCurrency(input: CurrencyInput): Promise<ActionResult
   const ctx = await safeActionClient();
   if (ctx.error) return { ok: false, error: ctx.error };
   try {
-    const { error } = await ctx.supabase.from("currencies").insert({
-      user_id: ctx.userId,
-      code: parsed.data.code,
-      symbol: parsed.data.symbol,
-      decimal_places: parsed.data.decimalPlaces,
-    }).select("code").single();
+    const { error } = await ctx.supabase.rpc("create_currency", {
+      p_code: parsed.data.code,
+      p_symbol: parsed.data.symbol,
+      p_decimal_places: parsed.data.decimalPlaces,
+    });
     if (error) return { ok: false, error: databaseActionError(error) };
     revalidatePath("/", "layout");
     return { ok: true };
@@ -51,12 +50,13 @@ export async function updateCurrency(currentCode: string, input: CurrencyInput):
   const ctx = await safeActionClient();
   if (ctx.error) return { ok: false, error: ctx.error };
   try {
-    const { data, error } = await ctx.supabase.from("currencies").update({
-      code: parsed.data.code,
-      symbol: parsed.data.symbol,
-      decimal_places: parsed.data.decimalPlaces,
-    }).eq("user_id", ctx.userId).eq("code", current.data).select("code").maybeSingle();
-    if (error || !data) return { ok: false, error: error ? databaseActionError(error) : "currencyUnavailable" };
+    const { error } = await ctx.supabase.rpc("update_currency", {
+      p_current_code: current.data,
+      p_code: parsed.data.code,
+      p_symbol: parsed.data.symbol,
+      p_decimal_places: parsed.data.decimalPlaces,
+    });
+    if (error) return { ok: false, error: databaseActionError(error) };
     revalidatePath("/", "layout");
     return { ok: true };
   } catch {
@@ -85,9 +85,8 @@ export async function deleteCurrency(code: string): Promise<ActionResult> {
   const ctx = await safeActionClient();
   if (ctx.error) return { ok: false, error: ctx.error };
   try {
-    const { data, error } = await ctx.supabase.from("currencies").delete()
-      .eq("user_id", ctx.userId).eq("code", parsed.data).select("code").maybeSingle();
-    if (error || !data) return { ok: false, error: error ? databaseActionError(error) : "currencyUnavailable" };
+    const { error } = await ctx.supabase.rpc("delete_currency", { p_code: parsed.data });
+    if (error) return { ok: false, error: databaseActionError(error) };
     revalidatePath("/", "layout");
     return { ok: true };
   } catch {

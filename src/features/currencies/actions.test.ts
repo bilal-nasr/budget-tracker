@@ -25,7 +25,7 @@ function query(table: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  writeResult = { data: { code: "EUR" }, error: null };
+  writeResult = { data: null, error: null };
   reads = {
     currencies: { data: [{ code: "USD", disabled_at: null }, { code: "EUR", disabled_at: null }], error: null },
     wallets: { data: [{ id: "wallet", name: "Pocket", default_balance_id: "eur", deleted_at: null, needs_attention: false }], error: null },
@@ -43,23 +43,22 @@ beforeEach(() => {
     budgets: { data: [], error: null },
   };
   mocks.from.mockImplementation((table: string) => query(table));
-  mocks.rpc.mockResolvedValue({ data: null, error: null });
+  mocks.rpc.mockImplementation(() => Promise.resolve(writeResult));
   mocks.actionClient.mockResolvedValue({ userId: owner, supabase: { rpc: mocks.rpc, from: mocks.from } });
 });
 
 describe("currency actions", () => {
   it("normalizes and creates a tenant-owned currency", async () => {
     await expect(createCurrency({ code: " eur ", symbol: " € ", decimalPlaces: 2 })).resolves.toEqual({ ok: true });
-    const chain = mocks.from.mock.results[0].value;
-    expect(chain.insert).toHaveBeenCalledWith({ user_id: owner, code: "EUR", symbol: "€", decimal_places: 2 });
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("create_currency", { p_code: "EUR", p_symbol: "€", p_decimal_places: 2 });
+    expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");
   });
 
   it("updates the current normalized code and maps duplicate/used definitions", async () => {
     await expect(updateCurrency(" eur ", { code: " eur2 ", symbol: "E", decimalPlaces: 3 })).resolves.toEqual({ ok: true });
-    const chain = mocks.from.mock.results[0].value;
-    expect(chain.update).toHaveBeenCalledWith({ code: "EUR2", symbol: "E", decimal_places: 3 });
-    expect(chain.eq).toHaveBeenCalledWith("code", "EUR");
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("update_currency", { p_current_code: "EUR", p_code: "EUR2", p_symbol: "E", p_decimal_places: 3 });
+    expect(mocks.from).not.toHaveBeenCalled();
     writeResult = { data: null, error: { code: "23505", message: "duplicate" } };
     expect(await createCurrency({ code: "EUR", symbol: "€", decimalPlaces: 2 })).toEqual({ ok: false, error: "duplicateCurrency" });
     writeResult = { data: null, error: { code: "P0001", message: "currency.used" } };
@@ -82,14 +81,51 @@ describe("currency actions", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");
   });
 
-  it("deletes only the normalized owned row and maps durable-use rejection", async () => {
+  it("atomically deletes the normalized owned definition and maps durable-use rejection", async () => {
     await expect(deleteCurrency(" eur ")).resolves.toEqual({ ok: true });
-    const chain = mocks.from.mock.results[0].value;
-    expect(chain.delete).toHaveBeenCalledOnce();
-    expect(chain.eq).toHaveBeenCalledWith("user_id", owner);
-    expect(chain.eq).toHaveBeenCalledWith("code", "EUR");
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("delete_currency", { p_code: "EUR" });
+    expect(mocks.from).not.toHaveBeenCalled();
     writeResult = { data: null, error: { code: "P0001", message: "currency.used" } };
     expect(await deleteCurrency("EUR")).toEqual({ ok: false, error: "currencyUsed" });
+  });
+
+  it("enables globally through the same RPC with disabled false", async () => {
+    expect(await setCurrencyEnabled(" eur ", true)).toEqual({ ok: true });
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("set_currency_disabled", { p_code: "EUR", p_disabled: false });
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");
+  });
+
+  const mutations = [
+    ["create", () => createCurrency({ code: "EUR", symbol: "€", decimalPlaces: 2 })],
+    ["update", () => updateCurrency("EUR", { code: "EUR", symbol: "€", decimalPlaces: 2 })],
+    ["delete", () => deleteCurrency("EUR")],
+    ["enable", () => setCurrencyEnabled("EUR", true)],
+    ["disable", () => setCurrencyEnabled("EUR", false)],
+  ] as const;
+
+  it.each(mutations)("%s accepts a void RPC response and revalidates only success", async (_name, mutate) => {
+    writeResult = { data: null, error: null };
+    expect(await mutate()).toEqual({ ok: true });
+    expect(mocks.revalidatePath).toHaveBeenCalledExactlyOnceWith("/", "layout");
+    mocks.revalidatePath.mockClear();
+    writeResult = { data: null, error: { message: "currency.unavailable" } };
+    expect(await mutate()).toEqual({ ok: false, error: "currencyUnavailable" });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    mocks.rpc.mockRejectedValueOnce(new Error("private transport detail"));
+    expect(await mutate()).toEqual({ ok: false, error: "failed" });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ code: "40001", message: "private serialization detail" }, "conflict"],
+    [{ code: "40P01", message: "private deadlock detail" }, "conflict"],
+    [{ message: "currency.incompleteCoverage" }, "conflict"],
+    [{ message: "currency.lifecycleRequired" }, "conflict"],
+    [{ message: "balance.globalCurrency" }, "conflict"],
+  ] as const)("maps global lifecycle conflict %o", async (error, expected) => {
+    writeResult = { data: null, error };
+    expect(await createCurrency({ code: "EUR", symbol: "€", decimalPlaces: 2 })).toEqual({ ok: false, error: expected });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("inspects nonzero, dependency, and last-balance blockers without mutating", async () => {
