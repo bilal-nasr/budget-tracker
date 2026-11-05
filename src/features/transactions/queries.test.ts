@@ -49,11 +49,17 @@ describe("complete transaction reads", () => {
   });
   it("reads settlement cost and exact change without multiplying its parent", async () => {
     query.then.mockImplementation((resolve) => Promise.resolve({ data: [{ ...row(1), amount_minor: "1250",
-      tender_minor: "2000", change_wallet_id: "aaaaaaaa-0000-4000-8000-000000000001", change_minor: "671250", change_currency: "LBP",
-      change_rate_base: "USD", change_rate_quote: "LBP", change_rate_numerator: "89500", change_rate_denominator: "1",
+      tender_minor: "2000", cashier_changes: [
+        { wallet_id: "aaaaaaaa-0000-4000-8000-000000000001", amount_minor: "500", currency: "USD", position: 0,
+          rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null },
+        { wallet_id: "aaaaaaaa-0000-4000-8000-000000000002", amount_minor: "223750", currency: "LBP", position: 1,
+          rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null },
+      ],
     }], error: null }).then(resolve));
     const result = await fetchTransactions({}, null);
-    expect(result.rows[0]).toMatchObject({ amountMinor: 1250, settlement: { tenderMinor: 2000, change: { amountMinor: 671250, currency: "LBP" } } });
+    expect(result.rows[0]).toMatchObject({ amountMinor: 1250, settlement: { tenderMinor: 2000, changes: [
+      { amountMinor: 500, currency: "USD" }, { amountMinor: 223750, currency: "LBP" },
+    ] } });
     expect(result.rows).toHaveLength(1);
   });
   it("ANDs source/destination/change wallet membership with the keyset cursor", async () => {
@@ -61,12 +67,14 @@ describe("complete transaction reads", () => {
     await fetchTransactions({ walletId }, { occurredOn: "2026-11-04", createdAt: "2026-11-04T12:00:01Z", id: row(1).id });
     expect(query.eq).not.toHaveBeenCalledWith("wallet_id", walletId);
     expect(query.or).toHaveBeenCalledOnce();
-    expect(query.or.mock.calls[0][0]).toContain(`and(or(wallet_id.eq.${walletId},to_wallet_id.eq.${walletId},change_wallet_id.eq.${walletId}),or(occurred_on.lt.`);
+    expect(query.or.mock.calls[0][0]).toContain(`and(or(wallet_id.eq.${walletId},to_wallet_id.eq.${walletId},change_wallet_ids.cs.{${walletId}}),or(occurred_on.lt.`);
   });
   it("demo receiving-wallet membership includes one purchase with its cost, not tender", async () => {
     mock.configured.mockReturnValue(false);
     const page = await fetchTransactions({ walletId: "00000000-0000-4000-8000-000000000003", q: "Coffee" }, null);
     expect(page.rows).toHaveLength(1);
-    expect(page.rows[0]).toMatchObject({ amountMinor: 350, kind: "expense", settlement: { tenderMinor: 1000, change: { amountMinor: 581750 } } });
+    expect(page.rows[0]).toMatchObject({ amountMinor: 1250, kind: "expense", settlement: { tenderMinor: 2000, changes: [
+      { amountMinor: 500, currency: "USD" }, { amountMinor: 223750, currency: "LBP" },
+    ] } });
   });
 });

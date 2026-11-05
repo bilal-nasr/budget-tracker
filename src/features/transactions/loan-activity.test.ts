@@ -27,7 +27,7 @@ describe("loan Activity cash versus fee reporting", () => {
   });
   it("combines fee, all wallet roles, category and cursor without widening the page", () => {
     const clause = activityOrClause({ kind: "expense", walletId: "w", categoryId: "c" }, { id: "t", occurredOn: "2026-11-04", createdAt: "2026-11-04T12:00:00Z" });
-    expect(clause).toContain("and(or(wallet_id.eq.w,to_wallet_id.eq.w,change_wallet_id.eq.w),or(occurred_on.lt.");
+    expect(clause).toContain("and(or(wallet_id.eq.w,to_wallet_id.eq.w,change_wallet_ids.cs.{w}),or(occurred_on.lt.");
     expect(clause).toContain("or(kind.eq.expense,and(kind.eq.loan,loan_event.eq.repayment,loan_flow.eq.out,loan_fee_minor.gt.0))");
     expect(clause).toContain("or(kind.neq.loan,and(loan_event.eq.repayment,loan_fee_minor.gt.0))");
     expect(activityOrClause({ kind: "loan" }, null)).toBeNull();

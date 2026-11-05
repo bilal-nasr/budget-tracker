@@ -40,8 +40,9 @@ describe("canonical transaction input", () => {
       { ...input, ownerId: id }, { ...input, kind: "income" },
       { ...input, items: [{ description: "x", amountMinor: 5001 }] },
       { ...input, items: [{ description: "x", amountMinor: 1, currency: "USD" }] },
-      { ...input, settlement: { tenderMinor: 6000, change: null, source: "forged" } },
-      { ...input, kind: "income", items: [], settlement: { tenderMinor: 5000, change: null } },
+      { ...input, settlement: { tenderMinor: 6000, changes: [], source: "forged" } },
+      { ...input, settlement: { tenderMinor: 6000, changes: [{ walletId, amountMinor: 0 }] } },
+      { ...input, kind: "income", items: [], settlement: { tenderMinor: 5000, changes: [] } },
     ]) expect(transactionWriteInputSchema.safeParse(value).success).toBe(false);
   });
 });
@@ -78,7 +79,10 @@ describe("create/update transaction core", () => {
   });
 
   it("forwards the exact validated settlement snapshot in the same aggregate RPC", async () => {
-    const settlement = { tenderMinor: 6000, change: { walletId, amountMinor: 1000 } };
+    const settlement = { tenderMinor: 6000, changes: [
+      { walletId, amountMinor: 500 },
+      { walletId: id, amountMinor: 447500 },
+    ] };
     await createTransactionCore({ ...input, settlement }, id);
     expect(mock.rpc.mock.calls[0][1].p_settlement).toEqual(settlement);
     expect(mock.rpc.mock.calls[0][1].p_input).not.toHaveProperty("settlement");

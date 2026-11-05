@@ -188,7 +188,7 @@ export function demoBudgetData(month: string): {
 type Seed = [daysAgo: number, wallet: number, category: number, amount: number, note: string | null, kind?: "income"];
 const SEEDS: Seed[] = [
   [3, 6, 101, 1250, "Synthetic SYP groceries"], [4, 7, 202, 5000, "Synthetic SYP income", "income"],
-  [0, 1, 101, 5420, "Supermarket"], [0, 1, 103, 350, "Coffee"], [0, 3, 102, 400000, "Taxi"],
+  [0, 1, 101, 5420, "Supermarket"], [0, 1, 103, 1250, "Coffee"], [0, 3, 102, 400000, "Taxi"],
   [1, 2, 201, 180000, "Salary", "income"], [1, 2, 104, 4500, "Generator bill"],
   [2, 3, 105, 1200000, "Pharmacy"], [2, 1, 103, 1800, "Lunch"], [3, 1, 101, 3210, null],
   [4, 4, 108, 6400, "Shoes"], [4, 3, 102, 300000, "Taxi"], [5, 1, 107, 1500, "Cinema"],
@@ -237,13 +237,15 @@ function build(): Transaction[] {
       categoryId: id(cat),
       note,
       settlement: note === "Coffee" && ago === 0 ? {
-        tenderMinor: 1000,
-        change: { walletId: id(3), amountMinor: 581750, currency: "LBP" as const,
-          rate: { base: "USD" as const, quote: "LBP" as const, quoteMajorNumerator: 89500, quoteMajorDenominator: 1 } },
+        tenderMinor: 2000,
+        changes: [
+          { walletId: id(1), amountMinor: 500, currency: "USD" as const },
+          { walletId: id(3), amountMinor: 223750, currency: "LBP" as const },
+        ],
       } : note === "Synthetic SYP groceries" ? {
         tenderMinor: 2500,
-        change: { walletId: id(3), amountMinor: 1250, currency: "LBP" as const,
-          rate: { base: "LBP" as const, quote: "SYP" as const, quoteMajorNumerator: 1, quoteMajorDenominator: 100 } },
+        changes: [{ walletId: id(3), amountMinor: 1250, currency: "LBP" as const,
+          rate: { base: "LBP" as const, quote: "SYP" as const, quoteMajorNumerator: 1, quoteMajorDenominator: 100 } }],
       } : null,
       // Synthetic composition enriches one existing parent; no extra ledger row.
       items: note === "Supermarket" && ago === 0 && wallets.get(walletId)!.currency === "USD" ? [
@@ -274,7 +276,8 @@ export function demoPage(filters: Filters, cursor: Cursor | null, limit: number)
     (t) =>
       (!q || (t.note ?? "").toLowerCase().includes(q)) &&
       matchesActivityKind(t, filters.kind) &&
-      (!filters.walletId || t.walletId === filters.walletId || t.toWalletId === filters.walletId || t.settlement?.change?.walletId === filters.walletId) &&
+      (!filters.walletId || t.walletId === filters.walletId || t.toWalletId === filters.walletId ||
+        t.settlement?.changes.some((change) => change.walletId === filters.walletId)) &&
       (!filters.categoryId || (t.categoryId === filters.categoryId && (t.kind !== "loan" || (t.loanFeeMinor ?? 0) > 0))) &&
       (!filters.from || t.occurredOn >= filters.from) &&
       (!filters.to || t.occurredOn <= filters.to) &&
