@@ -724,6 +724,10 @@
   },
   "Cashier": {
     "title": "المبلغ المدفوع والباقي",
+    "paymentStyle": "طريقة الدفع",
+    "standard": "عادي",
+    "cashPurchase": "شراء نقدي",
+    "alignBeforeStandard": "طابق عملة الشراء مع عملة محفظة الدفع قبل التبديل إلى عادي.",
     "cost": "تكلفة الشراء",
   "purchaseCurrency": "عملة الشراء",
     "tender": "المبلغ المدفوع للبائع",

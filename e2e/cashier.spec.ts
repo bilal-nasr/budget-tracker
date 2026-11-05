@@ -12,10 +12,31 @@ async function startPurchase(page: Page, locale: "en" | "ar") {
   for (const key of ["1", "2", ".", "5"]) await dialog.getByRole("button", { name: key, exact: true }).click();
   await dialog.getByRole("combobox", { name: m.Add.category }).click();
   await page.getByRole("option", { name: locale === "ar" ? "أخرى" : "Other", exact: true }).click();
-  await dialog.getByRole("checkbox", { name: m.Cashier.title }).check();
+  await dialog.getByRole("radio", { name: locale === "ar" ? "شراء نقدي" : "Cash purchase" }).click();
   return { dialog, m };
 }
 for (const locale of ["en", "ar"] as const) {
+  test(`${locale} records LBP cost with USD tender and LBP change through Cash purchase mode`, async ({ page }) => {
+    const m = locale === "ar" ? ar : en;
+    await page.goto(`/${locale}`);
+    await page.getByRole("button", { name: m.Nav.add, exact: true }).filter({ visible: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("radio", { name: m.Cashier.standard })).toBeChecked();
+    await dialog.getByRole("radio", { name: m.Cashier.cashPurchase }).click();
+    await dialog.getByLabel(m.Cashier.purchaseCurrency).selectOption("LBP");
+    for (const key of ["3", "4", "000", "000"]) await dialog.getByRole("button", { name: key, exact: true }).click();
+    await dialog.getByRole("combobox", { name: m.Add.category }).click();
+    await page.getByRole("option", { name: locale === "ar" ? "أخرى" : "Other", exact: true }).click();
+    await dialog.getByLabel(m.Cashier.tender).fill("5");
+    await dialog.getByRole("button", { name: m.Cashier.addChange, exact: true }).click();
+    await dialog.getByLabel(m.Cashier.currency).selectOption("LBP");
+    await dialog.getByLabel(m.Cashier.change).fill("110000");
+    await expect(dialog.getByLabel(m.Cashier.tender)).toHaveValue("5");
+    await expect(dialog.getByLabel(m.Cashier.change)).toHaveValue("110000");
+    await expect(dialog.getByLabel(m.Cashier.rate, { exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: m.Add.save, exact: true })).toBeEnabled();
+    await expectNoHorizontalOverflow(page);
+  });
   test(`${locale} same-currency tender/change preserves partial items and preview draft`, async ({ page }) => {
     const { dialog, m } = await startPurchase(page, locale);
     await dialog.getByLabel(m.Cashier.tender, { exact: true }).fill("20");

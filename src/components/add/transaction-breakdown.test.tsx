@@ -281,9 +281,25 @@ describe("cashier aggregate integration", () => {
         rate: { base: "USD", quote: "SYP", quoteMajorNumerator: 13000, quoteMajorDenominator: 1 } },
     ] },
   };
+  it.each([
+    ["en", "Payment style", "Standard", "Cash purchase"],
+    ["ar", "طريقة الدفع", "عادي", "شراء نقدي"],
+  ] as const)("%s exposes cashier as a secondary Expense mode", (locale, group, standard, cashPurchase) => {
+    const m = locale === "ar" ? ar : en;
+    mount(undefined, locale);
+    const mode = screen.getByRole("radiogroup", { name: group });
+    expect(mode).toBeTruthy();
+    expect((screen.getByRole("radio", { name: standard }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByLabelText(m.Cashier.tender)).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: m.Cashier.title })).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: cashPurchase }));
+    expect((screen.getByRole("radio", { name: cashPurchase }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("combobox", { name: m.Cashier.purchaseCurrency })).toBeTruthy();
+    expect(screen.getByLabelText(m.Cashier.tender)).toBeTruthy();
+  });
   it("records exact LBP cost, USD tender, and LBP change without a rate", async () => {
     mount();
-    fireEvent.click(screen.getByRole("checkbox", { name: en.Cashier.title }));
+    fireEvent.click(screen.getByRole("radio", { name: "Cash purchase" }));
     fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.purchaseCurrency }), { target: { value: "LBP" } });
     for (const digit of "340000") fireEvent.click(screen.getByRole("button", { name: digit }));
     fireEvent.change(screen.getByLabelText(en.Cashier.tender), { target: { value: "5" } });
@@ -301,6 +317,7 @@ describe("cashier aggregate integration", () => {
   it.each(["en", "ar"] as const)("%s hydrates every return, keeps cost/items separate and saves one captured revision", async (locale) => {
     const m = locale === "ar" ? ar : en;
     mount({ mode: "edit", initial: cashSaved }, locale);
+    expect((screen.getByRole("radio", { name: locale === "ar" ? "شراء نقدي" : "Cash purchase" }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText(m.Cashier.tender) as HTMLInputElement).value).toBe("20");
     expect(screen.getAllByLabelText(m.Cashier.change).map((input) => (input as HTMLInputElement).value)).toEqual(["5", "32500"]);
     expect(screen.queryByLabelText(m.Cashier.rate)).toBeNull();
@@ -317,7 +334,7 @@ describe("cashier aggregate integration", () => {
   });
   it("clears settlement explicitly without discarding descriptive items", async () => {
     mount({ mode: "edit", initial: cashSaved });
-    fireEvent.click(screen.getByRole("checkbox", { name: en.Cashier.title }));
+    fireEvent.click(screen.getByRole("radio", { name: "Standard" }));
     fireEvent.click(screen.getByRole("button", { name: en.Add.saveChanges }));
     await waitFor(() => expect(mock.updateTransaction).toHaveBeenCalledWith(id, expect.objectContaining({ settlement: null,
       amountMinor: 1250, items: [{ description: "Phone credits", amountMinor: 1000 }],
@@ -336,11 +353,26 @@ describe("cashier aggregate integration", () => {
     mount({ mode: "edit", initial: crossSaved });
     fireEvent.change(screen.getByRole("combobox", { name: en.Cashier.purchaseCurrency }), { target: { value: "USD" } });
     for (const digit of "34") fireEvent.click(screen.getByRole("button", { name: digit }));
-    fireEvent.click(screen.getByRole("checkbox", { name: en.Cashier.title }));
+    fireEvent.click(screen.getByRole("radio", { name: "Standard" }));
     fireEvent.click(screen.getByRole("button", { name: en.Add.saveChanges }));
     await waitFor(() => expect(mock.updateTransaction).toHaveBeenCalledWith(id, expect.objectContaining({
       costCurrency: "USD", settlement: null,
     }), 17));
+  });
+  it("keeps Cash purchase selected when cross-currency facts cannot be removed safely", () => {
+    const crossSaved: Transaction = {
+      ...cashSaved,
+      amountMinor: 340000,
+      currency: "LBP",
+      items: [],
+      settlement: { tenderMinor: 500, tenderCurrency: "USD", changes: [
+        { walletId: wallets[2].id, amountMinor: 110000, currency: "LBP" },
+      ] },
+    };
+    mount({ mode: "edit", initial: crossSaved });
+    fireEvent.click(screen.getByRole("radio", { name: "Standard" }));
+    expect((screen.getByRole("radio", { name: "Cash purchase" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("alert").textContent).toContain("Match the purchase currency to the paying wallet before switching to Standard.");
   });
   it("duplicates actual cash without rate confirmation and submits the fresh draft UUID", async () => {
     const fresh = "00000000-0000-4000-8000-000000000098";

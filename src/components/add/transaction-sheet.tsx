@@ -32,6 +32,7 @@ import { CURRENCY_DECIMALS, convertAtRate, currencyPrefix, groupTyped, parseAmou
 import { cn } from "@/lib/utils";
 
 type Mode = "expense" | "income" | "move";
+type ExpenseStyle = "standard" | "cashPurchase";
 
 /** Where the sheet was opened from. `walletId` is a wallet the user is adding money to. */
 export type ComposerPreset = { kind?: Mode; walletId?: string; categoryId?: string };
@@ -189,6 +190,20 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
     }
   };
 
+  const changeExpenseStyle = (next: ExpenseStyle) => {
+    if (next === "cashPurchase") {
+      setCashDraft((previous) => ({ ...previous, enabled: true }));
+      setError(null);
+      return;
+    }
+    if (purchaseCurrency !== currency) {
+      setError(ts("alignBeforeStandard"));
+      return;
+    }
+    setCashDraft((previous) => ({ ...previous, enabled: false }));
+    setError(null);
+  };
+
   const changeWallet = (id: string) => {
     if (currencyLocked && !cashDraft.enabled && walletById(id)?.currency !== currency) { setError(tb("removeBeforeCurrencyChange")); return; }
     setWalletId(id);
@@ -341,6 +356,17 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
       <fieldset disabled={pending || unresolved || reloading} className="contents">
       <Segmented label={t("kind")} value={mode} onChange={changeMode} options={modes} />
 
+      {settlementEligible ? <Segmented<ExpenseStyle>
+        label={ts("paymentStyle")}
+        value={cashDraft.enabled ? "cashPurchase" : "standard"}
+        onChange={changeExpenseStyle}
+        options={[
+          { value: "standard", label: ts("standard") },
+          { value: "cashPurchase", label: ts("cashPurchase") },
+        ]}
+        className="mt-2"
+      /> : null}
+
       {topUpId && mode !== "expense" && walletById(topUpId) ? (
         <p className="mt-2.5 rounded-lg bg-accent px-3.5 py-2.5 text-[13px] text-foreground">
           {mode === "move"
@@ -349,7 +375,21 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
         </p>
       ) : null}
 
-      {settlementEligible && cashDraft.enabled ? <p className="pt-3 text-sm text-muted-foreground">{ts("cost")}</p> : null}
+      {settlementEligible && cashDraft.enabled ? <>
+        <label className="mt-3 flex flex-col gap-1.5 text-sm font-medium">
+          {ts("purchaseCurrency")}
+          <select aria-label={ts("purchaseCurrency")} value={purchaseCurrency}
+            onChange={(event) => {
+              const next = event.target.value as Currency;
+              if (next !== purchaseCurrency) { setPurchaseCurrency(next); setTyped(""); }
+            }}
+            disabled={currencyLocked}
+            className="h-12 rounded-lg border border-input bg-card px-3 text-base">
+            {(Object.keys(CURRENCY_DECIMALS) as Currency[]).map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+        <p className="pt-3 text-sm text-muted-foreground">{ts("cost")}</p>
+      </> : null}
       <div className="flex flex-wrap items-center justify-between gap-3 py-3.5">
         <p
           className={cn(
@@ -497,21 +537,9 @@ function Form({ state, onClose, onCreateWallet, onReload }: { state: ComposerSta
             invalid={categoryId !== "" && !categoryAvailable}
           />
           {categoryId !== "" && !categoryAvailable ? <p role="alert" className="text-sm">{tc("errorUnavailable")}</p> : null}
-          {mode === "expense" && cashDraft.enabled ? <label className="flex flex-col gap-1.5 text-sm font-medium">
-            {ts("purchaseCurrency")}
-            <select aria-label={ts("purchaseCurrency")} value={purchaseCurrency}
-              onChange={(event) => {
-                const next = event.target.value as Currency;
-                if (next !== purchaseCurrency) { setPurchaseCurrency(next); setTyped(""); }
-              }}
-              disabled={currencyLocked}
-              className="h-12 rounded-lg border border-input bg-card px-3 text-base">
-              {(Object.keys(CURRENCY_DECIMALS) as Currency[]).map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label> : null}
           {mode === "expense" ? <ExpenseBreakdownFields currency={amountCurrency} parentMinor={minor}
             items={itemDrafts} onChange={setItemDrafts} labels={breakdownLabels} disabled={pending || unresolved} /> : null}
-          {settlementEligible ? <>
+          {settlementEligible && cashDraft.enabled ? <>
             <CashSettlementFields draft={cashDraft} payCurrency={currency} costCurrency={purchaseCurrency} costMinor={minor} wallets={wallets}
               editContext={cashEditContext}
               labels={settlementLabels} onChange={setCashDraft} onCreateWallet={() => onCreateWallet?.()} disabled={pending || unresolved} />

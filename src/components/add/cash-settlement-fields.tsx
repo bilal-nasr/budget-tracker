@@ -122,7 +122,7 @@ export function parseSettlementDraft(
   return validation.ok ? { ok: true, settlement } : { ok: false, error: validation.reason };
 }
 
-/** Controlled optional section. All copy is provided by bilingual message integration. */
+/** Expanded cash-payment details. The parent owns Standard/Cash purchase mode. */
 export function CashSettlementFields({
   draft,
   payCurrency,
@@ -155,15 +155,9 @@ export function CashSettlementFields({
     change({ changes: draft.changes.map((row) => row.key === key ? { ...row, ...patch } : row) });
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 border-t border-border py-2 disabled:opacity-60">
-      <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-medium">
-        <input type="checkbox" checked={draft.enabled} disabled={disabled || (draft.enabled && payCurrency !== costCurrency)}
-          onChange={(event) => change({ enabled: event.target.checked })}
-          className="size-5 accent-primary" aria-controls={`${id}-fields`} />
-        {labels.title}
-      </label>
-      {draft.enabled ? (
-        <div id={`${id}-fields`} className="flex min-w-0 flex-col gap-3 pt-2">
+    <fieldset disabled={disabled} className="min-w-0 border-t border-border py-3 disabled:opacity-60">
+      <legend className="px-1 text-sm font-semibold">{labels.title}</legend>
+      <div id={`${id}-fields`} className="flex min-w-0 flex-col gap-3 pt-2">
           <div className="flex flex-col gap-1">
             <bdi dir="ltr" className="text-sm text-muted-foreground">{payCurrency}</bdi>
             <TextField type="text" label={labels.tender} value={draft.tenderText}
@@ -225,8 +219,7 @@ export function CashSettlementFields({
             {labels.addChange}
           </button>
           {!parsed.ok ? <p role="alert" className="text-sm font-medium">{labels.errors[parsed.error]}</p> : null}
-        </div>
-      ) : null}
+      </div>
     </fieldset>
   );
 }

@@ -103,6 +103,7 @@ describe("cash settlement fields", () => {
     expect(screen.getAllByLabelText(labels.change).map((input) => (input as HTMLInputElement).value)).toEqual(["5", "223750"]);
     expect(screen.getAllByLabelText(labels.wallet).map((select) => (select as HTMLSelectElement).value)).toEqual([usd.id, lbp.id]);
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: labels.title })).toBeNull();
   });
 
   it("adds and removes independent change rows", () => {

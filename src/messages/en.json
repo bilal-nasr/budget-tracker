@@ -724,6 +724,10 @@
   },
   "Cashier": {
     "title": "Cash paid and change",
+    "paymentStyle": "Payment style",
+    "standard": "Standard",
+    "cashPurchase": "Cash purchase",
+    "alignBeforeStandard": "Match the purchase currency to the paying wallet before switching to Standard.",
     "cost": "Purchase cost",
     "purchaseCurrency": "Purchase currency",
     "tender": "Paid to cashier",
