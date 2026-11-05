@@ -13,8 +13,8 @@ import { promisify } from "node:util";
 const container = process.env.CATEGORY_ORDER_TEST_DOCKER_CONTAINER;
 const database = process.env.CATEGORY_ORDER_TEST_DATABASE;
 if (process.env.CATEGORY_ORDER_TEST_ALLOW_FIXTURES !== "1"
-    || container !== "supabase_db_budget-tracker-round3-check"
-    || !/^round3_check_\d+$/.test(database ?? "")) {
+    || !((container === "supabase_db_budget-tracker-round3-check" && /^round3_check_\d+$/.test(database ?? ""))
+      || (container === "supabase_db_CODEX-BUDGET-MULTIWALLET-SYSTEM-20261105" && database === "postgres"))) {
   throw new Error("Category order concurrency requires the designated disposable PG17 database and explicit fixture opt-in");
 }
 
@@ -82,7 +82,7 @@ async function orderedIds() {
   const output = await sql(`begin; ${claims}
     select string_agg(id::text,',' order by position desc) from public.categories
     where kind='expense' and parent_id is null and archived_at is null; commit;`);
-  return output.split(/\r?\n/).find((line) => line.includes(","));
+  return output.split(/\r?\n/).find((line) => /^[a-f0-9-]{36}(,[a-f0-9-]{36})*$/.test(line));
 }
 
 async function runBlockedWriter(label, writerSql) {

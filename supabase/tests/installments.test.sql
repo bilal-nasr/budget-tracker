@@ -13,12 +13,16 @@ values
 select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-4000-8000-000000000001","role":"authenticated"}', true);
 set local role authenticated;
 
-insert into public.wallets (id, name, kind, currency) values
-  ('a1000000-0000-4000-8000-000000000001', 'Bank', 'bank', 'USD'),
+with fixture(id,name,kind,currency) as (values ('a1000000-0000-4000-8000-000000000001', 'Bank', 'bank', 'USD'),
   ('a1000000-0000-4000-8000-000000000002', 'Cash', 'cash', 'USD'),
-  ('a1000000-0000-4000-8000-000000000003', 'Cash LBP', 'cash', 'LBP');
+  ('a1000000-0000-4000-8000-000000000003', 'Cash LBP', 'cash', 'LBP')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
 
-insert into public.installments (id, name, total_minor, wallet_id, category_id)
+insert into public.installments (id, name, total_minor, balance_id, category_id)
 select 'a2000000-0000-4000-8000-000000000001', 'Laptop', 100000, 'a1000000-0000-4000-8000-000000000001', c.id
 from public.categories c where c.kind = 'expense' limit 1;
 
@@ -29,7 +33,7 @@ create function pg_temp.pay(w uuid, amount bigint) returns void language sql as 
   -- These tests deliberately record another payment to exercise the principal
   -- cap. Supply the actual current receipt and acknowledge the last live payment
   -- so the newer repeat guard does not mask the principal/currency assertions.
-  insert into public.transactions (kind, occurred_on, wallet_id, amount_minor, currency, category_id,
+  insert into public.transactions (kind, occurred_on, balance_id, amount_minor, currency, category_id,
     source, installment_id, salary_cycle_id, installment_override_of)
   select 'expense', current_date, w, amount, 'USD', i.category_id, 'installment', i.id, s.id, p.id
   from public.installments i

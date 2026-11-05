@@ -1,11 +1,23 @@
 -- Synthetic fixtures only. Run after both SYP migrations with supabase test db.
 begin;
+-- Administrator-only seeding of the historical migration management state.
+create function pg_temp.seed_needs_attention(p_id uuid,p_value boolean) returns void
+language plpgsql security definer set search_path='' as $$ begin
+ set constraints all immediate;
+ set constraints public.wallet_order_guard deferred;
+ alter table public.wallets disable trigger wallet_guard;
+ update public.wallets set needs_attention=p_value where id=p_id and user_id=auth.uid();
+ update public.wallets w set position=x.position from (select id,row_number() over(order by position,id)-1 position from public.wallets where user_id=auth.uid() and deleted_at is null and not needs_attention)x where w.id=x.id;
+ set constraints public.wallet_order_guard immediate;
+ alter table public.wallets enable trigger wallet_guard;
+ set constraints all deferred;
+end $$;
+
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select no_plan();
 
-select is(enum_range(null::public.currency)::text, '{USD,LBP,SYP}',
-  'SYP appends to the existing enum without changing USD/LBP');
+select ok(not exists(select 1 from pg_type where typnamespace='public'::regnamespace and typname='currency'), 'currency metadata no longer depends on a static enum');
 select ok(has_function_privilege('authenticated',
   'public.record_transfer(date,uuid,uuid,bigint,bigint,text,integer)', 'execute'),
   'authenticated users may call record_transfer');
@@ -22,8 +34,12 @@ select ok(not has_function_privilege('authenticated', 'public.wallet_reference_l
 insert into auth.users (id, instance_id, aud, role, email) values
   ('c6000000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'currency-a@example.test'),
   ('c6000000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'currency-b@example.test');
-insert into public.wallets (id, user_id, name, kind, currency) values
-  ('c6200000-0000-4000-8000-000000000001', 'c6000000-0000-4000-8000-000000000002', 'B SYP', 'cash', 'SYP');
+with fixture(id,user_id,name,kind,currency) as (values ('c6200000-0000-4000-8000-000000000001', 'c6000000-0000-4000-8000-000000000002', 'B SYP', 'cash', 'SYP')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,f.user_id::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
 update public.profiles set usd_lbp_rate = 72000
 where user_id = 'c6000000-0000-4000-8000-000000000002';
 
@@ -33,8 +49,7 @@ set local role authenticated;
 insert into public.categories (id, kind, name_en, name_ar, tile, color) values
   ('c6300000-0000-4000-8000-000000000001', 'expense', 'Synthetic cost', 'تكلفة تجريبية', 1, 'teal'),
   ('c6300000-0000-4000-8000-000000000002', 'income', 'Synthetic income', 'دخل تجريبي', 2, 'teal');
-insert into public.wallets (id, name, kind, currency, opening_balance_minor) values
-  ('c6100000-0000-4000-8000-000000000001', 'A USD', 'cash', 'USD', 10000),
+with fixture(id,name,kind,currency,opening_balance_minor) as (values ('c6100000-0000-4000-8000-000000000001', 'A USD', 'cash', 'USD', 10000),
   ('c6100000-0000-4000-8000-000000000002', 'A LBP', 'cash', 'LBP', 900000),
   ('c6100000-0000-4000-8000-000000000003', 'A SYP', 'cash', 'SYP', 100000),
   ('c6100000-0000-4000-8000-000000000004', 'A SYP destination', 'bank', 'SYP', 0),
@@ -44,25 +59,29 @@ insert into public.wallets (id, name, kind, currency, opening_balance_minor) val
   ('c6100000-0000-4000-8000-000000000008', 'Unused', 'bank', 'SYP', 0),
   ('c6100000-0000-4000-8000-000000000009', 'Archived', 'bank', 'SYP', 0),
   ('c6100000-0000-4000-8000-000000000010', 'Incoming only', 'bank', 'SYP', 0),
-  ('c6100000-0000-4000-8000-000000000011', 'Other USD', 'bank', 'USD', 0);
-update public.wallets set archived_at = now()
-where id = 'c6100000-0000-4000-8000-000000000009';
+  ('c6100000-0000-4000-8000-000000000011', 'Other USD', 'bank', 'USD', 0)), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,f.opening_balance_minor::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+select pg_temp.seed_needs_attention('c6100000-0000-4000-8000-000000000009',true);
 update public.profiles set usd_lbp_rate = 89500, salary_amount_minor = 1250,
-  salary_wallet_id = 'c6100000-0000-4000-8000-000000000005';
+  salary_balance_id = 'c6100000-0000-4000-8000-000000000005';
 
-insert into public.transactions (kind, occurred_on, wallet_id, amount_minor, currency, category_id) values
+insert into public.transactions (kind, occurred_on, balance_id, amount_minor, currency, category_id) values
   ('expense', '2026-11-04', 'c6100000-0000-4000-8000-000000000003', 1250, 'USD', 'c6300000-0000-4000-8000-000000000001'),
   ('income', '2026-11-04', 'c6100000-0000-4000-8000-000000000003', 250, 'LBP', 'c6300000-0000-4000-8000-000000000002');
 select is((select count(*) from public.transactions where currency = 'SYP'), 2::bigint,
   'wallet currency replaces caller placeholders for SYP income and expense');
-select is((select balance_minor::bigint from public.wallet_balances
-  where wallet_id = 'c6100000-0000-4000-8000-000000000003'), 99000::bigint,
+select is((select balance_minor::bigint from public.wallet_balance_totals
+  where balance_id = 'c6100000-0000-4000-8000-000000000003'), 99000::bigint,
   'SYP balances use integer whole pounds without rescaling');
-select is((select balance_minor::bigint from public.wallet_balances
-  where wallet_id = 'c6100000-0000-4000-8000-000000000001'), 10000::bigint,
+select is((select balance_minor::bigint from public.wallet_balance_totals
+  where balance_id = 'c6100000-0000-4000-8000-000000000001'), 10000::bigint,
   'existing USD cents are unchanged');
-select is((select balance_minor::bigint from public.wallet_balances
-  where wallet_id = 'c6100000-0000-4000-8000-000000000002'), 900000::bigint,
+select is((select balance_minor::bigint from public.wallet_balance_totals
+  where balance_id = 'c6100000-0000-4000-8000-000000000002'), 900000::bigint,
   'existing whole-lira LBP balance is unchanged');
 
 insert into public.budgets (category_id, currency, starts_month, limit_minor) values
@@ -73,9 +92,9 @@ select is((select count(*) from public.month_budgets('2026-11-01')), 3::bigint,
   'one category can have independent budgets in all three currencies');
 select is((select spent_minor from public.month_category_spend('2026-11-01') where currency = 'SYP'),
   1250::bigint, 'SYP spending excludes income and stays in whole pounds');
-insert into public.fixed_expenses (name, amount_minor, wallet_id, category_id) values
+insert into public.fixed_expenses (name, amount_minor, balance_id, category_id) values
   ('Synthetic fixed', 1250, 'c6100000-0000-4000-8000-000000000006', 'c6300000-0000-4000-8000-000000000001');
-insert into public.installments (id, name, total_minor, monthly_minor, wallet_id, category_id, currency) values
+insert into public.installments (id, name, total_minor, monthly_minor, balance_id, category_id, currency) values
   ('c6400000-0000-4000-8000-000000000001', 'Synthetic installment', 10000, 1250,
     'c6100000-0000-4000-8000-000000000007', 'c6300000-0000-4000-8000-000000000001', 'USD');
 select is((select currency::text from public.installments where id = 'c6400000-0000-4000-8000-000000000001'),
@@ -100,19 +119,19 @@ select ok((select proretset from pg_proc where oid='public.record_transfer(date,
   'transfer RPC returns one revision-bearing record set');
 select is((select count(*) from public.transactions where id = (select id from currency_moves where name = 'syp-usd')),
   1::bigint, 'a manual SYP exchange records one transfer event');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000003'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000003'),
   97750::bigint, 'manual exchange removes the actual sent SYP amount');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000001'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000001'),
   10200::bigint, 'manual exchange adds the actual received USD amount');
 update public.transactions set deleted_at = now() where id = (select id from currency_moves where name = 'syp-usd');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000003'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000003'),
   99000::bigint, 'soft deletion reverses the sent leg');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000001'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000001'),
   10000::bigint, 'soft deletion reverses the received leg');
 update public.transactions set deleted_at = null where id = (select id from currency_moves where name = 'syp-usd');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000003'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000003'),
   97750::bigint, 'restoration reapplies the sent leg');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000001'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000001'),
   10200::bigint, 'restoration reapplies the received leg');
 
 insert into currency_moves values
@@ -120,7 +139,7 @@ insert into currency_moves values
   ('lbp-syp', pg_temp.currency_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000002', 'c6100000-0000-4000-8000-000000000004', 10000, 250)),
   ('syp-lbp', pg_temp.currency_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000002', 250, 5000)),
   ('syp-syp', pg_temp.currency_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 125, 125));
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000004'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000004'),
   875::bigint, 'all SYP destination legs retain their exact actual amounts');
 select is((select usd_lbp_rate from public.profiles), 89500,
   'manual SYP exchanges leave the USD/LBP reference memo unchanged');
@@ -135,8 +154,8 @@ select is((select usd_lbp_rate from public.profiles), 90000,
 
 create temp table currency_checkpoint as select
   (select count(*) from public.transactions) as event_count,
-  (select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000003') as syp_balance,
-  (select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000001') as usd_balance;
+  (select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000003') as syp_balance,
+  (select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000001') as usd_balance;
 
 select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000001', 100, 100, null, 90000)$$,
   '22023', 'rate is only supported for USD/LBP exchanges', 'SYP to USD cannot submit a USD/LBP rate');
@@ -176,9 +195,9 @@ select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-40
   '22023', 'invalid transfer details', 'overlong notes are rejected');
 select is((select count(*) from public.transactions), (select event_count from currency_checkpoint),
   'rejected transfers create no events');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000003'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000003'),
   (select syp_balance from currency_checkpoint), 'rejected transfers leave SYP balance unchanged');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id = 'c6100000-0000-4000-8000-000000000001'),
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id = 'c6100000-0000-4000-8000-000000000001'),
   (select usd_balance from currency_checkpoint), 'rejected transfers leave USD balance unchanged');
 select is((select usd_lbp_rate from public.profiles), 90000,
   'rejected rate metadata leaves the memo unchanged');
@@ -186,22 +205,21 @@ select is((select usd_lbp_rate from public.profiles), 90000,
 insert into currency_moves values ('incoming-only', pg_temp.currency_transfer('2026-11-04',
   'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000010', 25, 25));
 update public.transactions set deleted_at = now() where id = (select id from currency_moves where name = 'incoming-only');
-select throws_ok($$update public.wallets set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000010'$$,
+select throws_ok($$update public.wallet_balances set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000010'$$,
   'P0001', null, 'soft-deleted incoming-only history locks currency');
-select is((select currency::text from public.wallets where id = 'c6100000-0000-4000-8000-000000000010'),
+select is((select currency::text from public.wallet_balances where id = 'c6100000-0000-4000-8000-000000000010'),
   'SYP', 'a rejected incoming-history currency edit preserves the stored SYP unit');
-select throws_ok($$update public.wallets set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000003'$$,
-  'P0001', 'wallet currency cannot change while it has monetary references', 'outgoing history locks currency');
-select throws_ok($$update public.wallets set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000005'$$,
-  'P0001', 'wallet currency cannot change while it has monetary references', 'salary-only reference locks currency');
-select throws_ok($$update public.wallets set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000006'$$,
-  'P0001', 'wallet currency cannot change while it has monetary references', 'fixed-template-only reference locks currency');
-select throws_ok($$update public.wallets set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000007'$$,
-  'P0001', 'wallet currency cannot change while it has monetary references', 'installment-only reference locks currency');
-select lives_ok($$update public.wallets set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000008'$$,
-  'a genuinely unreferenced wallet can still change currency');
+select throws_ok($$update public.wallet_balances set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000003'$$,
+  'P0001', 'balance.immutable', 'outgoing history locks currency');
+select throws_ok($$update public.wallet_balances set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000005'$$,
+  'P0001', 'balance.immutable', 'salary-only reference locks currency');
+select throws_ok($$update public.wallet_balances set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000006'$$,
+  'P0001', 'balance.immutable', 'fixed-template-only reference locks currency');
+select throws_ok($$update public.wallet_balances set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000007'$$,
+  'P0001', 'balance.immutable', 'installment-only reference locks currency');
+select throws_ok($$update public.wallet_balances set currency = 'USD' where id = 'c6100000-0000-4000-8000-000000000008'$$,'P0001','balance.immutable', 'balance currency remains an immutable identity');
 select throws_ok($$update public.wallets set user_id = 'c6000000-0000-4000-8000-000000000002' where id = 'c6100000-0000-4000-8000-000000000008'$$,
-  'P0001', 'user_id cannot change', 'wallet ownership stays immutable');
+  'P0001', 'wallet.immutable', 'wallet ownership stays immutable');
 
 -- A memo failure is deliberately isolated; the actual transfer must survive.
 reset role;
@@ -234,16 +252,16 @@ select is((select count(*) from public.month_category_spend('2026-11-01')), 0::b
 select is((select usd_lbp_rate from public.profiles), 72000, 'tenant B reference rate was never changed');
 select throws_ok($$select public.record_transfer('2026-11-04', 'c6200000-0000-4000-8000-000000000001', 'c6100000-0000-4000-8000-000000000003', 100, 100)$$,
   '22023', 'wallet not found or archived', 'tenant B cannot target tenant A wallet');
-select throws_ok($$insert into public.fixed_expenses(name,amount_minor,wallet_id,category_id)
+select throws_ok($$insert into public.fixed_expenses(name,amount_minor,balance_id,category_id)
   select 'Synthetic foreign fixed',1250,'c6100000-0000-4000-8000-000000000003',id
   from public.categories where kind='expense' and parent_id is null order by position limit 1$$,
-  'P0001', 'wallet not found', 'the early lock preserves fixed-template wallet ownership validation');
-select throws_ok($$insert into public.installments(name,total_minor,wallet_id,category_id,currency)
+  'P0001', 'balance.unavailable', 'the early lock preserves fixed-template wallet ownership validation');
+select throws_ok($$insert into public.installments(name,total_minor,balance_id,category_id,currency)
   select 'Synthetic foreign installment',1250,'c6100000-0000-4000-8000-000000000003',id,'SYP'
   from public.categories where kind='expense' and parent_id is null order by position limit 1$$,
-  'P0001', 'wallet not found', 'the early lock preserves installment wallet ownership validation');
-select throws_ok($$update public.profiles set salary_wallet_id='c6100000-0000-4000-8000-000000000003',salary_amount_minor=1250$$,
-  'P0001', 'salary wallet not found or archived', 'the early lock preserves salary wallet ownership validation');
+  'P0001', 'balance.unavailable', 'the early lock preserves installment wallet ownership validation');
+select throws_ok($$update public.profiles set salary_balance_id='c6100000-0000-4000-8000-000000000003',salary_amount_minor=1250$$,
+  'P0001', 'balance.unavailable', 'the early lock preserves salary wallet ownership validation');
 
 select set_config('request.jwt.claims', '{"role":"authenticated"}', true);
 select throws_ok($$select public.record_transfer('2026-11-04', 'c6100000-0000-4000-8000-000000000003', 'c6100000-0000-4000-8000-000000000004', 100, 100)$$,

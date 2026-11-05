@@ -13,18 +13,22 @@ values
 select set_config('request.jwt.claims', '{"sub":"aaaaaaaa-0000-4000-8000-000000000001","role":"authenticated"}', true);
 set local role authenticated;
 
-insert into public.wallets (id, name, kind, currency)
-values ('a1000000-0000-4000-8000-000000000001', 'A cash', 'cash', 'USD');
+with fixture(id,name,kind,currency) as (values ('a1000000-0000-4000-8000-000000000001', 'A cash', 'cash', 'USD')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
 
 create temp table a_cat as
   select id from public.categories where kind = 'expense' and parent_id is null order by position limit 1;
 grant all on a_cat to authenticated;
 
-insert into public.transactions (kind, occurred_on, wallet_id, amount_minor, currency, category_id)
+insert into public.transactions (kind, occurred_on, balance_id, amount_minor, currency, category_id)
 select 'expense', current_date, 'a1000000-0000-4000-8000-000000000001', 1000, 'USD', id from a_cat;
-insert into public.fixed_expenses (name, amount_minor, wallet_id, category_id)
+insert into public.fixed_expenses (name, amount_minor, balance_id, category_id)
 select 'Rent', 5000, 'a1000000-0000-4000-8000-000000000001', id from a_cat;
-insert into public.installments (name, total_minor, wallet_id, category_id)
+insert into public.installments (name, total_minor, balance_id, category_id)
 select 'Laptop', 100000, 'a1000000-0000-4000-8000-000000000001', id from a_cat;
 insert into public.budgets (category_id, currency, starts_month, limit_minor)
 select id, 'USD', date_trunc('month', current_date)::date, 30000 from a_cat;
@@ -45,10 +49,10 @@ select is((select count(*) from public.categories where user_id <> 'bbbbbbbb-000
 
 -- B cannot use A's wallet or category.
 select throws_ok(
-  $$insert into public.transactions (kind, occurred_on, wallet_id, amount_minor, currency, category_id)
+  $$insert into public.transactions (kind, occurred_on, balance_id, amount_minor, currency, category_id)
     select 'expense', current_date, 'a1000000-0000-4000-8000-000000000001', 100, 'USD', id
     from public.categories where kind = 'expense' limit 1$$,
-  null, 'wallet not found', 'B cannot post to A''s wallet');
+  null, 'balance.unavailable', 'B cannot post to A''s wallet');
 
 select is((select count(*) from public.month_budgets(current_date)), 0::bigint, 'B sees no budget limits of A');
 select is((select count(*) from public.month_category_spend(current_date)), 0::bigint, 'B sees no spending of A');

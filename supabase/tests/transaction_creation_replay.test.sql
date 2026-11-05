@@ -1,5 +1,20 @@
 -- A lost create reply must never adopt a later edit/restore generation.
 begin;
+-- Only historical migration-state setup uses this administrator-owned helper.
+-- Monetary tests still execute through authenticated production entry points.
+-- Administrator-only seeding of the historical migration management state.
+create function pg_temp.seed_needs_attention(p_id uuid,p_value boolean) returns void
+language plpgsql security definer set search_path='' as $$ begin
+ set constraints all immediate;
+ set constraints public.wallet_order_guard deferred;
+ alter table public.wallets disable trigger wallet_guard;
+ update public.wallets set needs_attention=p_value where id=p_id and user_id=auth.uid();
+ update public.wallets w set position=x.position from (select id,row_number() over(order by position,id)-1 position from public.wallets where user_id=auth.uid() and deleted_at is null and not needs_attention)x where w.id=x.id;
+ set constraints public.wallet_order_guard immediate;
+ alter table public.wallets enable trigger wallet_guard;
+ set constraints all deferred;
+end $$;
+
 create extension if not exists pgtap with schema extensions;
 set local search_path=public,extensions;
 select no_plan();
@@ -8,11 +23,15 @@ insert into auth.users(id,instance_id,aud,role,email) values
  ('e2000000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000000','authenticated','authenticated','creation-b@example.test');
 select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 set local role authenticated;
-insert into public.wallets(id,name,kind,currency) values
- ('e2100000-0000-4000-8000-000000000001','Creation cash','cash','USD');
+with fixture(id,name,kind,currency) as (values ('e2100000-0000-4000-8000-000000000001','Creation cash','cash','USD')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
 create temp table creation_variants as
 select 'plain-'||g as name,('e2200000-0000-4000-8000-'||lpad((1+n)::text,12,'0'))::uuid as id,
- jsonb_build_object('kind','expense','occurredOn','2026-11-04','walletId','e2100000-0000-4000-8000-000000000001',
+ jsonb_build_object('kind','expense','occurredOn','2026-11-04','balanceId','e2100000-0000-4000-8000-000000000001',
  'categoryId',(select id from public.categories where kind='expense' and parent_id is null order by position limit 1),
  'amountMinor',5000,'note','Creation fixture') as input,
  '[]'::jsonb as items,null::jsonb as settlement,null::integer as creation_revision
@@ -24,7 +43,7 @@ from creation_variants where name like 'plain-%';
 insert into creation_variants
 select replace(name,'plain','settlement'),('e2200000-0000-4000-8000-'||lpad((6+row_number() over(order by name))::text,12,'0'))::uuid,
  input,'[{"description":"Phone credits","amountMinor":2000}]',
- '{"tenderMinor":6000,"changes":[{"walletId":"e2100000-0000-4000-8000-000000000001","amountMinor":1000}]}',null
+ '{"tenderMinor":6000,"changes":[{"balanceId":"e2100000-0000-4000-8000-000000000001","amountMinor":1000}]}',null
 from creation_variants where name like 'plain-%';
 create function pg_temp.creation_call(p_variant uuid) returns text language sql as $$
  select format('select * from public.save_transaction(%L,null,%L::jsonb,%L::jsonb,%L::jsonb)',id,input,items,settlement)
@@ -41,10 +60,10 @@ select lives_ok(pg_temp.creation_call(id),name||' repeated replay remains read-o
 select is((select count(*) from public.expense_items where id in(select id from creation_item_ids)),
  (select count(*) from creation_item_ids),'replays preserve all original item identities');
 
-update public.wallets set archived_at=now() where id='e2100000-0000-4000-8000-000000000001';
+select pg_temp.seed_needs_attention('e2100000-0000-4000-8000-000000000001',true);
 select lives_ok(pg_temp.creation_call(id),name||' unchanged replay accepts the now-archived original wallet')
  from creation_variants order by name;
-update public.wallets set archived_at=null where id='e2100000-0000-4000-8000-000000000001';
+select pg_temp.seed_needs_attention('e2100000-0000-4000-8000-000000000001',false);
 
 select lives_ok(format('select * from public.set_transaction_deleted(%L,%s,true)',id,creation_revision),name||' delete succeeds')
  from creation_variants where name like '%-restore' order by name;
@@ -67,11 +86,11 @@ select throws_ok(format('select * from public.set_transaction_deleted(%L,%s,true
  'BT003','transaction conflict',name||' original Undo still cannot delete a later generation') from creation_variants order by name;
 select is((select count(*) from public.transactions where deleted_at is null),6::bigint,'failed old requests leave all later live generations intact');
 select is((select sum(amount_minor)::bigint from public.transactions where deleted_at is null),30000::bigint,'old requests add no extra expense');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id='e2100000-0000-4000-8000-000000000001'),-30000::bigint,
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id='e2100000-0000-4000-8000-000000000001'),-30000::bigint,
  'each settled/itemized/plain parent contributes its net cost only once');
 
 -- Legacy/direct rows are editable but do not acquire a guessed creation token.
-insert into public.transactions(id,kind,occurred_on,wallet_id,amount_minor,currency,category_id,note)
+insert into public.transactions(id,kind,occurred_on,balance_id,amount_minor,currency,category_id,note)
  select 'e2200000-0000-4000-8000-000000000099','expense','2026-11-04','e2100000-0000-4000-8000-000000000001',5000,'USD',
  (input->>'categoryId')::uuid,'Creation fixture' from creation_variants limit 1;
 select throws_ok(format('select * from public.save_transaction(%L,null,%L::jsonb,''[]''::jsonb,null)',
@@ -95,16 +114,21 @@ select ok(not (select prosecdef from pg_proc where oid='public.save_transaction(
  'public canonical entry remains invoker-security');
 
 select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
-insert into public.wallets(id,name,kind,currency) values('e2100000-0000-4000-8000-000000000002','B cash','cash','USD');
+with fixture(id,name,kind,currency) as (values ('e2100000-0000-4000-8000-000000000002','B cash','cash','USD')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
 create temp table creation_b_input as select jsonb_build_object('kind','expense','occurredOn','2026-11-04',
- 'walletId','e2100000-0000-4000-8000-000000000002','categoryId',id,'amountMinor',5000,'note','Creation fixture') as value
+ 'balanceId','e2100000-0000-4000-8000-000000000002','categoryId',id,'amountMinor',5000,'note','Creation fixture') as value
  from public.categories where kind='expense' and parent_id is null order by position limit 1;
 select throws_ok(format('select * from public.save_transaction(%L,null,%L::jsonb,''[]''::jsonb,null)',
  (select id from creation_variants where name='plain-edit'),(select value from creation_b_input)),
  'BT003','transaction conflict','definer capability does not let another tenant claim an existing UUID');
 select throws_ok(format('select * from public.save_transaction(%L,null,%L::jsonb,''[]''::jsonb,null)',
- 'e2200000-0000-4000-8000-000000000098',(select value from creation_b_input)||'{"walletId":"e2100000-0000-4000-8000-000000000001"}'),
- '22023','wallet unavailable','definer aggregate still rejects a foreign source wallet');
+ 'e2200000-0000-4000-8000-000000000098',(select value from creation_b_input)||'{"balanceId":"e2100000-0000-4000-8000-000000000001"}'),
+ 'P0001','wallet unavailable','definer aggregate still rejects a foreign source wallet');
 select is((select count(*) from public.transactions),0::bigint,'foreign retries create or expose no transactions');
 
 reset role;

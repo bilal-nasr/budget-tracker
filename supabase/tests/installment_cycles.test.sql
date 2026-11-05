@@ -8,14 +8,18 @@ insert into auth.users (id, instance_id, aud, role, email) values
   ('a5000000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'cycle-b@example.test');
 select set_config('request.jwt.claims', '{"sub":"a5000000-0000-4000-8000-000000000001","role":"authenticated"}', true);
 set local role authenticated;
-insert into public.wallets (id, name, kind, currency) values
-  ('a5100000-0000-4000-8000-000000000001', 'Cycle bank', 'bank', 'USD'),
-  ('a5100000-0000-4000-8000-000000000002', 'Cycle cash', 'cash', 'LBP');
-insert into public.installments (id, name, total_minor, monthly_minor, wallet_id, category_id)
+with fixture(id,name,kind,currency) as (values ('a5100000-0000-4000-8000-000000000001', 'Cycle bank', 'bank', 'USD'),
+  ('a5100000-0000-4000-8000-000000000002', 'Cycle cash', 'cash', 'LBP')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
+insert into public.installments (id, name, total_minor, monthly_minor, balance_id, category_id)
 select 'a5200000-0000-4000-8000-000000000001', 'Cycle laptop', 100000, 10000,
   'a5100000-0000-4000-8000-000000000001', c.id
 from public.categories c where c.kind = 'expense' and c.parent_id is null order by c.position limit 1;
-update public.profiles set salary_amount_minor = 180000, salary_wallet_id = 'a5100000-0000-4000-8000-000000000001';
+update public.profiles set salary_amount_minor = 180000, salary_balance_id = 'a5100000-0000-4000-8000-000000000001';
 -- Name edits must not redirect future salary receipts to another root.
 update public.categories set name_en='Renamed income root'
 where id=(select id from public.categories where kind='income' and parent_id is null order by position,id limit 1);
@@ -60,8 +64,8 @@ select throws_ok($$select pg_temp.cycle_pay(3,9999,'a5400000-0000-4000-8000-0000
 
 -- Direct authenticated DML must obey the same normal/extra rules as RPCs.
 select throws_ok($$
-  insert into public.transactions(kind,occurred_on,wallet_id,amount_minor,currency,category_id,source,installment_id,salary_cycle_id)
-  select 'expense',current_date,i.wallet_id,100,'USD',i.category_id,'installment',i.id,'a5400000-0000-4000-8000-000000000001'
+  insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id,source,installment_id,salary_cycle_id)
+  select 'expense',current_date,i.balance_id,100,'USD',i.category_id,'installment',i.id,'a5400000-0000-4000-8000-000000000001'
   from public.installments i where i.id='a5200000-0000-4000-8000-000000000001'
 $$,'P0001','already paid this cycle','direct insert cannot bypass acknowledgment');
 select throws_ok($$update public.transactions set salary_cycle_id=null where id='a5300000-0000-4000-8000-000000000003'$$,'P0001','installment identity cannot change','cycle metadata cannot be edited');
@@ -77,7 +81,7 @@ select lives_ok($$select * from public.set_transaction_deleted('a5300000-0000-40
 select lives_ok($$
   select * from public.save_transaction('a5300000-0000-4000-8000-000000000004',1,
     jsonb_build_object('kind','expense','occurredOn',(current_date-60)::text,
-      'walletId','a5100000-0000-4000-8000-000000000001','amountMinor',7000,
+      'balanceId','a5100000-0000-4000-8000-000000000001','amountMinor',7000,
       'categoryId',(select category_id from public.installments where id='a5200000-0000-4000-8000-000000000001'),
       'note','Cycle laptop revised'),null,null)
 $$,'five-argument canonical save preserves source and cycle while editing');
@@ -87,7 +91,7 @@ select lives_ok($$
   select * from public.save_transaction('a5300000-0000-4000-8000-000000000004',
     (select revision from public.transactions where id='a5300000-0000-4000-8000-000000000004'),
     jsonb_build_object('kind','expense','occurredOn',(current_date-60)::text,
-      'walletId','a5100000-0000-4000-8000-000000000001','amountMinor',7000,
+      'balanceId','a5100000-0000-4000-8000-000000000001','amountMinor',7000,
       'categoryId',(select category_id from public.installments where id='a5200000-0000-4000-8000-000000000001'),
       'note','Cycle laptop itemized'),
     '[{"description":"First part","amountMinor":1500},{"description":"Second part","amountMinor":2000}]'::jsonb,null)
@@ -100,7 +104,7 @@ select is(jsonb_array_length(public.installment_cycle_snapshot()->'payments'->0-
   'cycle history contains every saved expense item');
 select is(public.installment_cycle_snapshot()->'payments'->0->'expense_items'->0->>'description','First part',
   'snapshot item order matches the canonical detail/editor order');
-select ok((public.installment_cycle_snapshot()->'payments'->0) ?& array['currency','category_id','kind','source','tender_minor','change_wallet_id','change_minor'],
+select ok((public.installment_cycle_snapshot()->'payments'->0) ?& array['currency','category_id','kind','source','tender_minor','change_balance_id','change_minor'],
   'snapshot retains the complete parent including cashier metadata fields');
 select is((select remaining_minor from public.installment_progress where installment_id='a5200000-0000-4000-8000-000000000001'),73000::numeric,'restoration preserves both real expenses and principal');
 select throws_ok($$select pg_temp.cycle_pay(5,73001,'a5400000-0000-4000-8000-000000000001','a5300000-0000-4000-8000-000000000004')$$,'P0001','exceeds remaining','explicit override cannot exceed principal');
@@ -115,12 +119,12 @@ select throws_ok($$select pg_temp.cycle_salary(3,'a5400000-0000-4000-8000-000000
 select is(public.installment_cycle_snapshot()->'receipt'->>'id','a5400000-0000-4000-8000-000000000002','latest actual receipt is selected by immutable recording order');
 
 -- Unrelated income named Salary is not a boundary, and cycle metadata is not allowed on it.
-insert into public.transactions(kind,occurred_on,wallet_id,amount_minor,currency,category_id,note)
+insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id,note)
 select 'income',current_date,'a5100000-0000-4000-8000-000000000001',1,'USD',c.id,'Salary'
 from public.categories c where kind='income' and parent_id is null order by position limit 1;
 select is(public.installment_cycle_snapshot()->'receipt'->>'id','a5400000-0000-4000-8000-000000000002','a note cannot create a cycle');
 select throws_ok($$
-  insert into public.transactions(kind,occurred_on,wallet_id,amount_minor,currency,category_id,salary_cycle_id)
+  insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id,salary_cycle_id)
   select 'income',current_date,'a5100000-0000-4000-8000-000000000001',1,'USD',c.id,'a5400000-0000-4000-8000-000000000002'
   from public.categories c where kind='income' and parent_id is null order by position limit 1
 $$,'P0001','invalid installment cycle','ordinary income cannot carry payment metadata');

@@ -59,7 +59,7 @@ select throws_ok($test$
 $test$,'P0001','category_order_invalid','an incomplete order cannot overwrite the catalogue');
 update public.categories set archived_at=now() where kind='expense' and name_en='Other';
 update public.categories set archived_at=null where kind='expense' and name_en='Other';
-select is((select position from public.categories where kind='expense' and name_en='Other'),10,'restoring an archived root appends it after the active order');
+select is((select position from public.categories where kind='expense' and name_en='Other'),11,'restoring an archived root appends it after the active order');
 
 insert into public.categories (id,kind,name_en,tile,color) values
  ('ca100000-0000-4000-8000-000000000001','expense',E'  Phone\t credits  ',1,'teal'),
@@ -90,7 +90,12 @@ select throws_ok($$update public.categories set parent_id='ca200000-0000-4000-80
 select throws_ok($$select public.remove_category('ca100000-0000-4000-8000-000000000006')$$,'P0001','category_in_use','roots with existing children cannot be removed');
 select throws_ok($$delete from public.categories where id='ca100000-0000-4000-8000-000000000006'$$,'P0001','category_in_use','direct DELETE cannot cascade children');
 
-insert into public.wallets(id,name,kind,currency) values('ca300000-0000-4000-8000-000000000001','Category test cash','cash','USD');
+with fixture(id,name,kind,currency) as (values ('ca300000-0000-4000-8000-000000000001','Category test cash','cash','USD')), containers as (
+ insert into public.wallets(id,user_id,name,kind,default_balance_id)
+ select f.id::uuid,auth.uid()::uuid,f.name,f.kind::public.wallet_kind,f.id::uuid from fixture f returning id,user_id
+)
+insert into public.wallet_balances(id,user_id,wallet_id,currency,opening_balance_minor,position)
+select c.id,c.user_id,c.id,f.currency,0::bigint,0 from fixture f join containers c on c.id=f.id::uuid;
 insert into public.budgets(category_id,currency,starts_month,limit_minor) values('ca100000-0000-4000-8000-000000000002','USD','2026-10-01',5000);
 select throws_ok($$delete from public.categories where id='ca100000-0000-4000-8000-000000000002'$$,'P0001','category_in_use','direct DELETE cannot cascade budget-only history');
 select is(public.remove_category('ca100000-0000-4000-8000-000000000002'),'archived','a budget-only category archives');
@@ -99,23 +104,23 @@ select throws_ok($$insert into public.budgets(category_id,currency,starts_month,
 select lives_ok($$insert into public.budgets(category_id,currency,starts_month,limit_minor) values('ca100000-0000-4000-8000-000000000002','USD','2027-01-01',null)$$,'archived budgets can explicitly be cleared');
 select is((select count(*) from public.month_budgets('2027-01-01') where category_id='ca100000-0000-4000-8000-000000000002'),0::bigint,'explicit clear ends the carried limit');
 
-insert into public.transactions(id,kind,occurred_on,wallet_id,amount_minor,currency,category_id,deleted_at) values
+insert into public.transactions(id,kind,occurred_on,balance_id,amount_minor,currency,category_id,deleted_at) values
  ('ca400000-0000-4000-8000-000000000001','expense','2026-11-04','ca300000-0000-4000-8000-000000000001',1200,'USD','ca100000-0000-4000-8000-000000000003',now());
 select is(public.remove_category('ca100000-0000-4000-8000-000000000003'),'archived','soft-deleted transaction references still retain the category');
 select lives_ok($$update public.transactions set deleted_at=null,note='Restored' where id='ca400000-0000-4000-8000-000000000001'$$,'restore preserves an unchanged archived category');
 select lives_ok($$update public.transactions set amount_minor=1300 where id='ca400000-0000-4000-8000-000000000001'$$,'historical amount edits may keep the archived category');
-select throws_ok($$insert into public.transactions(kind,occurred_on,wallet_id,amount_minor,currency,category_id) values('expense','2026-11-04','ca300000-0000-4000-8000-000000000001',100,'USD','ca100000-0000-4000-8000-000000000003')$$,'P0001','category_unavailable','new expense cannot select an archive');
+select throws_ok($$insert into public.transactions(kind,occurred_on,balance_id,amount_minor,currency,category_id) values('expense','2026-11-04','ca300000-0000-4000-8000-000000000001',100,'USD','ca100000-0000-4000-8000-000000000003')$$,'P0001','category_unavailable','new expense cannot select an archive');
 select throws_ok($$update public.transactions set category_id='ca100000-0000-4000-8000-000000000002' where id='ca400000-0000-4000-8000-000000000001'$$,'P0001','category_unavailable','historical edits cannot choose a different archive');
 select is((select spent_minor from public.month_category_spend('2026-11-01') where category_id='ca100000-0000-4000-8000-000000000003'),1300::bigint,'archived-category spending remains in budgets exactly once');
-select is((select balance_minor::bigint from public.wallet_balances where wallet_id='ca300000-0000-4000-8000-000000000001'),(-1300)::bigint,'archive never changes the wallet ledger');
+select is((select balance_minor::bigint from public.wallet_balance_totals where balance_id='ca300000-0000-4000-8000-000000000001'),(-1300)::bigint,'archive never changes the wallet ledger');
 
-insert into public.fixed_expenses(name,amount_minor,wallet_id,category_id) values('Category bill',100,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000004');
-insert into public.installments(name,total_minor,wallet_id,category_id,currency) values('Category device',1000,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000005','USD');
+insert into public.fixed_expenses(name,amount_minor,balance_id,category_id) values('Category bill',100,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000004');
+insert into public.installments(name,total_minor,balance_id,category_id,currency) values('Category device',1000,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000005','USD');
 select throws_ok($$select public.remove_category('ca100000-0000-4000-8000-000000000004')$$,'P0001','category_in_use','fixed templates require reassignment');
 select throws_ok($$select public.remove_category('ca100000-0000-4000-8000-000000000005')$$,'P0001','category_in_use','installment templates require reassignment');
 select throws_ok($$update public.categories set archived_at=now() where id='ca100000-0000-4000-8000-000000000004'$$,'P0001','category_in_use','direct updates cannot archive a fixed template category');
-select throws_ok($$insert into public.fixed_expenses(name,amount_minor,wallet_id,category_id) values('Stale',100,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000003')$$,'P0001','category_unavailable','new fixed templates cannot use archives');
-select throws_ok($$insert into public.installments(name,total_minor,wallet_id,category_id,currency) values('Stale',1000,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000003','USD')$$,'P0001','category_unavailable','new installments cannot use archives');
+select throws_ok($$insert into public.fixed_expenses(name,amount_minor,balance_id,category_id) values('Stale',100,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000003')$$,'P0001','category_unavailable','new fixed templates cannot use archives');
+select throws_ok($$insert into public.installments(name,total_minor,balance_id,category_id,currency) values('Stale',1000,'ca300000-0000-4000-8000-000000000001','ca100000-0000-4000-8000-000000000003','USD')$$,'P0001','category_unavailable','new installments cannot use archives');
 
 select is(public.remove_category('ca100000-0000-4000-8000-000000000001'),'deleted','unused custom category is permanently removed');
 select throws_ok($$select public.remove_category('ca100000-0000-4000-8000-000000000001')$$,'P0001','category_not_found','missing category never reports successful removal');

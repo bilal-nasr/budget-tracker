@@ -18,6 +18,7 @@ const connection = process.env.BREAKDOWN_TEST_DATABASE_URL;
 const container = process.env.BREAKDOWN_TEST_DOCKER_CONTAINER;
 const database = process.env.BREAKDOWN_TEST_DATABASE;
 const allowedDockerTargets = new Map([
+  ["supabase_db_CODEX-BUDGET-MULTIWALLET-SYSTEM-20261105", /^postgres$/],
   ["supabase_db_budget-tracker-round3-check", /^round3_check_\d+$/],
   ["budget_round3_sql_probe", /^round3_check_\d+$/],
 ]);
@@ -112,14 +113,17 @@ try {
     insert into auth.users(id,instance_id,aud,role,email) values
       ('${owner}','00000000-0000-0000-0000-000000000000','authenticated','authenticated','breakdown-${owner}@example.test');
     ${asOwner}
-    insert into public.wallets(id,name,kind,currency) values ('${wallet}','Concurrency fixture','cash','USD');
+    with fixture(id,name,kind,currency) as (values ('${wallet}','Concurrency fixture','cash','USD')), containers as (
+    insert into public.wallets(id,name,kind,default_balance_id) select id::uuid,name,kind::public.wallet_kind,id::uuid from fixture returning id,user_id
+    ) insert into public.wallet_balances(id,user_id,wallet_id,currency,position)
+    select c.id,c.user_id,c.id,f.currency,0 from fixture f join containers c on c.id=f.id::uuid;
     commit;`);
   fixtureCreated = true;
   const category = (await sql(`begin; ${asOwner}
     select id from public.categories where kind='expense' and parent_id is null order by position limit 1; commit;`))
     .split(/\r?\n/).find((line) => /^[0-9a-f-]{36}$/.test(line));
   assert.ok(category, "fixture has an expense category");
-  const input = JSON.stringify({ kind: "expense", occurredOn: "2026-11-04", walletId: wallet, amountMinor: 5000, categoryId: category, note: "Concurrency fixture" });
+  const input = JSON.stringify({ kind: "expense", occurredOn: "2026-11-04", balanceId: wallet, amountMinor: 5000, categoryId: category, note: "Concurrency fixture" });
   const items = '[{"description":"Phone credits","amountMinor":2000}]';
   const save = (revision, amount = 5000, lines = items) =>
     `select id,revision from public.save_transaction('${parent}',${revision},'${input.replace('"amountMinor":5000', `"amountMinor":${amount}`)}','${lines}');`;
@@ -198,7 +202,7 @@ try {
   assert.match(overfillResult.errors, /BT001|breakdown exceeds total/);
   const result = await sql(`begin; ${asOwner}
     select count(*)||'|'||max(amount_minor) from public.transactions where id='${parent}';
-    select balance_minor from public.wallet_balances where wallet_id='${wallet}';
+    select balance_minor from public.wallet_balance_totals where balance_id='${wallet}';
     select count(*)||'|'||sum(amount_minor) from public.expense_items where transaction_id='${parent}'; commit;`);
   const lines = result.split(/\r?\n/);
   assert.ok(lines.includes("1|6000"), "one parent retains the winning cost");
