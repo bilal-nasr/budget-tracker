@@ -403,6 +403,8 @@
     "moveSave": "Move money",
     "moved": "Money moved",
     "moveNeedTwo": "You need a second wallet to move money. Add one first.",
+    "draftRestored": "Restored your unsaved entry.",
+    "startOver": "Start over",
     "topUpNew": "Adding new money to {wallet}, for example income. To take it from another wallet instead, choose Move.",
     "topUpMove": "Adding money to {wallet}. It is taken from the wallet you choose here.",
     "errorAmount": "Enter a valid amount.",

@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useLocale } from "next-intl";
-import type { ComposerPreset, ComposerState } from "@/components/add/transaction-sheet";
+import type { ComposerPreset, ComposerState, DraftSnapshot } from "@/components/add/transaction-sheet";
 import { Toaster } from "@/components/ui/sonner";
 import type { FixedSheetState } from "@/components/fixed/fixed-sheet";
 import type { BudgetsSheetState } from "@/components/budget/budgets-sheet";
@@ -77,7 +77,14 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(id);
   }, []);
 
-  const openAdd = useCallback((preset?: ComposerPreset) => setAdd({ mode: "add", draftId: crypto.randomUUID(), preset }), [setAdd]);
+  // An Add entry the sheet was dismissed on without saving. A plain Add brings it back; an
+  // explicit preset (budget row, Add money) starts clean and leaves it for later.
+  const stashedDraft = useRef<DraftSnapshot | null>(null);
+  const openAdd = useCallback((preset?: ComposerPreset) => {
+    const restore = preset ? undefined : stashedDraft.current ?? undefined;
+    if (!preset) stashedDraft.current = null;
+    setAdd({ mode: "add", draftId: crypto.randomUUID(), preset, restore });
+  }, [setAdd]);
   const openDetail = useCallback((t: Transaction) => setDetail(t), [setDetail]);
   const openWallet = useCallback((w: WalletContainer | null) => setWallet({ wallet: w }), [setWallet]);
 
@@ -97,7 +104,14 @@ export function ComposerProvider({ children }: { children: React.ReactNode }) {
   return (
     <Context value={value}>
       {children}
-      {addMounted && <TransactionSheet state={add} onClose={() => setAdd(null)} onCreateWallet={() => setWallet({ wallet: null })} />}
+      {addMounted && <TransactionSheet
+        state={add}
+        // Clear first: the form stashes only afterwards, on a dismissal. Saving leaves nothing behind.
+        onClose={() => { stashedDraft.current = null; setAdd(null); }}
+        onCreateWallet={() => setWallet({ wallet: null })}
+        onStash={(draft) => { stashedDraft.current = draft; }}
+        onStartOver={() => setAdd({ mode: "add", draftId: crypto.randomUUID() })}
+      />}
       {detailMounted && <DetailSheet
         transaction={detail}
         onClose={() => setDetail(null)}

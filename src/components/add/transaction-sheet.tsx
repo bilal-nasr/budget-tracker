@@ -1,14 +1,14 @@
 "use client";
 
 import { currencyIntent } from "@/lib/currency-intent";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import { ChevronDown, Pencil } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { AmountKeypad } from "@/components/add/amount-keypad";
 import { ExpenseBreakdownFields, useExpenseBreakdownLabels } from "./expense-breakdown-fields";
-import { CashSettlementFields, parseSettlementDraft, settlementDraftFromSnapshot } from "./cash-settlement-fields";
+import { CashSettlementFields, parseSettlementDraft, settlementDraftFromSnapshot, type CashSettlementDraft } from "./cash-settlement-fields";
 import { useCashSettlementLabels } from "./cash-settlement-labels";
 import { useAppData } from "@/components/providers/app-data";
 import { CategorySelect } from "@/components/categories/category-select";
@@ -39,8 +39,19 @@ type ExpenseStyle = "standard" | "cashPurchase";
 /** Where the sheet was opened from. `walletId` is a wallet the user is adding money to. */
 export type ComposerPreset = { kind?: Mode; walletId?: string; categoryId?: string };
 
+/**
+ * Everything typed into an unsaved Add form. Kept in memory when the sheet is
+ * dismissed by accident (swipe down, backdrop tap) and offered back on reopen.
+ */
+export type DraftSnapshot = {
+  mode: Mode; balanceId: string; toBalanceId: string; purchaseCurrency: string;
+  cashDraft: CashSettlementDraft; typed: string; rateText: string; receivedText: string;
+  receivedEdited: boolean; categoryId: string; date: string; note: string;
+  itemDrafts: ExpenseItemDraft[]; details: boolean;
+};
+
 export type ComposerState =
-  | { mode: "add"; draftId: string; initial?: Transaction; preset?: ComposerPreset }
+  | { mode: "add"; draftId: string; initial?: Transaction; preset?: ComposerPreset; restore?: DraftSnapshot }
   | { mode: "edit"; initial: Transaction };
 
 const LAST_WALLET_KEY = "lastWalletId";
@@ -49,7 +60,10 @@ const LAST_WALLET_KEY = "lastWalletId";
 const parseTyped = (typed: string, currency: import("@/lib/currency").CurrencyDefinition) =>
   typed === "" ? null : parseAmount(typed.endsWith(".") ? typed.slice(0, -1) : typed, currency);
 
-function Form({ state, onClose, onReload }: { state: ComposerState; onClose: () => void; onCreateWallet?: () => void; onReload: () => void }) {
+function Form({ state, onClose, onReload, onStash, onStartOver }: {
+  state: ComposerState; onClose: () => void; onCreateWallet?: () => void; onReload: () => void;
+  onStash?: (draft: DraftSnapshot) => void; onStartOver?: () => void;
+}) {
   const t = useTranslations("Add");
   const tc = useTranslations("Categories");
   const tb = useTranslations("Breakdown");
@@ -74,12 +88,15 @@ function Form({ state, onClose, onReload }: { state: ComposerState; onClose: () 
   const preset = state.mode === "add" ? state.preset : undefined;
   // A wallet the user chose "Add money" on. New money goes in as income; Move takes it from another wallet.
   const topUpId = defaultId(preset?.walletId);
+  // An unsaved entry the sheet was dismissed on; every field below starts from it.
+  const saved = state.mode === "add" ? state.restore : undefined;
 
   const usable = wallets.filter((w) => !w.archived || w.id === initial?.balanceId);
   const [mode, setMode] = useState<Mode>(
-    initial && (initial.kind === "expense" || initial.kind === "income") ? initial.kind : (preset?.kind ?? "expense"),
+    saved?.mode ?? (initial && (initial.kind === "expense" || initial.kind === "income") ? initial.kind : (preset?.kind ?? "expense")),
   );
   const [balanceId, setBalanceId] = useState(() => {
+    if (saved) return saved.balanceId;
     if (initial) return initial.balanceId;
     if (topUpId && usable.some((w) => w.id === topUpId)) return topUpId;
     let last: string | null = null;
@@ -89,26 +106,26 @@ function Form({ state, onClose, onReload }: { state: ComposerState; onClose: () 
     const remembered = defaultId(last ?? undefined);
     return usable.find((w) => w.id === remembered)?.id ?? defaultId(walletContainers[0]?.id) ?? "";
   });
-  const [toBalanceId, setToBalanceId] = useState("");
+  const [toBalanceId, setToBalanceId] = useState(saved?.toBalanceId ?? "");
   const transferring = mode === "move" || mode === "exchange";
   const balance = balanceOptionById(balanceId);
   const toWallet = balanceOptionById(toBalanceId);
   const currency = balance?.currency ?? app.balanceById(balanceId)?.currency ?? enabledCurrencies[0]?.code ?? "";
-  const [purchaseCurrency, setPurchaseCurrency] = useState<string>(initial?.currency ?? currency);
-  const [cashDraft, setCashDraft] = useState(() => settlementDraftFromSnapshot(initial?.settlement ?? null, currency, balanceId, state.mode === "add", app.currencies));
+  const [purchaseCurrency, setPurchaseCurrency] = useState<string>(saved?.purchaseCurrency ?? initial?.currency ?? currency);
+  const [cashDraft, setCashDraft] = useState(() => saved?.cashDraft ?? settlementDraftFromSnapshot(initial?.settlement ?? null, currency, balanceId, state.mode === "add", app.currencies));
   const settlementEligible = mode === "expense" && (state.mode === "add" || (!initial?.source && !initial?.installmentId));
   const crossCurrency = transferring && toWallet !== undefined && balance !== undefined && toWallet.currency !== balance.currency;
   const rateSupported = crossCurrency && toWallet !== undefined && supportsUsdLbpRate(currency, toWallet.currency);
 
-  const [typed, setTyped] = useState(initial ? toInputText(initial.amountMinor, definition(initial.currency)) : "");
+  const [typed, setTyped] = useState(saved?.typed ?? (initial ? toInputText(initial.amountMinor, definition(initial.currency)) : ""));
   // Rate is LBP per 1 USD. Received follows amount × rate until the owner edits it.
-  const [rateText, setRateText] = useState(usdLbpRate ? String(usdLbpRate) : "");
-  const [receivedText, setReceivedText] = useState("");
-  const [receivedEdited, setReceivedEdited] = useState(false);
-  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? preset?.categoryId ?? "");
-  const [date, setDate] = useState(() => (state.mode === "edit" && initial ? initial.occurredOn : todayIn(timezone)));
-  const [note, setNote] = useState(initial?.note ?? "");
-  const [itemDrafts, setItemDrafts] = useState<ExpenseItemDraft[]>(() => (initial?.items ?? []).map((item) => ({
+  const [rateText, setRateText] = useState(saved?.rateText ?? (usdLbpRate ? String(usdLbpRate) : ""));
+  const [receivedText, setReceivedText] = useState(saved?.receivedText ?? "");
+  const [receivedEdited, setReceivedEdited] = useState(saved?.receivedEdited ?? false);
+  const [categoryId, setCategoryId] = useState(saved?.categoryId ?? initial?.categoryId ?? preset?.categoryId ?? "");
+  const [date, setDate] = useState(() => saved?.date ?? (state.mode === "edit" && initial ? initial.occurredOn : todayIn(timezone)));
+  const [note, setNote] = useState(saved?.note ?? initial?.note ?? "");
+  const [itemDrafts, setItemDrafts] = useState<ExpenseItemDraft[]>(() => saved?.itemDrafts ?? (initial?.items ?? []).map((item) => ({
     key: crypto.randomUUID(), description: item.description, amountText: toInputText(item.amountMinor, definition(initial!.currency)),
   })));
   const [unresolved, setUnresolved] = useState(false);
@@ -116,12 +133,35 @@ function Form({ state, onClose, onReload }: { state: ComposerState; onClose: () 
   const transferAttempt = useRef<TransferInput | null>(null);
   const inFlight = useRef(false);
   const [pickWallet, setPickWallet] = useState(false);
-  const [details, setDetails] = useState(false);
+  const [details, setDetails] = useState(saved?.details ?? false);
   const [error, setError] = useState<string | null>(null);
   const [conflicted, setConflicted] = useState(false);
   const [reloading, setReloading] = useState(false);
   const noteInput = useRef<HTMLInputElement>(null);
   const receivedInput = useRef<HTMLInputElement>(null);
+
+  // Keep the unsaved entry when the sheet is dismissed by accident. Saving, Start over and
+  // an attempt whose outcome is unknown never stash: those must not come back.
+  const finished = useRef(false);
+  const stashable = useRef<{ draft: DraftSnapshot; keep: boolean; onStash?: (draft: DraftSnapshot) => void } | null>(null);
+  useEffect(() => {
+    stashable.current = {
+      onStash,
+      draft: { mode, balanceId, toBalanceId, purchaseCurrency, cashDraft, typed, rateText, receivedText, receivedEdited, categoryId, date, note, itemDrafts, details },
+      keep: state.mode === "add" && !state.initial && !unresolved &&
+        (typed !== "" || note.trim() !== "" || itemDrafts.length > 0 || cashDraft.enabled || toBalanceId !== "" ||
+          categoryId !== (preset?.categoryId ?? "")),
+    };
+  });
+  useEffect(() => () => {
+    const latest = stashable.current;
+    if (finished.current || !latest?.keep || inFlight.current || attemptSnapshot.current || transferAttempt.current) return;
+    latest.onStash?.(latest.draft);
+  }, []);
+  const startOver = () => {
+    finished.current = true;
+    onStartOver?.();
+  };
 
   const today = todayIn(timezone);
   const list = transferring ? [] : categoryOptions(categories, mode as "expense" | "income", state.mode === "edit" ? initial?.categoryId ?? undefined : undefined);
@@ -288,6 +328,7 @@ function Form({ state, onClose, onReload }: { state: ComposerState; onClose: () 
     try {
       localStorage.setItem(LAST_WALLET_KEY, app.balanceById(balanceId)?.walletId ?? balanceId);
     } catch {}
+    finished.current = true;
     onClose();
   };
   const undoToast = (label: string, id: string, revision: number) =>
@@ -411,6 +452,12 @@ function Form({ state, onClose, onReload }: { state: ComposerState; onClose: () 
   return (
     <div className="flex flex-col">
       <fieldset disabled={pending || unresolved || reloading} className="contents">
+      {saved ? (
+        <div className="mb-2.5 flex items-center justify-between gap-3 rounded-lg bg-accent ps-3.5 pe-1 text-[13px] text-foreground">
+          <span>{t("draftRestored")}</span>
+          <Button variant="ghost" size="sm" onClick={startOver}>{t("startOver")}</Button>
+        </div>
+      ) : null}
       <Segmented label={t("kind")} value={mode} onChange={changeMode} options={modes} />
 
       {settlementEligible ? <Segmented<ExpenseStyle>
@@ -704,10 +751,16 @@ export function TransactionSheet({
   onClose,
   onCreateWallet,
   onReload = () => window.location.reload(),
+  onStash,
+  onStartOver,
 }: {
   state: ComposerState | null;
   onClose: () => void;
   onCreateWallet?: () => void;
+  /** Receives the unsaved entry when the sheet is dismissed without saving. */
+  onStash?: (draft: DraftSnapshot) => void;
+  /** Drops a restored entry and reopens Add empty. */
+  onStartOver?: () => void;
   /** A full new page drops stale client-held snapshots after explicit consent. */
   onReload?: () => void;
 }) {
@@ -721,7 +774,7 @@ export function TransactionSheet({
       title={state?.mode === "edit" ? t("editTitle") : t("title")}
     >
       {state ? (
-        <Form key={state.mode === "add" ? state.draftId : state.initial.id} state={state} onClose={onClose} onCreateWallet={onCreateWallet} onReload={onReload} />
+        <Form key={state.mode === "add" ? state.draftId : state.initial.id} state={state} onClose={onClose} onCreateWallet={onCreateWallet} onReload={onReload} onStash={onStash} onStartOver={onStartOver} />
       ) : null}
     </SheetShell>
   );

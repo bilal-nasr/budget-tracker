@@ -393,3 +393,52 @@ it.each(["move", "exchange"] as const)("retains the exact %s attempt across a co
   await waitFor(() => expect(mocks.createTransfer).toHaveBeenCalledTimes(2));
   expect(mocks.createTransfer.mock.calls[1][0]).toEqual(first);
 });
+
+describe("unsaved entry survives an accidental dismiss", () => {
+  const draftState: ComposerState = { mode: "add", draftId: "00000000-0000-4000-8000-000000000071", preset: { kind: "expense" } };
+  const renderSheet = (state: ComposerState | null, props: Partial<React.ComponentProps<typeof TransactionSheet>> = {}) => (
+    <NextIntlClientProvider locale="en" messages={en}>
+      <AppDataProvider walletContainers={completeFixtureWallets(wallets)} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={[expenseCategory]} timezone="Asia/Beirut" salary={null} usdLbpRate={89500}>
+        <TransactionSheet state={state} onClose={vi.fn()} {...props} />
+      </AppDataProvider>
+    </NextIntlClientProvider>
+  );
+
+  it("hands the typed amount to onStash on dismiss and restores it with a Start over option", () => {
+    const onStash = vi.fn();
+    const first = render(renderSheet(draftState, { onStash }));
+    fireEvent.click(screen.getByRole("button", { name: "4" }));
+    fireEvent.click(screen.getByRole("button", { name: "2" }));
+    first.rerender(renderSheet(null, { onStash }));
+    expect(onStash).toHaveBeenCalledTimes(1);
+    const draft = onStash.mock.calls[0][0];
+    expect(draft.typed).toBe("42");
+    first.unmount();
+
+    const onStartOver = vi.fn();
+    render(renderSheet({ ...draftState, draftId: "00000000-0000-4000-8000-000000000072", restore: draft }, { onStartOver }));
+    expect(screen.getByText(en.Add.draftRestored)).toBeTruthy();
+    expect(screen.getByText("42")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: en.Add.startOver }));
+    expect(onStartOver).toHaveBeenCalledTimes(1);
+  });
+
+  it("stashes nothing for an untouched form, and nothing after Start over", () => {
+    const onStash = vi.fn();
+    const untouched = render(renderSheet(draftState, { onStash }));
+    untouched.rerender(renderSheet(null, { onStash }));
+    expect(onStash).not.toHaveBeenCalled();
+    untouched.unmount();
+
+    const restoreState: ComposerState = {
+      ...draftState, draftId: "00000000-0000-4000-8000-000000000073",
+      restore: { mode: "expense", balanceId: wallets[0].id, toBalanceId: "", purchaseCurrency: "USD",
+        cashDraft: { enabled: false, tenderText: "", changes: [] }, typed: "7", rateText: "", receivedText: "",
+        receivedEdited: false, categoryId: "", date: "2026-11-06", note: "", itemDrafts: [], details: false },
+    };
+    const restored = render(renderSheet(restoreState, { onStash, onStartOver: vi.fn() }));
+    fireEvent.click(screen.getByRole("button", { name: en.Add.startOver }));
+    restored.rerender(renderSheet(null, { onStash }));
+    expect(onStash).not.toHaveBeenCalled();
+  });
+});
