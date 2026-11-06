@@ -11,7 +11,10 @@ export function matchesActivityKind(row: Transaction, kind: Filters["kind"]): bo
 /** One combined PostgREST OR expression so wallet/cursor/kind clauses stay ANDed. */
 export function activityOrClause(filters: Filters, cursor: Cursor | null): string | null {
   const groups: string[] = [];
-  if (filters.balanceId) groups.push(`balance_id.eq.${filters.balanceId},to_balance_id.eq.${filters.balanceId},change_balance_ids.cs.{${filters.balanceId}}`);
+  if (filters.balanceId) {
+    groups.push(filters.balanceId.split(",")
+      .map((id) => `balance_id.eq.${id},to_balance_id.eq.${id},change_balance_ids.cs.{${id}}`).join(","));
+  }
   if (cursor) groups.push(`occurred_on.lt.${cursor.occurredOn},and(occurred_on.eq.${cursor.occurredOn},created_at.lt."${cursor.createdAt}"),and(occurred_on.eq.${cursor.occurredOn},created_at.eq."${cursor.createdAt}",id.lt.${cursor.id})`);
   if (filters.kind === "expense" || filters.kind === "income") {
     groups.push(`kind.eq.${filters.kind},and(kind.eq.loan,loan_event.eq.repayment,loan_flow.eq.${filters.kind === "expense" ? "out" : "in"},loan_fee_minor.gt.0)`);

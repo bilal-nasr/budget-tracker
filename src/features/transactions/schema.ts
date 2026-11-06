@@ -91,7 +91,11 @@ export type Cursor = z.infer<typeof cursorSchema>;
 export const filtersSchema = z.object({
   q: z.string().trim().max(60).optional(),
   kind: z.enum(["expense", "income", "transfer", "loan"]).optional(),
-  balanceId: z.uuid().optional(),
+  /** One balance id, or several joined by commas (a wallet and/or currency selection). */
+  balanceId: z.string().max(1500).refine((value) => {
+    const ids = value.split(",");
+    return ids.length <= 40 && ids.every((id) => z.uuid().safeParse(id).success);
+  }).optional(),
   categoryId: z.uuid().optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),

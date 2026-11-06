@@ -32,6 +32,11 @@ describe("loan Activity cash versus fee reporting", () => {
     expect(clause).toContain("or(kind.neq.loan,and(loan_event.eq.repayment,loan_fee_minor.gt.0))");
     expect(activityOrClause({ kind: "loan" }, null)).toBeNull();
   });
+  it("matches every balance of a wallet or currency selection", () => {
+    expect(activityOrClause({ balanceId: "a,b" }, null)).toBe(
+      "balance_id.eq.a,to_balance_id.eq.a,change_balance_ids.cs.{a},balance_id.eq.b,to_balance_id.eq.b,change_balance_ids.cs.{b}",
+    );
+  });
 });
 describe("one shared synthetic loan ledger", () => {
   it("agrees across loan history, Activity, wallet balance and realized budget fee", () => {

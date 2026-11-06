@@ -314,8 +314,8 @@ export function demoPage(filters: Filters, cursor: Cursor | null, limit: number)
     (t) =>
       (!q || (t.note ?? "").toLowerCase().includes(q)) &&
       matchesActivityKind(t, filters.kind) &&
-      (!filters.balanceId || t.balanceId === filters.balanceId || t.toBalanceId === filters.balanceId ||
-        t.settlement?.changes.some((change) => change.balanceId === filters.balanceId)) &&
+      (!filters.balanceId || filters.balanceId.split(",").some((id) => t.balanceId === id || t.toBalanceId === id ||
+        t.settlement?.changes.some((change) => change.balanceId === id))) &&
       (!filters.categoryId || (t.categoryId === filters.categoryId && (t.kind !== "loan" || (t.loanFeeMinor ?? 0) > 0))) &&
       (!filters.from || t.occurredOn >= filters.from) &&
       (!filters.to || t.occurredOn <= filters.to) &&

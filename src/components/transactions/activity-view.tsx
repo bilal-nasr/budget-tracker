@@ -43,7 +43,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
   const router = useRouter();
   const pathname = usePathname();
   const { walletContainers } = useAppData();
-  const wallets = walletContainers.flatMap((wallet) => wallet.balances.map((balance) => ({ id: balance.id, name: wallet.name, currency: balance.currency, archived: wallet.deleted })));
+  const wallets = walletContainers.flatMap((wallet) => wallet.balances.map((balance) => ({ id: balance.id, name: wallet.name, currency: balance.currency, walletId: wallet.id, archived: wallet.deleted })));
   const { openAdd } = useComposer();
   const [rows, setRows] = useState(initial.rows);
   const [next, setNext] = useState<Cursor | null>(initial.next);
