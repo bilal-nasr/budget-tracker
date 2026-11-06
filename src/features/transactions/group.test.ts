@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, groupByDay, todayIn } from "./group";
+import { addDays, groupByDay, sumSelected, todayIn } from "./group";
 import { emptyTransactionMetadata, type Transaction } from "./schema";
 
 const tx = (over: Partial<Transaction>): Transaction => ({
@@ -65,6 +65,21 @@ describe("groupByDay with moves", () => {
     ]);
     expect(groups[0].rows).toHaveLength(2);
     expect(groups[0].totals).toEqual({ USD: -500 });
+  });
+});
+
+describe("sumSelected", () => {
+  it("nets each currency separately and lists only currencies that count", () => {
+    expect(sumSelected([
+      tx({ amountMinor: 5420 }),
+      tx({ kind: "income", amountMinor: 20000 }),
+      tx({ amountMinor: 400000, currency: "LBP" }),
+      tx({ amountMinor: 250, currency: "SYP", kind: "transfer", toAmountMinor: 250 }),
+    ])).toEqual({ USD: 14580, LBP: -400000 });
+  });
+  it("is empty when only moves are picked", () => {
+    expect(sumSelected([tx({ kind: "transfer", amountMinor: 999, toAmountMinor: 999 })])).toEqual({});
+    expect(sumSelected([])).toEqual({});
   });
 });
 

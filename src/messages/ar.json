@@ -548,7 +548,15 @@
     "to": "إلى",
     "dateOrder": "يجب أن يسبق تاريخ البداية تاريخ النهاية.",
     "transfer": "عمليات النقل",
-    "loan": "القروض"
+    "loan": "القروض",
+    "select": "تحديد الأنشطة",
+    "selectionSummary": "مجموع المحدّد",
+    "selectHint": "اضغط على الأنشطة لجمعها.",
+    "selectNoTotal": "عمليات النقل وأصل القروض لا تُحتسب.",
+    "selectedCount": "{count, plural, =0 {لا شيء محدّد} one {# محدّد} two {# محدّدان} few {# محدّدة} many {# محدّدًا} other {# محدّد}}",
+    "selectAll": "تحديد الكل",
+    "selectNone": "مسح",
+    "done": "تم"
   },
   "Salary": {
     "changeDate": "تغيير التاريخ",

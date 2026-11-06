@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, ArrowRight, HandCoins } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Check, HandCoins } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useAppData } from "@/components/providers/app-data";
 import { Amount } from "@/components/money/amount";
@@ -18,9 +18,12 @@ import { cn } from "@/lib/utils";
 export function TransactionRow({
   transaction,
   onOpen,
+  selection,
 }: {
   transaction: Transaction;
   onOpen: (transaction: Transaction) => void;
+  /** In select mode the row toggles instead of opening, and shows a check. */
+  selection?: { selected: boolean; onToggle: (transaction: Transaction) => void };
 }) {
   const t = useTranslations("Detail");
   const ts = useTranslations("Cashier");
@@ -44,9 +47,25 @@ export function TransactionRow({
     <li className="border-b border-border last:border-b-0">
       <button
         type="button"
-        onClick={() => onOpen(transaction)}
-        className="flex min-h-[60px] w-full items-center gap-3 px-3.5 py-2 text-start hover:bg-accent/50 active:bg-accent"
+        role={selection ? "checkbox" : undefined}
+        aria-checked={selection ? selection.selected : undefined}
+        onClick={() => (selection ? selection.onToggle(transaction) : onOpen(transaction))}
+        className={cn(
+          "flex min-h-[60px] w-full items-center gap-3 px-3.5 py-2 text-start hover:bg-accent/50 active:bg-accent",
+          selection?.selected && "bg-accent/60",
+        )}
       >
+        {selection ? (
+          <span
+            aria-hidden
+            className={cn(
+              "grid size-6 shrink-0 place-items-center rounded-full border-2 transition-colors",
+              selection.selected ? "border-primary bg-primary text-primary-foreground" : "border-input",
+            )}
+          >
+            {selection.selected ? <Check className="size-4" strokeWidth={3} /> : null}
+          </span>
+        ) : null}
         {loan ? <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-secondary text-primary"><HandCoins className="size-5" /></span> : transfer ? (
           <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-secondary text-primary">
             <ArrowLeftRight className="size-5" />

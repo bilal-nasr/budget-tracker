@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { ListChecks, Search, SlidersHorizontal, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
@@ -12,8 +12,8 @@ import { TransactionRow } from "@/components/transactions/transaction-row";
 import { Button } from "@/components/ui/button";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { loadTransactions } from "@/features/transactions/actions";
-import { addDays, groupByDay, todayIn } from "@/features/transactions/group";
-import type { Cursor, Filters, Page } from "@/features/transactions/schema";
+import { addDays, groupByDay, sumSelected, todayIn } from "@/features/transactions/group";
+import type { Cursor, Filters, Page, Transaction } from "@/features/transactions/schema";
 
 // The filter sheet (and the drawer it needs) loads on first open, then stays
 // mounted for its exit animation.
@@ -100,6 +100,25 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [next, loading]);
 
+  // Select mode: tap rows to add them up. Derived from the loaded rows, so a row
+  // that was deleted or filtered out never counts.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const selectedRows = useMemo(() => rows.filter((row) => picked.has(row.id)), [rows, picked]);
+  const selectedTotals = useMemo(() => sumSelected(selectedRows), [selectedRows]);
+  const toggle = useCallback((transaction: Transaction) => {
+    setPicked((current) => {
+      const nextSet = new Set(current);
+      if (!nextSet.delete(transaction.id)) nextSet.add(transaction.id);
+      return nextSet;
+    });
+  }, []);
+  const setSelectMode = (on: boolean) => {
+    setSelecting(on);
+    if (!on) setPicked(new Set());
+  };
+  const allPicked = rows.length > 0 && selectedRows.length === rows.length;
+
   const kind = filters.kind ?? "all";
   const extraCount = [filters.balanceId, filters.categoryId, filters.from, filters.to].filter(Boolean).length;
   const filtered = Boolean(filters.q || filters.kind || extraCount);
@@ -120,6 +139,16 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
             className="h-full min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
+        <Button
+          variant={selecting ? "default" : "outline"}
+          size="icon"
+          className="size-12"
+          aria-label={t("select")}
+          aria-pressed={selecting}
+          onClick={() => setSelectMode(!selecting)}
+        >
+          <ListChecks aria-hidden />
+        </Button>
         <Button variant="outline" size="icon" className="relative size-12" aria-label={t("filters")} onClick={() => setFilterOpen(true)}>
           <SlidersHorizontal aria-hidden />
           {extraCount > 0 ? (
@@ -170,7 +199,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
         />
       ) : (
         <div className="flex flex-col">
-          <ActivityGroups rows={rows} hasMore={next !== null} />
+          <ActivityGroups rows={rows} hasMore={next !== null} selection={selecting ? { picked, onToggle: toggle } : undefined} />
           <div ref={sentinel} aria-hidden className="h-px" />
           {next ? (
             <div className="flex flex-col items-center gap-2 py-4">
@@ -184,6 +213,16 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
           )}
         </div>
       )}
+
+      {selecting ? (
+        <SelectionBar
+          count={selectedRows.length}
+          totals={selectedTotals}
+          allPicked={allPicked}
+          onToggleAll={() => setPicked(allPicked ? new Set() : new Set(rows.map((row) => row.id)))}
+          onDone={() => setSelectMode(false)}
+        />
+      ) : null}
 
       {filterMounted ? <FilterSheet
         open={filterOpen}
@@ -200,8 +239,64 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
 }
 
 
+/**
+ * Floats above the phone tab bar (and bottom-left of the content on larger
+ * screens). Leads with the answer: the net per currency, never combined.
+ */
+function SelectionBar({
+  count,
+  totals,
+  allPicked,
+  onToggleAll,
+  onDone,
+}: {
+  count: number;
+  totals: Record<string, number>;
+  allPicked: boolean;
+  onToggleAll: () => void;
+  onDone: () => void;
+}) {
+  const t = useTranslations("Activity");
+  const { currencies } = useAppData();
+  const codes = currencies.map((currency) => currency.code).filter((code) => code in totals);
+  return (
+    <div
+      role="region"
+      aria-label={t("selectionSummary")}
+      className="sticky bottom-[calc(100px+var(--safe-bottom))] z-20 mt-1 flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-lg md:bottom-4"
+    >
+      <div aria-live="polite" className="flex min-h-7 flex-wrap items-baseline gap-x-4 gap-y-1">
+        {count === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("selectHint")}</p>
+        ) : codes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("selectNoTotal")}</p>
+        ) : (
+          codes.map((code) => (
+            <Amount key={code} minor={totals[code]} currency={code} sign className="text-xl font-bold" />
+          ))
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <p className="flex-1 text-[13px] text-muted-foreground">{t("selectedCount", { count })}</p>
+        <Button variant="ghost" size="sm" onClick={onToggleAll}>
+          {allPicked ? t("selectNone") : t("selectAll")}
+        </Button>
+        <Button size="sm" onClick={onDone}>{t("done")}</Button>
+      </div>
+    </div>
+  );
+}
+
 // Search input state must not rerender every loaded transaction on each keystroke.
-const ActivityGroups = memo(function ActivityGroups({ rows, hasMore }: { rows: Page["rows"]; hasMore: boolean }) {
+const ActivityGroups = memo(function ActivityGroups({
+  rows,
+  hasMore,
+  selection,
+}: {
+  rows: Page["rows"];
+  hasMore: boolean;
+  selection?: { picked: ReadonlySet<string>; onToggle: (transaction: Transaction) => void };
+}) {
   const t = useTranslations("Activity");
   const locale = useLocale();
   const { timezone, currencies } = useAppData();
@@ -227,7 +322,12 @@ const ActivityGroups = memo(function ActivityGroups({ rows, hasMore }: { rows: P
           </div>
           <ul className="overflow-hidden rounded-xl border border-border bg-card">
             {group.rows.map((row) => (
-              <TransactionRow key={row.id} transaction={row} onOpen={openDetail} />
+              <TransactionRow
+                key={row.id}
+                transaction={row}
+                onOpen={openDetail}
+                selection={selection ? { selected: selection.picked.has(row.id), onToggle: selection.onToggle } : undefined}
+              />
             ))}
           </ul>
         </section>

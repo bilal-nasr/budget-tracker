@@ -29,6 +29,23 @@ export function groupByDay(rows: readonly Transaction[]): DayGroup[] {
   return groups;
 }
 
+/**
+ * Net per currency for hand-picked rows, using the same rule as the day totals
+ * (purchase cost, income, realized loan fees). Currencies are never combined.
+ * Moves and loan principal count for nothing, so a currency appears only when
+ * at least one picked row of it counts.
+ */
+export function sumSelected(rows: readonly Transaction[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  const currencies = new Set(
+    rows.filter((row) => row.kind === "income" || row.kind === "expense" || reportingMinor(row) !== 0).map((row) => row.currency),
+  );
+  for (const currency of currencies) {
+    totals[currency] = sumMinor(rows.filter((row) => row.currency === currency).map(reportingMinor));
+  }
+  return totals;
+}
+
 /** Today's date as YYYY-MM-DD in the given IANA timezone. */
 export function todayIn(timeZone: string, now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {

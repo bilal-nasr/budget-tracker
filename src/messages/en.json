@@ -548,7 +548,15 @@
     "to": "To",
     "dateOrder": "The start date must be before the end date.",
     "transfer": "Moves",
-    "loan": "Loans"
+    "loan": "Loans",
+    "select": "Select activities",
+    "selectionSummary": "Selection total",
+    "selectHint": "Tap activities to add them up.",
+    "selectNoTotal": "Moves and loan principal are not counted.",
+    "selectedCount": "{count, plural, =0 {None selected} one {# selected} other {# selected}}",
+    "selectAll": "Select all",
+    "selectNone": "Clear",
+    "done": "Done"
   },
   "Salary": {
     "title": "Monthly salary",
