@@ -41,7 +41,7 @@ export function PasskeysSection() {
   const available = useSyncExternalStore(subscribeNoop, passkeysConfigured, () => false);
   const supported = useSyncExternalStore(subscribeNoop, passkeysSupported, () => false);
   const [items, setItems] = useState<PasskeyItem[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadError, setLoadError] = useState<PasskeyErrorKind | null>(null);
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<PasskeyItem | null>(null);
   const [nameDraft, setNameDraft] = useState("");
@@ -52,7 +52,9 @@ export function PasskeysSection() {
     (kind: PasskeyErrorKind) =>
       kind === "duplicate"
         ? t("passkeyDuplicate")
-        : kind === "domain"
+        : kind === "disabled"
+          ? t("passkeyDisabled")
+          : kind === "domain"
           ? t("passkeyDomain")
           : kind === "unsupported"
             ? t("passkeyUnsupported")
@@ -64,9 +66,9 @@ export function PasskeysSection() {
     const result = await listPasskeys();
     if (result.ok) {
       setItems(result.data);
-      setLoadFailed(false);
+      setLoadError(null);
     } else {
-      setLoadFailed(true);
+      setLoadError(result.error);
     }
   }, []);
 
@@ -126,7 +128,7 @@ export function PasskeysSection() {
       <p className="text-[13px] text-muted-foreground">{t("passkeysHelp")}</p>
 
       <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-        {items === null && !loadFailed ? (
+        {items === null && loadError === null ? (
           <div className="flex min-h-16 items-center gap-3 px-4 py-3" aria-hidden>
             <Skeleton className="size-5 rounded-full" />
             <div className="flex flex-1 flex-col gap-2">
@@ -135,8 +137,10 @@ export function PasskeysSection() {
             </div>
           </div>
         ) : null}
-        {loadFailed ? (
-          <p role="alert" className="px-4 py-3 text-[15px] text-over">{t("passkeysLoadFailed")}</p>
+        {loadError ? (
+          <p role="alert" className="px-4 py-3 text-[15px] text-over">
+            {loadError === "disabled" ? t("passkeyDisabled") : loadError === "domain" ? t("passkeyDomain") : t("passkeysLoadFailed")}
+          </p>
         ) : null}
         {items?.length === 0 ? (
           <p className="px-4 py-3 text-[15px] text-muted-foreground">{t("passkeysEmpty")}</p>
@@ -175,7 +179,7 @@ export function PasskeysSection() {
         ))}
       </div>
 
-      {supported ? (
+      {loadError === "disabled" ? null : supported ? (
         <Button variant="outline" size="lg" loading={adding} onClick={add} className="w-full">
           <Plus aria-hidden />
           {t("passkeyAdd")}

@@ -237,7 +237,8 @@
     "passkeyDuplicate": "This device already has a sign-in key for your account.",
     "passkeyDomain": "Sign-in keys are not set up for this address yet.",
     "passkeyUnsupported": "This browser cannot use sign-in keys.",
-    "passkeyFailed": "Could not complete that. Try again."
+    "passkeyFailed": "Could not complete that. Try again.",
+    "passkeyDisabled": "Sign-in keys are not turned on for this server yet."
   },
   "CurrencySettings": {
     "title": "Currencies",
@@ -312,7 +313,8 @@
     "passkeyCancelled": "No key was used. Pick your key on your phone or password manager, or sign in with your password.",
     "passkeyDomain": "Sign-in keys are not set up for this address yet. Use your password.",
     "passkeyUnsupported": "This browser cannot use sign-in keys. Use your password.",
-    "passkeyFailed": "Could not sign in with a key. Try again, or use your password."
+    "passkeyFailed": "Could not sign in with a key. Try again, or use your password.",
+    "passkeyDisabled": "Sign-in keys are not turned on for this server yet. Use your password."
   },
   "SignUp": {
     "errorCaptcha": "Complete the security check, then try again.",

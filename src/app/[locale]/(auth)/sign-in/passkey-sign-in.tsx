@@ -53,13 +53,15 @@ export function PasskeySignIn({
       ? t("passkeyCancelled")
       : error === "captcha"
         ? t("errorCaptcha")
-        : error === "domain"
-          ? t("passkeyDomain")
-          : error === "unsupported"
-            ? t("passkeyUnsupported")
-            : error
-              ? t("passkeyFailed")
-              : null;
+        : error === "disabled"
+          ? t("passkeyDisabled")
+          : error === "domain"
+            ? t("passkeyDomain")
+            : error === "unsupported"
+              ? t("passkeyUnsupported")
+              : error
+                ? t("passkeyFailed")
+                : null;
 
   return (
     <div className="flex flex-col gap-3">

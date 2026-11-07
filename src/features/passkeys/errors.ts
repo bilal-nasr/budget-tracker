@@ -8,6 +8,8 @@ export type PasskeyErrorKind =
   | "duplicate"
   /** The site address does not match the server's passkey setup (a deployment problem). */
   | "domain"
+  /** Sign-in keys are switched off on the Supabase project (Authentication > Passkeys). */
+  | "disabled"
   /** The bot check failed or was missing. */
   | "captcha"
   | "failed";
@@ -30,7 +32,8 @@ export function passkeyErrorKind(error: unknown): PasskeyErrorKind {
   if (names.includes("NotAllowedError") || names.includes("AbortError") || code === "ERROR_CEREMONY_ABORTED") {
     return "cancelled";
   }
-  if (code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") return "duplicate";
+  if (code === "passkey_disabled") return "disabled";
+  if (code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" || code === "webauthn_credential_exists") return "duplicate";
   if (code === "ERROR_INVALID_DOMAIN" || code === "ERROR_INVALID_RP_ID") return "domain";
   if (/does not support webauthn/i.test(message) || names.includes("NotSupportedError")) return "unsupported";
   if (code === "captcha_failed" || /captcha/i.test(message)) return "captcha";

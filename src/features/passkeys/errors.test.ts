@@ -12,6 +12,10 @@ describe("passkeyErrorKind", () => {
     expect(passkeyErrorKind({ name: "InvalidStateError", code: "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" })).toBe("duplicate");
   });
 
+  it("recognises sign-in keys switched off on the project", () => {
+    expect(passkeyErrorKind({ code: "passkey_disabled", message: "Passkeys are disabled" })).toBe("disabled");
+  });
+
   it("recognises a site address that does not match the server setup", () => {
     expect(passkeyErrorKind({ code: "ERROR_INVALID_RP_ID" })).toBe("domain");
     expect(passkeyErrorKind({ code: "ERROR_INVALID_DOMAIN" })).toBe("domain");

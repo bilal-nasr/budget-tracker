@@ -45,13 +45,19 @@ export async function listPasskeys(): Promise<PasskeyResult<PasskeyItem[]>> {
   return { ok: true, data: items };
 }
 
-/** Asks the device to make a new key, then names it after the device so the list is readable. */
+/**
+ * Asks the device to make a new key. Supabase names it after the authenticator
+ * (for example iCloud Keychain or 1Password); only when it gives no name do we
+ * name it after the device, so the list is always readable.
+ */
 export async function addPasskey(): Promise<PasskeyResult> {
   const auth = createClient().auth;
   const { data, error } = await auth.registerPasskey();
   if (error || !data) return fail(error);
-  // Naming is a nicety: the key already works if it fails.
-  await auth.passkey.update({ passkeyId: data.id, friendlyName: deviceLabel(navigator.userAgent) });
+  if (!data.friendly_name?.trim()) {
+    // Naming is a nicety: the key already works if it fails.
+    await auth.passkey.update({ passkeyId: data.id, friendlyName: deviceLabel(navigator.userAgent) });
+  }
   return { ok: true, data: undefined };
 }
 
