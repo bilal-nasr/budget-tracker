@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ExternalLink, Mail } from "lucide-react";
 import { useAppData } from "@/components/providers/app-data";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
@@ -17,6 +17,9 @@ import { PasskeysSection } from "./passkeys-section";
 import { SignOutButton } from "./sign-out-button";
 
 type Theme = Profile["theme"];
+
+const PORTFOLIO_URL = "https://bilalnasr.com";
+const SUPPORT_EMAIL = "me@bilalnasr.com";
 
 const subscribeNoop = () => () => {};
 
@@ -152,6 +155,33 @@ export function SettingsForm({ profile }: { profile: Profile }) {
       <PasskeysSection />
 
       <ExportButton />
+
+      <section aria-labelledby="s-about" className="flex flex-col gap-2">
+        <h2 id="s-about" className="text-[17px] font-semibold">{t("about")}</h2>
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          <li>
+            <a href={PORTFOLIO_URL} target="_blank" rel="noopener noreferrer" className="flex min-h-14 items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] text-muted-foreground">{t("developedBy")}</span>
+                <span className="block font-medium"><bdi>Bilal Nasr</bdi></span>
+                <span className="block truncate text-[13px] text-muted-foreground"><bdi dir="ltr">bilalnasr.com</bdi></span>
+              </span>
+              <ExternalLink aria-hidden className="size-4 shrink-0 text-muted-foreground rtl:-scale-x-100" />
+              <span className="sr-only">{t("opensNewTab")}</span>
+            </a>
+          </li>
+          <li>
+            <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(t("supportSubject"))}`} className="flex min-h-14 items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{t("support")}</span>
+                <span className="block text-[13px] text-muted-foreground">{t("supportHint")}</span>
+                <span className="block truncate text-[13px] text-muted-foreground"><bdi dir="ltr">{SUPPORT_EMAIL}</bdi></span>
+              </span>
+              <Mail aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            </a>
+          </li>
+        </ul>
+      </section>
 
       {message ? (
         <p role="alert" className="text-sm text-over">{message}</p>
