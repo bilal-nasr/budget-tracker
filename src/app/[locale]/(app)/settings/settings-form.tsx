@@ -12,6 +12,7 @@ import { applyTheme } from "@/lib/theme";
 import { signOut } from "@/features/auth/actions";
 import type { Profile } from "@/features/profile/schema";
 import { ExportButton } from "./export-button";
+import { PasskeysSection } from "./passkeys-section";
 import { SignOutButton } from "./sign-out-button";
 
 type Theme = Profile["theme"];
@@ -120,6 +121,8 @@ export function SettingsForm({ profile }: { profile: Profile }) {
           <li><NavRow href="/settings/currencies" title={t("currencies")} hint={<bdi dir="ltr">{codes.join(" · ")}</bdi>} /></li>
         </ul>
       </section>
+
+      <PasskeysSection />
 
       <ExportButton />
 

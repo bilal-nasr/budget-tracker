@@ -147,7 +147,7 @@ Acceptance: installs to the home screen on iPhone and Android and opens straight
 
 ## Later (not scheduled)
 
-Recurring transactions & bills · CSV export/import · savings goals · offline add queue · passkey sign-in · more accounts / household sharing · receipt photo · quick-entry by text ("taxi 200k").
+Recurring transactions & bills · CSV export/import · savings goals · offline add queue · more accounts / household sharing · receipt photo · quick-entry by text ("taxi 200k").
 
 ## Working agreements
 

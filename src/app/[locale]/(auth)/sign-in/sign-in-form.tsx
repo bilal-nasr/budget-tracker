@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
 import { resendConfirmation, signIn, type SignInState } from "@/features/auth/actions";
 import { Link } from "@/i18n/navigation";
+import { PasskeySignIn } from "./passkey-sign-in";
 
 const initial: SignInState = { error: null };
 
@@ -99,6 +100,13 @@ export function SignInForm() {
       <Button type="submit" size="lg" loading={pending} className="w-full">
         {pending ? t("submitting") : t("submit")}
       </Button>
+      <PasskeySignIn
+        captchaToken={() => {
+          const token = new FormData(formRef.current ?? undefined).get("captchaToken");
+          return typeof token === "string" && token !== "" ? token : undefined;
+        }}
+        onAttempt={() => setAttempt((n) => n + 1)}
+      />
       <p className="text-center text-[15px] text-muted-foreground">
         {t("noAccount")}{" "}
         <Link href="/sign-up" className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4">
