@@ -49,3 +49,6 @@ test-results/
 .impeccable/build/
 .impeccable/config.local.json
 .impeccable/hook.cache.json
+
+# supabase CLI local state
+/supabase/.branches
