@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
 import { useComposer } from "@/components/shell/composer";
+import { CurrencyTabs } from "@/components/shell/currency-tabs";
 import { EmptyState } from "@/components/shell/empty-state";
 import { PageBody } from "@/components/shell/page-body";
 import { ScreenHeader } from "@/components/shell/screen-header";
@@ -14,7 +15,6 @@ import { SalaryCard } from "@/components/salary/salary-card";
 import { CycleLoadError } from "@/components/installments/cycle-load-error";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { cn } from "@/lib/utils";
 import type { FixedExpense } from "@/features/fixed/schema";
 import type { Installment } from "@/features/installments/schema";
 import type { MonthBudgets } from "@/features/budgets/schema";
@@ -48,15 +48,7 @@ export function HomeView({ recent, commitments, budgetSummary }: {
           <>
             <h1 className="sr-only">{t("leadLabel")}</h1>
             {enabledCurrencies.length > 1 ? (
-              <div role="tablist" aria-label={t("currency")} className="-mx-1 mt-3 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
-                {enabledCurrencies.map((c) => (
-                  <button key={c.code} type="button" role="tab" aria-selected={c.code === code} onClick={() => setPicked(c.code)}
-                    className={cn("min-h-11 shrink-0 rounded-full px-4 text-[15px] focus-visible:outline-2 focus-visible:outline-ring",
-                      c.code === code ? "bg-shell-foreground/15 font-semibold text-shell-foreground" : "text-shell-muted")}>
-                    <bdi dir="ltr">{c.code}</bdi>
-                  </button>
-                ))}
-              </div>
+              <CurrencyTabs className="mt-3" currencies={enabledCurrencies} value={code} onChange={setPicked} label={t("currency")} />
             ) : null}
             {code ? <Amount minor={total} currency={code} className="mt-2 block max-w-full whitespace-normal! break-all text-3xl leading-tight font-bold" /> : null}
             {budgetSummary}
