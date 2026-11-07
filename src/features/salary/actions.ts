@@ -5,6 +5,7 @@ import { actionClient, type ActionResult } from "@/lib/supabase/action";
 import { z } from "zod";
 import { todayIn } from "@/features/transactions/group";
 import { salaryInputSchema, type SalaryInput } from "./schema";
+import { scheduleSalaryEmail } from "./email/schedule";
 import { receiveSalaryForCycle } from "@/features/installments/cycle-actions";
 import type { ReceiveSalaryInput, CycleMutation } from "@/features/installments/cycle-input";
 
@@ -58,5 +59,7 @@ export async function clearSalary(): Promise<ActionResult> {
 
 /** Stable receipt identity and expected cycle are validated by the source RPC. */
 export async function receiveSalary(input: ReceiveSalaryInput): Promise<ActionResult<CycleMutation>> {
-  return receiveSalaryForCycle(input);
+  const result = await receiveSalaryForCycle(input);
+  if (result.ok) scheduleSalaryEmail(result.id);
+  return result;
 }

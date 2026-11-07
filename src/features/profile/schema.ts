@@ -8,6 +8,8 @@ export const profileSchema = z.object({
   onboarded: z.boolean(),
   /** Currency the home screen opens on, or null for the first enabled one. */
   defaultCurrency: z.string().nullable().optional(),
+  /** Email the wallet summary when salary is received. Missing means on. */
+  salaryEmail: z.boolean().optional(),
   /** Last USD to LBP rate used (LBP per 1 USD), or null. */
   usdLbpRate: z.number().int().min(1).max(10_000_000).nullable(),
   salary: z

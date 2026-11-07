@@ -725,6 +725,7 @@ export type Database = {
                     "locale": string;
                     "onboarded_at": string | null;
                     "salary_amount_minor": number | null;
+                    "salary_email_enabled": boolean;
                     "salary_balance_id": string | null;
                     "theme": string;
                     "timezone": string;
@@ -739,6 +740,7 @@ export type Database = {
                     "locale"?: string;
                     "onboarded_at"?: string | null;
                     "salary_amount_minor"?: number | null;
+                    "salary_email_enabled"?: boolean;
                     "salary_balance_id"?: string | null;
                     "theme"?: string;
                     "timezone"?: string;
@@ -752,6 +754,7 @@ export type Database = {
                     "locale"?: string;
                     "onboarded_at"?: string | null;
                     "salary_amount_minor"?: number | null;
+                    "salary_email_enabled"?: boolean;
                     "salary_balance_id"?: string | null;
                     "theme"?: string;
                     "timezone"?: string;

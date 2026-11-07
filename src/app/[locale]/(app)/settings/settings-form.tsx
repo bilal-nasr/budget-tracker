@@ -6,8 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { useAppData } from "@/components/providers/app-data";
 import { Segmented } from "@/components/ui/segmented";
+import { Switch } from "@/components/ui/switch";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { saveLocale, updateProfile } from "@/features/profile/actions";
+import { saveLocale, setSalaryEmail, updateProfile } from "@/features/profile/actions";
 import { applyTheme } from "@/lib/theme";
 import { signOut } from "@/features/auth/actions";
 import type { Profile } from "@/features/profile/schema";
@@ -42,6 +43,7 @@ export function SettingsForm({ profile }: { profile: Profile }) {
   const [, startTransition] = useTransition();
   const [digits, setDigits] = useState(profile.digits);
   const [theme, setTheme] = useState<Theme>(profile.theme);
+  const [salaryEmail, setSalaryEmailState] = useState(profile.salaryEmail ?? true);
   const [message, setMessage] = useState<string | null>(null);
   // The signed-out/unconfigured preview cannot save to the database.
   const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
@@ -51,6 +53,18 @@ export function SettingsForm({ profile }: { profile: Profile }) {
     startTransition(async () => {
       const result = await updateProfile(patch);
       if (!result.ok && result.error !== "notConfigured") setMessage(t("saveFailed"));
+    });
+  };
+
+  const changeSalaryEmail = (next: boolean) => {
+    setMessage(null);
+    setSalaryEmailState(next);
+    startTransition(async () => {
+      const result = await setSalaryEmail(next);
+      if (!result.ok && result.error !== "notConfigured") {
+        setSalaryEmailState(!next);
+        setMessage(t("saveFailed"));
+      }
     });
   };
 
@@ -111,6 +125,19 @@ export function SettingsForm({ profile }: { profile: Profile }) {
               ]}
             />
           </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="s-notify" className="flex flex-col gap-2">
+        <h2 id="s-notify" className="text-[17px] font-semibold">{t("notifications")}</h2>
+        <div className="rounded-xl border border-border bg-card">
+          <label className="flex min-h-14 cursor-pointer items-center gap-4 p-4">
+            <span className="min-w-0 flex-1">
+              <span id="s-salary-email" className="block font-medium">{t("salaryEmail")}</span>
+              <span id="s-salary-email-help" className="mt-0.5 block text-[13px] text-muted-foreground">{t("salaryEmailHelp")}</span>
+            </span>
+            <Switch checked={salaryEmail} onChange={changeSalaryEmail} aria-labelledby="s-salary-email" aria-describedby="s-salary-email-help" />
+          </label>
         </div>
       </section>
 

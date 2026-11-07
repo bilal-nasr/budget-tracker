@@ -43,6 +43,19 @@ export async function setDefaultCurrency(code: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/** Turns the "salary received" wallet summary email on or off for the signed-in owner. */
+export async function setSalaryEmail(enabled: boolean): Promise<ActionResult> {
+  if (typeof enabled !== "boolean") return { ok: false, error: "invalid" };
+  if (!supabaseConfigured()) return { ok: false, error: "notConfigured" };
+  const userId = await getUserId();
+  if (!userId) return { ok: false, error: "failed" };
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ salary_email_enabled: enabled }).eq("user_id", userId);
+  if (error) return { ok: false, error: "failed" };
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 /**
  * Remembers the chosen language. No revalidation: the navigation to the other
  * locale already renders the new language, so a refresh would only add renders.
