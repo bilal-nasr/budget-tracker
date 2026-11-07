@@ -83,7 +83,7 @@ export function WalletForm({ wallet, onDone, submitLabel, currencies: catalog, o
       <TextField label={t("amount")} value={amount} onChange={(event) => setAmountDraft(currency ? { text: event.target.value, code: currency.code, decimalPlaces: currency.decimalPlaces } : null)} inputMode={currency?.decimalPlaces === 0 ? "numeric" : "decimal"} placeholder="0" autoComplete="off" dir="ltr" error={parsedAmount === null ? t("errorAmount") : null} disabled={pending} />
     </> : null}
     {error ? <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p> : null}
-    <Button type="submit" size="lg" disabled={pending || !ready} className="w-full">{submitLabel ?? t(wallet ? "saveChanges" : "create")}</Button>
+    <Button type="submit" size="lg" loading={pending} disabled={!ready} className="w-full">{submitLabel ?? t(wallet ? "saveChanges" : "create")}</Button>
     {wallet && !wallet.deleted && !wallet.needsAttention && onAddMoney ? <Button type="button" variant="outline" disabled={pending} onClick={() => onAddMoney(wallet)}>{t("addMoney")}</Button> : null}
   </form>;
 }

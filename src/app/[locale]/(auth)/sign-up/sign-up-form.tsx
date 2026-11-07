@@ -86,7 +86,7 @@ export function SignUpForm() {
           {message}
         </p>
       ) : null}
-      <Button type="submit" size="lg" disabled={pending} className="w-full">
+      <Button type="submit" size="lg" loading={pending} className="w-full">
         {pending ? t("submitting") : t("submit")}
       </Button>
       <p className="text-center text-[15px] text-muted-foreground">

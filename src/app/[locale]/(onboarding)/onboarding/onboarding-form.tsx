@@ -79,7 +79,7 @@ export function OnboardingForm({ currencies }: { currencies: CurrencyDefinition[
               ]}
             />
             {error ? <p role="alert" className="text-sm text-over">{t("failed")}</p> : null}
-            <Button size="lg" className="w-full" onClick={toWalletStep} disabled={pending}>
+            <Button size="lg" className="w-full" onClick={toWalletStep} loading={pending}>
               {t("continue")}
             </Button>
           </>
@@ -87,7 +87,7 @@ export function OnboardingForm({ currencies }: { currencies: CurrencyDefinition[
           <>
             <WalletForm currencies={currencies} wallet={null} onDone={finish} submitLabel={t("createStart")} />
             {error ? <p role="alert" className="text-sm text-over">{t("failed")}</p> : null}
-            <Button variant="ghost" onClick={finish} disabled={pending}>
+            <Button variant="ghost" onClick={finish} loading={pending}>
               {t("skip")}
             </Button>
           </>

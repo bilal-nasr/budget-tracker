@@ -49,7 +49,7 @@ export function LoanPaymentSheet({ item, onClose }: { item: Loan; onClose: () =>
   };
   return <SheetShell open dismissible={submission.dismissible} onOpenChange={(open) => !open && submission.dismissible && onClose()} title={t(item.direction === "borrowed" ? "record" : "receive")}
     description={<bdi>{item.name}</bdi>} footer={submission.review ? <Button className="w-full" onClick={() => { onClose(); router.refresh(); }}>{t("reviewLatest")}</Button>
-      : <Button form={formId} type="submit" size="lg" variant="action" className="w-full" disabled={submission.pending || (!submission.uncertain && !valid)}>{t(submission.uncertain ? "retrySame" : "recordPayment")}</Button>}>
+      : <Button form={formId} type="submit" size="lg" variant="action" className="w-full" loading={submission.pending} disabled={!submission.uncertain && !valid}>{t(submission.uncertain ? "retrySame" : "recordPayment")}</Button>}>
     <form id={formId} onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex flex-col gap-4" noValidate>
       <fieldset disabled={submission.frozen} className="flex min-w-0 flex-col gap-4 border-0 p-0">
       <p className="text-sm text-muted-foreground">{t("splitHelp")}</p>

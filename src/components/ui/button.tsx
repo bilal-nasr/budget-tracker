@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Loader2 } from "lucide-react"
 import { cn } from "cn"
 
 const buttonVariants = cva(
@@ -37,18 +38,38 @@ const buttonVariants = cva(
   }
 )
 
+/**
+ * `loading` marks a request in flight: the button is disabled, announces
+ * `aria-busy`, and shows a spinner centred over its (invisible but still
+ * measured) label, so the button never changes size or shifts the layout.
+ */
 function Button({
   className,
   variant = "default",
   size = "default",
+  loading = false,
+  disabled,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { loading?: boolean }) {
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      data-loading={loading ? "" : undefined}
+      aria-busy={loading || undefined}
+      disabled={disabled || loading}
+      className={cn(buttonVariants({ variant, size, className }), loading && "relative data-loading:disabled:opacity-100")}
       {...props}
-    />
+    >
+      {loading ? (
+        <>
+          <span className="inline-flex items-center justify-center gap-[inherit] opacity-0">{children}</span>
+          <Loader2 aria-hidden className="absolute size-4 animate-spin motion-reduce:animate-pulse" />
+        </>
+      ) : (
+        children
+      )}
+    </ButtonPrimitive>
   )
 }
 

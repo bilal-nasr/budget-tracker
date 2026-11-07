@@ -71,18 +71,18 @@ export function LoanDetailSheet({ item, onClose, onEdit, onPay }: { item: Loan; 
               <div className="flex flex-wrap justify-between gap-2"><span>{date(event.occurredOn)} · {t(event.event)}</span><Amount minor={event.flow === "in" ? event.amountMinor : -event.amountMinor} currency={item.currency} sign /></div>
               <p className="text-muted-foreground"><bdi>{balanceChoiceById(event.balanceId)?.name}</bdi>{event.deletedAt ? <> · {t("voided")}</> : null}</p>
               {event.event === "repayment" ? <p className="flex flex-wrap gap-x-3 text-muted-foreground"><span>{t("principalPart")} {money(event.principalMinor)}</span><span>{t("feePart")} {money(event.feeMinor)}</span></p> : null}
-              {event.deletedAt && event.event === "repayment" && !item.deletedAt && (!latest || latest.sequence < event.sequence) ? <Button variant="outline" disabled={pending} onClick={() => run(() => restoreLoanPayment(event.transactionId, event.revision))}>{t("restore")}</Button> : null}
+              {event.deletedAt && event.event === "repayment" && !item.deletedAt && (!latest || latest.sequence < event.sequence) ? <Button variant="outline" loading={pending} onClick={() => run(() => restoreLoanPayment(event.transactionId, event.revision))}>{t("restore")}</Button> : null}
               {event.event === "repayment" ? <Button variant="outline" disabled={pending} onClick={() => { setError(null); setConfirm({ kind: "deletePayment", transactionId: event.transactionId, revision: event.revision }); }}>{t("deletePayment")}</Button> : null}
             </li>)}
           </ol>}
           {history.failed ? <p role="alert" className="text-sm text-over">{ta("loadFailed")}</p> : null}
-          {history.failed || history.page?.next !== null && history.page !== null ? <Button variant="outline" disabled={history.pending || pending} onClick={history.loadMore}>{ta("loadMore")}</Button> : null}
+          {history.failed || history.page?.next !== null && history.page !== null ? <Button variant="outline" loading={history.pending} disabled={pending} onClick={history.loadMore}>{ta("loadMore")}</Button> : null}
         </section>
         {error ? <p role="alert" className="text-sm">{error}</p> : null}
         {!item.deletedAt ? <div className="flex flex-col gap-2">
           <Button variant="outline" onClick={onEdit}>{t("edit")}</Button>
           {latest ? <Button variant="outline" onClick={() => setConfirm({ kind: "void", transactionId: latest.transactionId, revision: latest.revision })} disabled={pending}>{t("void")}</Button> : null}
-          {item.remainingMinor === 0 ? <Button variant="outline" disabled={pending} onClick={() => run(() => setLoanArchived(item.id, !item.archivedAt))}>{t(item.archivedAt ? "unarchive" : "archive")}</Button> : null}
+          {item.remainingMinor === 0 ? <Button variant="outline" loading={pending} onClick={() => run(() => setLoanArchived(item.id, !item.archivedAt))}>{t(item.archivedAt ? "unarchive" : "archive")}</Button> : null}
           {livePaymentCount === 0 ? <Button variant="outline" disabled={pending} onClick={() => setConfirm({ kind: "cancel" })}>{t("cancelLoan")}</Button> : null}
         </div> : null}
         {item.archivedAt || item.deletedAt ? <Button variant="destructive" disabled={pending} onClick={() => { setError(null); setConfirm({ kind: "deleteLoan" }); }}>{t("deleteLoan")}</Button> : null}

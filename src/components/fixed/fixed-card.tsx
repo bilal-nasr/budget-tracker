@@ -150,6 +150,7 @@ export function FixedCard({
                 ) : (
                   <Button
                     className="shrink-0"
+                    loading={busyId === item.id}
                     disabled={pending}
                     aria-label={t("markPaid", { name: item.name })}
                     onClick={() => pay(item)}

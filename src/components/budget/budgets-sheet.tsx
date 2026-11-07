@@ -145,7 +145,7 @@ function Form({ state, onClose }: { state: BudgetsSheetState; onClose: () => voi
         {error ? (
           <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p>
         ) : null}
-        <Button type="submit" variant="action" size="lg" className="w-full" disabled={!unit || unit.disabled || invalid || total === null || pending}>
+        <Button type="submit" variant="action" size="lg" className="w-full" loading={pending} disabled={!unit || unit.disabled || invalid || total === null}>
           {pending ? t("saving") : t("save")}
         </Button>
       </div>

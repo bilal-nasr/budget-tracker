@@ -146,7 +146,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
         <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p>
       ) : null}
 
-      <Button type="submit" size="lg" className="w-full" disabled={pending || !canSave}>
+      <Button type="submit" size="lg" className="w-full" loading={pending} disabled={!canSave}>
         {item ? t("saveChanges") : t("save")}
       </Button>
 
@@ -158,7 +158,7 @@ function Form({ item, onClose }: { item: FixedExpense | null; onClose: () => voi
               <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>
                 {t("cancel")}
               </Button>
-              <Button type="button" variant="destructive" disabled={pending} onClick={() => run(() => deleteFixedExpense(item.id))}>
+              <Button type="button" variant="destructive" loading={pending} onClick={() => run(() => deleteFixedExpense(item.id))}>
                 {t("delete")}
               </Button>
             </div>

@@ -109,7 +109,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
     return <section aria-labelledby="h-salary" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
       <h2 id="h-salary" className="text-[17px] font-semibold">{t("title")}</h2>
       <p className="text-[15px] text-muted-foreground">{t(pending ? "cycleHelp" : "errorUncertain")}</p>
-      <Button size="lg" disabled={pending} onClick={receive}>{t("retrySame")}</Button>
+      <Button size="lg" loading={pending} onClick={receive}>{t("retrySame")}</Button>
     </section>;
   }
 
@@ -164,7 +164,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
           {dateError ? <p role="alert" className="text-sm text-over">{t("errorDate")}</p> : null}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" disabled={pending} onClick={() => setEditingDate(false)}>{t("cancel")}</Button>
-            <Button disabled={pending || dateText === "" || dateText === status.lastReceivedOn} onClick={() => {
+            <Button loading={pending} disabled={dateText === "" || dateText === status.lastReceivedOn} onClick={() => {
               const id = status.receiptId!;
               setDateError(false);
               startTransition(async () => {
@@ -184,7 +184,7 @@ export function SalaryCard({ status: serverStatus }: { status: SalaryStatus }) {
 
       <p className="text-[13px] text-muted-foreground">{t(uncertain ? "errorUncertain" : "cycleHelp")}</p>
       <div className="flex items-center gap-2">
-        <Button size="lg" className="flex-1" disabled={pending} onClick={openReceive}>
+        <Button size="lg" className="flex-1" loading={pending} onClick={openReceive}>
           {t(uncertain ? "retrySame" : "got")}
         </Button>
         <Button variant="ghost" disabled={pending || uncertain} onClick={openSalary}>{t("edit")}</Button>

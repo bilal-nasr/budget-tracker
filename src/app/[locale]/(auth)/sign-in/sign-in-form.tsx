@@ -35,10 +35,17 @@ export function SignInForm() {
               ? t("errorLink")
               : null;
 
+  const [resending, setResending] = useState(false);
   const resend = async () => {
-    const data = new FormData(formRef.current ?? undefined);
-    await resendConfirmation(String(data.get("email") ?? ""), locale, String(data.get("captchaToken") ?? ""));
-    setResent(true);
+    if (resending) return;
+    setResending(true);
+    try {
+      const data = new FormData(formRef.current ?? undefined);
+      await resendConfirmation(String(data.get("email") ?? ""), locale, String(data.get("captchaToken") ?? ""));
+      setResent(true);
+    } finally {
+      setResending(false);
+    }
   };
 
   return (
@@ -84,12 +91,12 @@ export function SignInForm() {
         resent ? (
           <p role="status" className="text-[15px] text-muted-foreground">{t("resent")}</p>
         ) : (
-          <Button type="button" variant="outline" onClick={resend}>
+          <Button type="button" variant="outline" loading={resending} onClick={resend}>
             {t("resend")}
           </Button>
         )
       ) : null}
-      <Button type="submit" size="lg" disabled={pending} className="w-full">
+      <Button type="submit" size="lg" loading={pending} className="w-full">
         {pending ? t("submitting") : t("submit")}
       </Button>
       <p className="text-center text-[15px] text-muted-foreground">

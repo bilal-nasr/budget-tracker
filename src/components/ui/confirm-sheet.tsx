@@ -42,7 +42,7 @@ export function ConfirmSheet({
           <Button
             variant={tone === "danger" ? "destructive" : "action"}
             size="lg"
-            disabled={pending}
+            loading={pending}
             onClick={onConfirm}
           >
             {confirmLabel}

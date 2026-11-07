@@ -54,6 +54,6 @@ export function InstallmentHistory({ item, onClose }: { item: Installment; onClo
       </li> : null}
     </ul>
     {failed ? <p role="alert" className="text-sm text-over">{ta("loadFailed")}</p> : null}
-    {failed || page?.next ? <Button type="button" variant="outline" disabled={pending} onClick={loadMore}>{ta("loadMore")}</Button> : null}
+    {failed || page?.next ? <Button type="button" variant="outline" loading={pending} onClick={loadMore}>{ta("loadMore")}</Button> : null}
   </section>;
 }

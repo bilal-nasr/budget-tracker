@@ -210,7 +210,7 @@ export function InstallmentForm({ item, onClose }: { item: Installment | null; o
         <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p>
       ) : null}
 
-      <Button type="submit" size="lg" className="w-full" disabled={pending || !canSave}>
+      <Button type="submit" size="lg" className="w-full" loading={pending} disabled={!canSave}>
         {item ? t("saveChanges") : t("save")}
       </Button>
 

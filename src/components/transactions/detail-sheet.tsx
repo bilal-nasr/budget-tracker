@@ -219,14 +219,14 @@ export function DetailSheet({
                 </Button>}
               </>
             )}
-            <Button variant="destructive" className="col-span-2" disabled={pending || conflicted || reloading} onClick={remove}>
+            <Button variant="destructive" className="col-span-2" loading={pending} disabled={conflicted || reloading} onClick={remove}>
               {t("delete")}
             </Button>
           </div>}
           {conflicted ? null : <DateCorrection key={`${transaction.id}:${transaction.revision}`} transaction={transaction} disabled={pending || reloading} onDone={onClose} />}
           {conflicted ? <div className="flex flex-col items-start gap-3">
             <p role="alert" className="text-sm">{tb("conflict")}</p>
-            <Button type="button" variant="outline" disabled={reloading || pending} onClick={reloadLatest}>
+            <Button type="button" variant="outline" loading={reloading} disabled={pending} onClick={reloadLatest}>
               {tb("reload")}
             </Button>
           </div> : null}
@@ -266,7 +266,7 @@ function DateCorrection({ transaction, disabled, onDone }: { transaction: Transa
     {error ? <p role="alert" className="text-sm text-over-foreground">{error}</p> : null}
     <div className="grid grid-cols-2 gap-2">
       <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>{t("cancelDate")}</Button>
-      <Button type="submit" disabled={pending || date === "" || date === transaction.occurredOn}>{t("saveDate")}</Button>
+      <Button type="submit" loading={pending} disabled={date === "" || date === transaction.occurredOn}>{t("saveDate")}</Button>
     </div>
   </form>;
 }
@@ -288,6 +288,6 @@ function HistoricalNote({ transaction, onDone }: { transaction: Transaction; onD
     <p className="text-sm text-muted-foreground">{t("historyLocked")}</p>
     <TextField label={t("historyNote")} value={note} maxLength={140} disabled={pending} onChange={(event) => setNote(event.target.value)} />
     {error ? <p role="alert" className="text-sm text-over-foreground">{error}</p> : null}
-    <Button type="submit" variant="outline" disabled={pending || note.trim() === (transaction.note ?? "")}>{t("saveHistoryNote")}</Button>
+    <Button type="submit" variant="outline" loading={pending} disabled={note.trim() === (transaction.note ?? "")}>{t("saveHistoryNote")}</Button>
   </form>;
 }

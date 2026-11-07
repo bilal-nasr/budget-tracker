@@ -72,7 +72,7 @@ export function LoanSheet({ item, onClose }: { item: Loan | null; onClose: () =>
   };
   return <SheetShell open dismissible={submission.dismissible} onOpenChange={(open) => !open && submission.dismissible && onClose()} title={item ? t("edit") : t("add")}
     footer={submission.review ? <Button className="w-full" onClick={() => { onClose(); router.refresh(); }}>{t("reviewLatest")}</Button>
-      : <Button form={formId} type="submit" variant="action" size="lg" className="w-full" disabled={submission.pending || (!submission.uncertain && !valid)}>{t(submission.uncertain ? "retrySame" : item ? "saveChanges" : "save")}</Button>}>
+      : <Button form={formId} type="submit" variant="action" size="lg" className="w-full" loading={submission.pending} disabled={!submission.uncertain && !valid}>{t(submission.uncertain ? "retrySame" : item ? "saveChanges" : "save")}</Button>}>
     <form id={formId} noValidate onSubmit={(e) => { e.preventDefault(); save(); }} className="flex flex-col gap-4">
       <fieldset disabled={submission.frozen} className="flex min-w-0 flex-col gap-4 border-0 p-0">
       {!usable.length ? <p role="status">{t("noWallet")}</p> : null}

@@ -79,10 +79,10 @@ function Editor({ category, kind, onOpenChange, onOptimisticUpdate }: Omit<Props
           {confirming ? (
             <div className="grid grid-cols-2 gap-3">
               <Button ref={cancelRef} variant="outline" disabled={pending} onClick={() => { setConfirming(false); setError(null); }}>{t("cancel")}</Button>
-              <Button disabled={pending} onClick={remove}>{pending ? t("removing") : t("confirmRemove")}</Button>
+              <Button loading={pending} onClick={remove}>{pending ? t("removing") : t("confirmRemove")}</Button>
             </div>
           ) : (
-            <Button type="submit" form={formId} variant="action" size="lg" disabled={!edit.success || pending}>{pending ? t("saving") : t("save")}</Button>
+            <Button type="submit" form={formId} variant="action" size="lg" loading={pending} disabled={!edit.success}>{pending ? t("saving") : t("save")}</Button>
           )}
         </div>
       }

@@ -38,7 +38,7 @@ export function PaymentSheet({ item, onClose }: { item: PendingPayment | null; o
   const valid = !!unit && !unit.disabled && parsed.success && !belowPaid;
   return <SheetShell open dismissible={submission.dismissible} onOpenChange={(open) => !open && onClose()} title={t(item ? "edit" : "add")}
     footer={submission.review ? <Button className="w-full" onClick={() => { onClose(); router.refresh(); }}>{t("review")}</Button> :
-      <Button variant="action" size="lg" className="w-full" form={formId} type="submit" disabled={submission.pending || (!submission.uncertain && !valid)}>{t(submission.uncertain ? "retrySame" : "save")}</Button>}>
+      <Button variant="action" size="lg" className="w-full" form={formId} type="submit" loading={submission.pending} disabled={!submission.uncertain && !valid}>{t(submission.uncertain ? "retrySame" : "save")}</Button>}>
     <form id={formId} noValidate onSubmit={(event) => { event.preventDefault(); submission.submit(valid && parsed.success ? parsed.data : null); }} className="flex flex-col gap-4">
       <fieldset disabled={submission.frozen} className="flex min-w-0 flex-col gap-4 border-0 p-0">
         <TextField label={t("client")} value={client} onChange={(event) => setClient(event.target.value)} maxLength={60} autoComplete="organization" required />

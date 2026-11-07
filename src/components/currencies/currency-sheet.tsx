@@ -75,8 +75,8 @@ function Editor({ currency, onOpenChange }: { currency: CurrencyDefinition | nul
       {error ? <p role="alert" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm">{error}</p> : null}
       {confirmingDelete ? <div className="grid grid-cols-2 gap-3">
         <Button variant="outline" disabled={pending} onClick={() => { setConfirmingDelete(false); setError(null); }}>{t("cancel")}</Button>
-        <Button disabled={pending} onClick={remove}>{pending ? t("deleting") : t("confirmDelete")}</Button>
-      </div> : <Button type="submit" form={formId} variant="action" size="lg" disabled={!parsed.success || pending}>{pending ? t("saving") : t("save")}</Button>}
+        <Button loading={pending} onClick={remove}>{pending ? t("deleting") : t("confirmDelete")}</Button>
+      </div> : <Button type="submit" form={formId} variant="action" size="lg" loading={pending} disabled={!parsed.success}>{pending ? t("saving") : t("save")}</Button>}
     </div>}
   >
     {confirmingDelete ? <div className="flex flex-col gap-3 text-[15px]"><p>{t("deleteCopy")}</p><p className="font-semibold"><bdi dir="ltr">{currency?.code}</bdi></p></div> :

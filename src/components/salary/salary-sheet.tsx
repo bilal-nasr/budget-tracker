@@ -86,11 +86,11 @@ function Form({ onClose }: { onClose: () => void }) {
         <p role="alert" className="rounded-lg bg-over-soft px-3.5 py-3 text-[15px] text-over-foreground">{error}</p>
       ) : null}
 
-      <Button type="submit" size="lg" className="w-full" disabled={pending || !canSave}>
+      <Button type="submit" size="lg" className="w-full" loading={pending} disabled={!canSave}>
         {t("save")}
       </Button>
       {salary ? (
-        <Button type="button" variant="ghost" disabled={pending} onClick={() => run(() => clearSalary())}>
+        <Button type="button" variant="ghost" loading={pending} onClick={() => run(() => clearSalary())}>
           {t("remove")}
         </Button>
       ) : null}

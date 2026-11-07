@@ -75,7 +75,7 @@ export function WalletDeleteSheet({ wallet, onClose, onDeleted }: { wallet: Wall
       {plan && plan.blockers.length > 0 ? <div className="flex flex-col gap-2 rounded-lg bg-over-soft p-3"><p className="font-medium">{t("blocked")}</p><ul className="list-inside list-disc text-sm">{plan.blockers.map((blocker, index) => <li key={`${blocker.balanceId}-${index}`}>{t(blocker.kind, { name: "name" in blocker ? blocker.name ?? "" : "", currency: "currency" in blocker ? blocker.currency : "" })}</li>)}</ul></div> : null}
       {error ? <p role="alert" className="text-sm text-over-foreground">{error}</p> : null}
       {!verified && !error ? <p role="status">{t("checking")}</p> : null}
-      <Button variant="destructive" disabled={pending || !verified || (!attempt && settlements === null)} onClick={submit}>{t(attempt ? "retry" : "confirm")}</Button>
+      <Button variant="destructive" loading={pending} disabled={!verified || (!attempt && settlements === null)} onClick={submit}>{t(attempt ? "retry" : "confirm")}</Button>
       <Button variant="outline" disabled={pending} onClick={refresh}>{t("reload")}</Button>
       <Button variant="ghost" disabled={pending} onClick={onClose}>{t("cancel")}</Button>
     </div>

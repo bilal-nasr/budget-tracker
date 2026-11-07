@@ -42,7 +42,7 @@ export function ReceiptSheet({ item, onClose }: { item: PendingPayment; onClose:
   const selectClass = "h-12 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-base focus-visible:outline-2 focus-visible:outline-ring";
   return <SheetShell open title={t("receive")} description={<bdi>{item.client} · {item.project}</bdi>} dismissible={submission.dismissible} onOpenChange={(open) => !open && onClose()}
     footer={submission.review ? <Button className="w-full" onClick={() => { onClose(); router.refresh(); }}>{t("review")}</Button> :
-      <Button variant="action" size="lg" className="w-full" form={formId} type="submit" disabled={submission.pending || (!submission.uncertain && !valid)}>{t(submission.uncertain ? "retrySame" : "saveReceipt")}</Button>}>
+      <Button variant="action" size="lg" className="w-full" form={formId} type="submit" loading={submission.pending} disabled={!submission.uncertain && !valid}>{t(submission.uncertain ? "retrySame" : "saveReceipt")}</Button>}>
     <form id={formId} className="flex flex-col gap-4" noValidate onSubmit={(event) => { event.preventDefault(); submission.submit(valid && parsed.success ? parsed.data : null); }}>
       <fieldset disabled={submission.frozen} className="flex min-w-0 flex-col gap-4 border-0 p-0">
         <p className="text-sm text-muted-foreground">{t("receiptHelp")}</p>

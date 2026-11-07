@@ -6,13 +6,13 @@ import { useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { useAppData } from "@/components/providers/app-data";
 import { Segmented } from "@/components/ui/segmented";
-import { Button } from "@/components/ui/button";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { saveLocale, updateProfile } from "@/features/profile/actions";
 import { applyTheme } from "@/lib/theme";
 import { signOut } from "@/features/auth/actions";
 import type { Profile } from "@/features/profile/schema";
 import { ExportButton } from "./export-button";
+import { SignOutButton } from "./sign-out-button";
 
 type Theme = Profile["theme"];
 
@@ -129,9 +129,7 @@ export function SettingsForm({ profile }: { profile: Profile }) {
 
       <form action={signOut} className="border-t border-border pt-6">
         <input type="hidden" name="locale" value={locale} />
-        <Button type="submit" variant="outline" className="w-full" disabled={!mounted}>
-          {t("signOut")}
-        </Button>
+        <SignOutButton disabled={!mounted}>{t("signOut")}</SignOutButton>
       </form>
     </div>
   );

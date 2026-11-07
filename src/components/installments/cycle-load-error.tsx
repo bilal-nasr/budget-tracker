@@ -11,6 +11,6 @@ export function CycleLoadError() {
   return <section role="alert" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
     <h2 className="text-[17px] font-semibold">{t("loadErrorTitle")}</h2>
     <p className="text-[15px] text-muted-foreground">{t("loadErrorBody")}</p>
-    <Button variant="outline" className="self-start" disabled={pending} onClick={() => startTransition(() => router.refresh())}>{t("retry")}</Button>
+    <Button variant="outline" className="self-start" loading={pending} onClick={() => startTransition(() => router.refresh())}>{t("retry")}</Button>
   </section>;
 }

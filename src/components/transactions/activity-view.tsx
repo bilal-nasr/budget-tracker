@@ -204,7 +204,7 @@ export function ActivityView({ filters, initial }: { filters: Filters; initial: 
           {next ? (
             <div className="flex flex-col items-center gap-2 py-4">
               {loadFailed ? <p role="alert" className="text-sm text-over">{t("loadFailed")}</p> : null}
-              <Button variant="outline" onClick={loadMore} disabled={loading}>
+              <Button variant="outline" onClick={loadMore} loading={loading}>
                 {loading ? t("loading") : t("loadMore")}
               </Button>
             </div>

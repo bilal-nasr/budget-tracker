@@ -714,12 +714,13 @@ function Form({ state, onClose, onReload, onStash, onStartOver }: {
       <div className="sr-only" aria-live="polite">{canSave ? "" : t("incomplete")}</div>
       {conflicted ? <div className="mt-3 flex flex-col items-start gap-2">
         <p className="text-sm text-muted-foreground">{tb("reloadHint")}</p>
-        <Button type="button" variant="outline" disabled={reloading || pending} onClick={reloadLatest}>
+        <Button type="button" variant="outline" loading={reloading} disabled={pending} onClick={reloadLatest}>
           {tb("reload")}
         </Button>
       </div> : null}
       <SaveBar
-        disabled={(!canSave && !unresolved) || pending || conflicted || reloading}
+        loading={pending}
+        disabled={(!canSave && !unresolved) || conflicted || reloading}
         label={unresolved ? tb("retrySave") : state.mode === "edit" ? t("saveChanges") : transferring ? t(mode === "exchange" ? "exchangeSave" : "moveSave") : t("save")}
         onSave={save}
       />
@@ -736,10 +737,10 @@ function WalletBalance({ label, wallet: balance }: { label: string; wallet: { ba
 }
 
 /** Sticks to the bottom of the sheet's scroll area so Save is always reachable. */
-function SaveBar({ disabled, label, onSave }: { disabled: boolean; label: string; onSave: () => void }) {
+function SaveBar({ disabled, loading, label, onSave }: { disabled: boolean; loading: boolean; label: string; onSave: () => void }) {
   return (
     <div className="sticky -mx-4 bottom-0 mt-3 border-t border-border bg-card px-4 pt-2.5 pb-[calc(0.75rem+var(--safe-bottom))]">
-      <Button variant="action" size="lg" className="w-full" disabled={disabled} onClick={onSave}>
+      <Button variant="action" size="lg" className="w-full" loading={loading} disabled={disabled} onClick={onSave}>
         {label}
       </Button>
     </div>

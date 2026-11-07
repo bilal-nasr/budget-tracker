@@ -154,7 +154,8 @@ export function ExportButton() {
       <Button
         type="button"
         className="mt-4 w-full"
-        disabled={status === "loading" || nothingSelected}
+        loading={status === "loading"}
+        disabled={nothingSelected}
         aria-describedby="s-export-help"
         onClick={() => void download()}
       >

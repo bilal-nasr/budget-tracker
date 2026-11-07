@@ -128,7 +128,7 @@ function Form({ state, onClose, onBusy }: { state: InstallmentPayState; onClose:
     </fieldset>
     {error ? <p role="alert" className="rounded-lg border border-border bg-secondary px-3.5 py-3 text-[15px]">{error}</p> : null}
     {blocked ? <Button type="button" variant="outline" onClick={() => { onClose(); router.refresh(); }}>{t("reviewLatest")}</Button>
-      : <Button type="submit" variant="action" size="lg" className="w-full" disabled={pending || (!frozen && !canSave)}>
+      : <Button type="submit" variant="action" size="lg" className="w-full" loading={pending} disabled={!frozen && !canSave}>
         {pending ? t("recording") : frozen ? t("retrySame") : t("record")}
       </Button>}
     <ConfirmSheet open={confirmation !== null} onOpenChange={(open) => { if (!open) setConfirmation(null); }}

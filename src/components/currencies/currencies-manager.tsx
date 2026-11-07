@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useTransition } from "react";
-import { ChevronRight, Plus, Star } from "lucide-react";
+import { ChevronRight, Loader2, Plus, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
@@ -39,6 +39,8 @@ export function CurrenciesManager({ currencies, defaultCurrency = null }: { curr
   const [disable, setDisable] = useState<DisableState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Which row's request is in flight, so only that control shows its spinner.
+  const [busy, setBusy] = useState<string | null>(null);
   const ordered = useMemo(() => [
     ...currencies.filter((currency) => !currency.disabled),
     ...currencies.filter((currency) => currency.disabled),
@@ -49,13 +51,14 @@ export function CurrenciesManager({ currencies, defaultCurrency = null }: { curr
     if (currency.disabled || enabledCount <= 1 || pending) return;
     setError(null);
     setDisable({ currency, blockers: null, error: null });
+    setBusy(`toggle:${currency.code}`);
     startTransition(async () => {
       try {
         const blockers = await inspectCurrencyDisable(currency.code);
         setDisable((current) => current?.currency.code === currency.code ? { ...current, blockers } : current);
       } catch {
         setDisable((current) => current?.currency.code === currency.code ? { ...current, blockers: [], error: t("errorFailed") } : current);
-      }
+      } finally { setBusy(null); }
     });
   };
 
@@ -63,13 +66,16 @@ export function CurrenciesManager({ currencies, defaultCurrency = null }: { curr
   const makeDefault = (code: string) => {
     if (pending) return;
     setError(null);
+    setBusy(`default:${code}`);
     startTransition(async () => {
       try { const result = await setDefaultCurrency(code); if (!result.ok) setError(t("errorFailed")); } catch { setError(t("errorFailed")); }
+      finally { setBusy(null); }
     });
   };
   const changeEnabled = (currency: CurrencyDefinition, enabled: boolean) => {
     if (pending) return;
     setError(null);
+    setBusy(`toggle:${currency.code}`);
     startTransition(async () => {
       try {
         const result = await setCurrencyEnabled(currency.code, enabled);
@@ -84,7 +90,7 @@ export function CurrenciesManager({ currencies, defaultCurrency = null }: { curr
       } catch {
         if (!enabled) setDisable((current) => current ? { ...current, error: t("errorFailed") } : current);
         else setError(t("errorFailed"));
-      }
+      } finally { setBusy(null); }
     });
   };
 
@@ -103,13 +109,14 @@ export function CurrenciesManager({ currencies, defaultCurrency = null }: { curr
         </button>
         {!currency.disabled ? <button type="button" aria-pressed={currency.code === defaultCode} aria-label={t("makeDefaultNamed", { code: currency.code })} disabled={pending || currency.code === defaultCode}
           onClick={() => makeDefault(currency.code)} className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
-          <Star aria-hidden className={cn("size-5", currency.code === defaultCode && "fill-current text-primary")} />
+          {busy === `default:${currency.code}` ? <Loader2 aria-hidden className="size-5 animate-spin motion-reduce:animate-pulse" /> : <Star aria-hidden className={cn("size-5", currency.code === defaultCode && "fill-current text-primary")} />}
         </button> : null}
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span data-testid={`currency-status-${currency.code}`} className="text-xs text-muted-foreground">{t(currency.disabled ? "disabled" : "enabled")}</span>
           <Button
             variant="ghost"
             size="sm"
+            loading={busy === `toggle:${currency.code}`}
             disabled={pending || (!currency.disabled && enabledCount <= 1)}
             aria-label={t(currency.disabled ? "enableNamed" : "disableNamed", { code: currency.code })}
             onClick={() => currency.disabled ? changeEnabled(currency, true) : beginDisable(currency)}
@@ -127,7 +134,7 @@ export function CurrenciesManager({ currencies, defaultCurrency = null }: { curr
       dismissible={!pending}
       footer={disable ? <div className="flex flex-col gap-2">
         {disable.error ? <p role="alert" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm">{disable.error}</p> : null}
-        {disable.blockers?.length === 0 && !disable.error ? <div className="grid grid-cols-2 gap-3"><Button variant="outline" disabled={pending} onClick={() => setDisable(null)}>{t("cancel")}</Button><Button disabled={pending} onClick={() => changeEnabled(disable.currency, false)}>{pending ? t("disabling") : t("confirmDisable")}</Button></div> :
+        {disable.blockers?.length === 0 && !disable.error ? <div className="grid grid-cols-2 gap-3"><Button variant="outline" disabled={pending} onClick={() => setDisable(null)}>{t("cancel")}</Button><Button loading={pending} onClick={() => changeEnabled(disable.currency, false)}>{pending ? t("disabling") : t("confirmDisable")}</Button></div> :
           disable.blockers && disable.blockers.length > 0 ? <Button variant="outline" disabled={pending} onClick={() => setDisable(null)}>{t("cancel")}</Button> : null}
       </div> : null}
     >
