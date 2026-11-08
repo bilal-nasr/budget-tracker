@@ -1,6 +1,7 @@
-import { ChevronRight, HandCoins, Hourglass } from "lucide-react";
+import { Calculator, ChevronRight, HandCoins, Hourglass } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { Amount } from "@/components/money/amount";
+import { getShoppingItems } from "@/features/items/queries";
 import { getLoans } from "@/features/loans/queries";
 import { getPendingPayments } from "@/features/pending-payments/queries";
 import { Link } from "@/i18n/navigation";
@@ -21,7 +22,7 @@ function Amounts({ totals }: { totals: Total[] }) {
   </>;
 }
 
-function Row({ href, icon: Icon, title, hint, children }: { href: "/loans" | "/pending-payments"; icon: typeof HandCoins; title: string; hint: string; children?: React.ReactNode }) {
+function Row({ href, icon: Icon, title, hint, children }: { href: "/loans" | "/pending-payments" | "/items"; icon: typeof HandCoins; title: string; hint: string; children?: React.ReactNode }) {
   return (
     <Link href={href} className="flex min-h-[72px] items-center gap-3 px-3.5 py-3 hover:bg-accent/50 active:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
       <span className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-secondary text-primary"><Icon aria-hidden className="size-5" /></span>
@@ -35,16 +36,19 @@ function Row({ href, icon: Icon, title, hint, children }: { href: "/loans" | "/p
   );
 }
 
-/** Loans and client payments at a glance; each opens its own screen. Totals stay per currency, never mixed. */
+/** Loans, client payments and the item calculator at a glance; each opens its own screen. Totals stay per currency, never mixed. */
 export async function Commitments() {
-  const [t, loans, jobs] = await Promise.all([getTranslations("Wallets"), getLoans().catch(() => []), getPendingPayments().catch(() => [])]);
+  const [t, loans, jobs, items] = await Promise.all([getTranslations("Wallets"), getLoans().catch(() => []), getPendingPayments().catch(() => []), getShoppingItems().catch(() => [])]);
   const l = await getTranslations("Loans");
   const p = await getTranslations("PendingPayments");
+  const i = await getTranslations("Items");
   const active = loans.filter((loan) => !loan.deletedAt && !loan.archivedAt && loan.remainingMinor > 0);
   const owe = sum(active.filter((loan) => loan.direction === "borrowed").map((loan) => ({ currency: loan.currency, minor: loan.remainingMinor })));
   const owed = sum(active.filter((loan) => loan.direction === "lent").map((loan) => ({ currency: loan.currency, minor: loan.remainingMinor })));
   const waiting = jobs.filter((job) => job.remainingMinor > 0);
   const clientOwes = sum(waiting.map((job) => ({ currency: job.currency, minor: job.remainingMinor })));
+  const listed = items.filter((item) => !item.boughtOn);
+  const toBuy = sum(listed.map((item) => ({ currency: item.currency, minor: item.priceMinor })));
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
       <li>
@@ -56,6 +60,11 @@ export async function Commitments() {
       <li>
         <Row href="/pending-payments" icon={Hourglass} title={p("title")} hint={waiting.length > 0 ? t("waitingCount", { count: waiting.length }) : t("nothingPending")}>
           {clientOwes.length > 0 ? <span><Amounts totals={clientOwes} /></span> : null}
+        </Row>
+      </li>
+      <li>
+        <Row href="/items" icon={Calculator} title={i("title")} hint={listed.length > 0 ? t("itemsCount", { count: listed.length }) : t("nothingListed")}>
+          {toBuy.length > 0 ? <span><Amounts totals={toBuy} /></span> : null}
         </Row>
       </li>
     </ul>

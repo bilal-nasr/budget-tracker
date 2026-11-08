@@ -51,6 +51,7 @@ v1 scope:
 - Optional cashier payment/change may denominate the purchase cost independently from the paying wallet. Spending uses the stated cost currency, while wallet balances debit the exact tender once and credit every actual returned amount to its selected wallet. One purchase may return multiple currencies; new entries record the amounts exactly without calculating or requesting an exchange rate.
 - Installment paid status follows actual salary receipt cycles, with an explicit repeat-payment action. Principal progress remains lifetime progress.
 - Borrowed and lent loans with one additive, one-time percentage fee, principal-first repayments, fee-only income/spending and an explicit existing-loan entry that does not move cash.
+- Item calculator (`/items`, linked from Wallets): list items with prices per currency, see the total and the total of ticked items, edit or delete items, and mark them bought. Buying records one ordinary expense in Activity (several items become one expense itemised by name), and undoing that expense returns the items to the list. Items never move money themselves.
 - Monthly budgets: a limit per expense category per currency; carry forward to the next month by default.
 - Home: this month's spending vs budget, per currency; recent activity.
 - Reports: spending by category and month-over-month trend.
