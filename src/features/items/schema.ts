@@ -8,6 +8,9 @@ export const MAX_ITEM_NAME = 60;
 /** One purchase becomes one expense whose breakdown lists the items, so it shares the breakdown cap. */
 export const MAX_BUY_ITEMS = MAX_EXPENSE_ITEMS;
 
+/** Moving rows into an invoice folder is one statement, so it shares the folder's own row cap's order of magnitude. */
+export const MAX_MOVE_ITEMS = 100;
+
 const name = z.string().trim().min(1).max(MAX_ITEM_NAME);
 const price = z.number().int().min(1).max(MAX_MINOR);
 const date = z.iso.date().refine((value) => value >= "2000-01-01");
@@ -25,7 +28,18 @@ export const itemBuySchema = z.strictObject({
   balanceId: z.uuid(), categoryId: z.uuid(), occurredOn: date,
 });
 
+/**
+ * Items become rows of an invoice folder (same ids, so a retry after a lost response is a no-op).
+ * `expectedUnits` is required: each row keeps the decimals it was priced with.
+ */
+export const itemMoveSchema = z.strictObject({
+  expectedUnits: expectedUnitsSchema,
+  folderId: z.uuid(),
+  itemIds: z.array(z.uuid()).min(1).max(MAX_MOVE_ITEMS).refine((ids) => new Set(ids).size === ids.length),
+});
+
 export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
+export type ItemMoveInput = z.infer<typeof itemMoveSchema>;
 export type ItemEditInput = z.infer<typeof itemEditSchema>;
 export type ItemBuyInput = z.infer<typeof itemBuySchema>;
 

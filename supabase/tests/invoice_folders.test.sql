@@ -2,7 +2,7 @@
 -- A stranger, a removed member and a member of a different folder must see nothing.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(149);
+select plan(162);
 
 -- A owns the folder, B joins it, C is a stranger (later a member), D owns a different
 -- folder, E tests the folder cap, and twenty fillers test the member cap.
@@ -57,7 +57,7 @@ select ok((select name = 'CPU' and created_by = 'f0000000-0000-4000-8000-0000000
 select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
   values (gen_random_uuid(), 'f1000000-0000-4000-8000-0000000000a1', '   ', 'USD', 2, 100)$$, '23514', null, 'blank item name rejected');
 select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
-  values (gen_random_uuid(), 'f1000000-0000-4000-8000-0000000000a1', repeat('x', 61), 'USD', 2, 100)$$, '23514', null, 'over-length item name rejected');
+  values (gen_random_uuid(), 'f1000000-0000-4000-8000-0000000000a1', repeat('x', 201), 'USD', 2, 100)$$, '23514', null, 'over-length item name rejected');
 select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
   values (gen_random_uuid(), 'f1000000-0000-4000-8000-0000000000a1', 'Free', 'USD', 2, 0)$$, '23514', null, 'price 0 rejected');
 select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
@@ -80,7 +80,7 @@ values ('f2000000-0000-4000-8000-000000000005', 'f1000000-0000-4000-8000-0000000
 -- ---------------------------------------------------------------- link management
 select pg_temp.login('f0000000-0000-4000-8000-0000000000b1');
 select throws_ok($$select public.rotate_invoice_link('f1000000-0000-4000-8000-0000000000a1', 'Bob')$$, null, 'invoices.invalid', 'only the owner makes a link');
-select throws_ok($$select public.disable_invoice_link('f1000000-0000-4000-8000-0000000000a1')$$, null, 'invoices.invalid', 'only the owner turns a link off');
+select throws_ok($$select public.set_invoice_link_enabled('f1000000-0000-4000-8000-0000000000a1', false)$$, null, 'invoices.invalid', 'only the owner switches joining');
 
 select pg_temp.login('f0000000-0000-4000-8000-0000000000a1');
 select throws_ok($$select public.rotate_invoice_link('f1000000-0000-4000-8000-0000000000a1', '  ')$$, null, 'invoices.invalid', 'first share needs the owner''s name');
@@ -252,12 +252,27 @@ select throws_ok($$insert into public.invoice_items(id, folder_id, name, currenc
 select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
   values ('f2000000-0000-4000-8000-000000000009', 'f1000000-0000-4000-8000-0000000000d1', 'Squat', 'USD', 2, 1) on conflict (id) do nothing$$,
   '42501', 'invoices.invalid', 'not even through an insert that ignores duplicates');
--- The trigger runs before ON CONFLICT, so an add retried after someone else deleted that row
--- (same folder, same id) is refused too; the app shows it as "changed meanwhile".
+-- A member squatting in a currency they lack still gets 42501 (a conflict), not the currency
+-- error: the id pre-check refuses before the row is written (and on the AFTER backstop path
+-- invoice_items_a_id_guard fires before invoice_items_currency, pinned below).
+select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
+  values ('f2000000-0000-4000-8000-000000000009', 'f1000000-0000-4000-8000-0000000000d1', 'Squat', 'XYZ', 2, 1)$$,
+  '42501', 'invoices.invalid', 'a squat in a currency the squatter lacks is still refused as a conflict');
+-- The squat is refused before the row is written, so ahead of the column checks too.
+select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
+  values ('f2000000-0000-4000-8000-000000000009', 'f1000000-0000-4000-8000-0000000000d1', 'Squat', 'USD', 2, 0)$$,
+  '42501', 'invoices.invalid', 'a squat with an invalid price is refused as a squat, before the row is written');
+-- The id pre-check runs before ON CONFLICT is checked, so an add retried after that row was
+-- deleted (by anyone, the adder included, same folder, same id) is refused too; the app shows
+-- it as "changed meanwhile".
 select pg_temp.login('f0000000-0000-4000-8000-0000000000a1');
 select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
   values ('f2000000-0000-4000-8000-000000000009', 'f1000000-0000-4000-8000-0000000000a1', 'Monitor', 'USD', 2, 19900) on conflict (id) do nothing$$,
-  '42501', 'invoices.invalid', 'an add retried after its row was deleted meanwhile is refused while the Undo is open');
+  '42501', 'invoices.invalid', 'an add retried after its row was deleted (by anyone) is refused while the Undo is open');
+select pg_temp.login('f0000000-0000-4000-8000-0000000000b1');
+select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
+  values ('f2000000-0000-4000-8000-000000000009', 'f1000000-0000-4000-8000-0000000000a1', 'Monitor', 'USD', 2, 19900) on conflict (id) do nothing$$,
+  '42501', 'invoices.invalid', 'even the person who deleted the row cannot re-add its id while the Undo is open');
 reset role;
 select ok((select folder_id = 'f1000000-0000-4000-8000-0000000000a1' and name = 'Monitor' and price_minor = 19900
   and deleted_by = 'f0000000-0000-4000-8000-0000000000b1' and restoring_txid is null
@@ -339,9 +354,20 @@ select pg_temp.login('f0000000-0000-4000-8000-0000000000c1');
 select throws_ok($$select public.join_invoice_folder((select token from tokens where label = 'first'), 'Cara')$$, null, 'invoices.link', 'old token fails after rotating');
 select is(public.invoice_link_preview((select token from tokens where label = 'first')), null, 'old token has no preview');
 select pg_temp.login('f0000000-0000-4000-8000-0000000000a1');
-select lives_ok($$select public.disable_invoice_link('f1000000-0000-4000-8000-0000000000a1')$$, 'owner turns the link off');
+select lives_ok($$select public.set_invoice_link_enabled('f1000000-0000-4000-8000-0000000000a1', false)$$, 'owner switches joining off');
 select pg_temp.login('f0000000-0000-4000-8000-0000000000c1');
-select throws_ok($$select public.join_invoice_folder((select token from tokens where label = 'second'), 'Cara')$$, null, 'invoices.link', 'token fails after it is turned off');
+select throws_ok($$select public.join_invoice_folder((select token from tokens where label = 'second'), 'Cara')$$, null, 'invoices.link', 'a stranger cannot join while joining is off');
+select is(public.invoice_link_preview((select token from tokens where label = 'second')), null, 'a stranger gets no preview while joining is off');
+-- People already in are untouched: B keeps access and the link still opens for them.
+select pg_temp.login('f0000000-0000-4000-8000-0000000000b1');
+select isnt(public.invoice_link_preview((select token from tokens where label = 'second')), null, 'a member still gets the preview while joining is off');
+select is(public.join_invoice_folder((select token from tokens where label = 'second'), 'Bob'), 'f1000000-0000-4000-8000-0000000000a1'::uuid, 'a member opening the link while joining is off still gets in');
+-- Switching back on revives the very same link; nothing was deleted.
+select pg_temp.login('f0000000-0000-4000-8000-0000000000a1');
+select lives_ok($$select public.set_invoice_link_enabled('f1000000-0000-4000-8000-0000000000a1', true)$$, 'owner switches joining back on');
+select is((select token from public.invoice_links), (select token from tokens where label = 'second'), 'the link is the same after switching back on');
+select pg_temp.login('f0000000-0000-4000-8000-0000000000c1');
+select isnt(public.invoice_link_preview((select token from tokens where label = 'second')), null, 'a stranger gets the preview again once joining is on');
 select pg_temp.login('f0000000-0000-4000-8000-0000000000a1');
 insert into tokens select 'third', public.rotate_invoice_link('f1000000-0000-4000-8000-0000000000a1', null);
 
@@ -395,6 +421,9 @@ delete from public.invoice_items where id = 'f2000000-0000-4000-8000-00000000000
 insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
 values (gen_random_uuid(), 'f1000000-0000-4000-8000-0000000000a1', 'Replacement', 'USD', 2, 100);
 select throws_ok($$select public.restore_invoice_item('f2000000-0000-4000-8000-000000000001')$$, null, 'invoices.limit', 'restoring into a full folder is rejected');
+select throws_ok($$insert into public.invoice_items(id, folder_id, name, currency, decimal_places, price_minor)
+  values ('f2000000-0000-4000-8000-000000000001', 'f1000000-0000-4000-8000-0000000000a1', 'Ryzen 7 CPU', 'USD', 2, 26000)$$,
+  '42501', 'invoices.invalid', 'a squat into a full folder is refused as a squat, before the cap');
 
 -- ---------------------------------------------------------------- folder cap: 100 per owner
 select pg_temp.login('f0000000-0000-4000-8000-0000000000e1');
@@ -435,6 +464,14 @@ select is((select count(*) from pg_publication_tables where pubname = 'supabase_
   and tablename in ('invoice_members', 'invoice_links', 'invoice_item_tombstones')), 0::bigint, 'members, links and tombstones are not published (deletes bypass RLS)');
 select ok(not has_function_privilege('anon', 'public.restore_invoice_item(uuid)', 'execute')
   and has_function_privilege('authenticated', 'public.restore_invoice_item(uuid)', 'execute'), 'restore is for signed-in users only');
+select ok(not has_function_privilege('authenticated', 'public.invoice_item_restorable(timestamptz)', 'execute')
+  and not has_function_privilege('anon', 'public.invoice_item_restorable(timestamptz)', 'execute'), 'clients cannot call the Undo window helper');
+select ok(not has_function_privilege('authenticated', 'public.invoice_items_id_guard()', 'execute')
+  and not has_function_privilege('anon', 'public.invoice_items_id_guard()', 'execute'), 'clients cannot call the id guard trigger function');
+-- AFTER triggers fire in name order; the id guard must report before the currency check.
+select is((select array_agg(tgname::text order by tgname) from pg_trigger
+  where tgrelid = 'public.invoice_items'::regclass and not tgisinternal and tgtype & 4 = 4 and tgtype & 2 = 0),
+  array['invoice_items_a_id_guard', 'invoice_items_currency'], 'the id guard is the first AFTER INSERT trigger on invoice items');
 
 select * from finish();
 rollback;

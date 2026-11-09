@@ -3,13 +3,20 @@ import { currencyCodeSchema } from "@/features/currencies/schema";
 import { expectedUnitsSchema } from "@/lib/currency-intent";
 import { MAX_MINOR } from "@/lib/money";
 
+/** Folder names. */
 export const MAX_NAME = 60;
+/** Row names: long enough for a full product title. */
+export const MAX_ITEM_NAME = 200;
+export const MAX_CATEGORY_NAME = 40;
 export const MAX_PERSON_NAME = 30;
 export const MAX_FOLDERS = 100;
 export const MAX_ITEMS = 500;
+export const MAX_CATEGORIES = 30;
 export const MAX_GUESTS = 20;
 
 const name = z.string().trim().min(1).max(MAX_NAME);
+const itemName = z.string().trim().min(1).max(MAX_ITEM_NAME);
+const categoryName = z.string().trim().min(1).max(MAX_CATEGORY_NAME);
 const price = z.number().int().min(1).max(MAX_MINOR);
 const decimalPlaces = z.number().int().min(0).max(8);
 
@@ -17,14 +24,18 @@ const decimalPlaces = z.number().int().min(0).max(8);
 export const folderCreateSchema = z.strictObject({ id: z.uuid(), name });
 export const folderRenameSchema = z.strictObject({ name });
 
+/** Same idea for categories: the sheet picks the id so a retry never makes a second one. */
+export const categoryCreateSchema = z.strictObject({ id: z.uuid(), folderId: z.uuid(), name: categoryName });
+export const categoryRenameSchema = z.strictObject({ name: categoryName });
+
 /** The row keeps the decimals it was priced with, so a later change to a viewer's catalog never reinterprets it. */
 export const itemCreateSchema = z.strictObject({
   expectedUnits: expectedUnitsSchema.optional(),
-  id: z.uuid(), folderId: z.uuid(), name,
+  id: z.uuid(), folderId: z.uuid(), categoryId: z.uuid(), name: itemName,
   currency: currencyCodeSchema, decimalPlaces, priceMinor: price,
 });
 export const itemEditSchema = z.strictObject({
-  name, priceMinor: price,
+  name: itemName, priceMinor: price, categoryId: z.uuid().optional(),
   currency: currencyCodeSchema.optional(), decimalPlaces: decimalPlaces.optional(),
 }).refine((value) => (value.currency === undefined) === (value.decimalPlaces === undefined), {
   message: "currency and decimalPlaces change together",
@@ -35,14 +46,18 @@ export const personNameSchema = z.string().trim().min(1).max(MAX_PERSON_NAME);
 export const tokenSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
 export type FolderCreateInput = z.infer<typeof folderCreateSchema>;
+export type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
 export type ItemCreateInput = z.infer<typeof itemCreateSchema>;
 export type ItemEditInput = z.infer<typeof itemEditSchema>;
 
 /** A saved row's timestamps as the database reported them (server clock, never the device's). */
 export type SavedTimes = { createdAt: string; updatedAt: string };
 
+/** `isDefault` marks "Other": every folder has exactly one, and it can be neither renamed nor deleted. */
+export type InvoiceCategory = { id: string; folderId: string; name: string; isDefault: boolean; createdAt: string };
+
 export type InvoiceItem = {
-  id: string; folderId: string; name: string; currency: string; decimalPlaces: number; priceMinor: number;
+  id: string; folderId: string; categoryId: string; name: string; currency: string; decimalPlaces: number; priceMinor: number;
   createdBy: string | null; createdAt: string; updatedAt: string;
 };
 export type InvoiceMember = {

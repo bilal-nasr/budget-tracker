@@ -16,11 +16,11 @@ const ITEM = "1d000000-0000-4000-8000-000000000001";
 const USER = "1a000000-0000-4000-8000-000000000001";
 
 const row = (over: Record<string, unknown> = {}) => ({
-  id: ITEM, folder_id: FOLDER, name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45000,
+  id: ITEM, folder_id: FOLDER, category_id: "1c000000-0000-4000-8000-000000000001", name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45000,
   created_by: USER, updated_by: USER, created_at: "2026-11-09T10:00:00.123456+00:00", updated_at: "2026-11-09T10:00:00.123456+00:00", ...over,
 });
 const mapped = {
-  id: ITEM, folderId: FOLDER, name: "GPU", currency: "USD", decimalPlaces: 2, priceMinor: 45000,
+  id: ITEM, folderId: FOLDER, categoryId: "1c000000-0000-4000-8000-000000000001", name: "GPU", currency: "USD", decimalPlaces: 2, priceMinor: 45000,
   createdBy: USER, createdAt: "2026-11-09T10:00:00.123456+00:00", updatedAt: "2026-11-09T10:00:00.123456+00:00",
 };
 
@@ -59,6 +59,8 @@ describe("useLiveFolder", () => {
       // A DELETE carries only the id, so a folder_id filter never matches it (checked on a real stack).
       { event: "DELETE", schema: "public", table: "invoice_items" },
       { event: "*", schema: "public", table: "invoice_folders", filter: `id=eq.${FOLDER}` },
+      // Categories added, renamed or deleted by someone else refresh the page.
+      { event: "*", schema: "public", table: "invoice_categories", filter: `folder_id=eq.${FOLDER}` },
     ]);
     // Never members, links or tombstones: their DELETE events are not filtered by access.
     expect(realtime.current!.channels.flatMap((channel) => channel.bindings.map((binding) => binding.filter.table)))

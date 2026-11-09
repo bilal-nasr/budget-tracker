@@ -72,7 +72,7 @@ describe("preview mode (no database)", () => {
     const [pc] = await getInvoiceFolders();
     const detail = await getInvoiceFolder(pc.id);
     expect(detail).toMatchObject({ name: "PC build", isOwner: true });
-    expect(detail?.items.map((row) => row.name)).toEqual(expect.arrayContaining(["CPU", "GPU", "Case", "Cables"]));
+    expect(detail?.items.map((row) => row.name)).toEqual(expect.arrayContaining(["CPU", "GPU", "MSI MAG Forge 120A Airflow Mid-Tower (6× Fans, 330mm GPU support)", "Cables"]));
     const times = detail?.items.map((row) => row.createdAt) ?? [];
     expect([...times].sort().reverse()).toEqual(times);
     expect(await getInvoiceFolder(uid(99))).toBeNull();

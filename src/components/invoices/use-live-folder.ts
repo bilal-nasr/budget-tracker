@@ -18,7 +18,7 @@ export const REFRESH_MS = 30_000;
 export const POLL_MS = 5_000;
 
 const itemRow = z.object({
-  id: z.uuid(), folder_id: z.uuid(), name: z.string().min(1), currency: currencyCodeSchema,
+  id: z.uuid(), folder_id: z.uuid(), category_id: z.uuid(), name: z.string().min(1), currency: currencyCodeSchema,
   decimal_places: z.number().int().min(0).max(8),
   price_minor: z.union([z.number(), z.string()]),
   created_by: z.uuid().nullable(), created_at: z.string().min(1), updated_at: z.string().min(1),
@@ -31,8 +31,8 @@ function toItem(value: unknown, folderId: string): InvoiceItem | null {
   if (!row.success || row.data.folder_id !== folderId) return null;
   let priceMinor: number;
   try { priceMinor = readMinor(row.data.price_minor); } catch { return null; }
-  const { id, name, currency, decimal_places: decimalPlaces, created_by: createdBy, created_at: createdAt, updated_at: updatedAt } = row.data;
-  return { id, folderId, name, currency, decimalPlaces, priceMinor, createdBy, createdAt, updatedAt };
+  const { id, category_id: categoryId, name, currency, decimal_places: decimalPlaces, created_by: createdBy, created_at: createdAt, updated_at: updatedAt } = row.data;
+  return { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, createdBy, createdAt, updatedAt };
 }
 
 let opened = 0;
@@ -55,6 +55,7 @@ export function useLiveFolder(folderId: string, handlers: {
   const onItem = useEffectEvent((change: LiveItemChange) => handlers.onItem(change));
   const onLost = useEffectEvent(() => handlers.onLost());
   const onRenamed = useEffectEvent(() => router.refresh());
+  const onCategories = useEffectEvent(() => router.refresh());
   const refetch = useEffectEvent(() => { router.refresh(); handlers.onMembers(); });
 
   useEffect(() => {
@@ -106,6 +107,11 @@ export function useLiveFolder(folderId: string, handlers: {
           const key = keyRow.safeParse(payload.eventType === "DELETE" ? payload.old : payload.new);
           if (!key.success || key.data.id !== folderId) return;
           if (payload.eventType === "DELETE") onLost(); else onRenamed();
+        })
+        // Categories added, renamed or deleted by someone else: the page is refetched with the new list.
+        .on("postgres_changes", { event: "*", schema: "public", table: "invoice_categories", filter: `folder_id=eq.${folderId}` }, () => {
+          if (disposed || current !== channel) return;
+          onCategories();
         })
         // The join itself succeeds even when the server cannot set up the changes; it says so here.
         .on("system", {}, (payload: { extension?: unknown; status?: unknown }) => {

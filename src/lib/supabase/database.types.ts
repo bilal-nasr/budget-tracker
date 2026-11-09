@@ -514,6 +514,49 @@ export type Database = {
                     }
                 ];
             };
+            "invoice_categories": {
+                Row: {
+                    "created_at": string;
+                    "created_by": string | null;
+                    "folder_id": string;
+                    "id": string;
+                    "is_default": boolean;
+                    "name": string;
+                    "updated_at": string;
+                };
+                ComputedFields: never;
+                Insert: {
+                    "created_at"?: string;
+                    "created_by"?: string | null;
+                    "folder_id": string;
+                    "id": string;
+                    "is_default"?: boolean;
+                    "name": string;
+                    "updated_at"?: string;
+                };
+                Update: {
+                    "created_at"?: string;
+                    "created_by"?: string | null;
+                    "folder_id"?: string;
+                    "id"?: string;
+                    "is_default"?: boolean;
+                    "name"?: string;
+                    "updated_at"?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "invoice_categories_folder_id_fkey";
+                        columns: [
+                            "folder_id"
+                        ];
+                        isOneToOne: false;
+                        referencedRelation: "invoice_folders";
+                        referencedColumns: [
+                            "id"
+                        ];
+                    }
+                ];
+            };
             "invoice_folders": {
                 Row: {
                     "created_at": string;
@@ -592,6 +635,7 @@ export type Database = {
             };
             "invoice_items": {
                 Row: {
+                    "category_id": string;
                     "created_at": string;
                     "created_by": string | null;
                     "currency": string;
@@ -605,6 +649,7 @@ export type Database = {
                 };
                 ComputedFields: never;
                 Insert: {
+                    "category_id"?: string;
                     "created_at"?: string;
                     "created_by"?: string | null;
                     "currency": string;
@@ -617,6 +662,7 @@ export type Database = {
                     "updated_by"?: string | null;
                 };
                 Update: {
+                    "category_id"?: string;
                     "created_at"?: string;
                     "created_by"?: string | null;
                     "currency"?: string;
@@ -629,6 +675,19 @@ export type Database = {
                     "updated_by"?: string | null;
                 };
                 Relationships: [
+                    {
+                        foreignKeyName: "invoice_items_category_fk";
+                        columns: [
+                            "folder_id",
+                            "category_id"
+                        ];
+                        isOneToOne: false;
+                        referencedRelation: "invoice_categories";
+                        referencedColumns: [
+                            "folder_id",
+                            "id"
+                        ];
+                    },
                     {
                         foreignKeyName: "invoice_items_folder_id_fkey";
                         columns: [
@@ -645,17 +704,20 @@ export type Database = {
             "invoice_links": {
                 Row: {
                     "created_at": string;
+                    "enabled": boolean;
                     "folder_id": string;
                     "token": string;
                 };
                 ComputedFields: never;
                 Insert: {
                     "created_at"?: string;
+                    "enabled"?: boolean;
                     "folder_id": string;
                     "token": string;
                 };
                 Update: {
                     "created_at"?: string;
+                    "enabled"?: boolean;
                     "folder_id"?: string;
                     "token"?: string;
                 };
@@ -1947,9 +2009,9 @@ export type Database = {
                 };
                 Returns: undefined;
             };
-            "disable_invoice_link": {
+            "delete_invoice_category": {
                 Args: {
-                    "p_folder": string;
+                    "p_category": string;
                 };
                 Returns: undefined;
             };
@@ -1966,6 +2028,13 @@ export type Database = {
                     "p_deleted_at": string;
                 };
                 Returns: boolean;
+            };
+            "set_invoice_link_enabled": {
+                Args: {
+                    "p_enabled": boolean;
+                    "p_folder": string;
+                };
+                Returns: undefined;
             };
             "invoice_link_preview": {
                 Args: {

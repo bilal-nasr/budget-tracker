@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
 import {
-  folderCreateSchema, folderRenameSchema, itemCreateSchema, itemEditSchema, personNameSchema, tokenSchema,
+  categoryCreateSchema, categoryRenameSchema, folderCreateSchema, folderRenameSchema, itemCreateSchema, itemEditSchema, personNameSchema, tokenSchema,
 } from "./schema";
 
 const id = "11111111-1111-4111-8111-111111111111";
 const folderId = "22222222-2222-4222-8222-222222222222";
-const item = { id, folderId, name: "Cement", currency: "usd", decimalPlaces: 2, priceMinor: 1500 };
+const categoryId = "33333333-3333-4333-8333-333333333333";
+const item = { id, folderId, categoryId, name: "Cement", currency: "usd", decimalPlaces: 2, priceMinor: 1500 };
 
 describe("folder schemas", () => {
   it("accepts a trimmed name and rejects empty or 61-character names", () => {
@@ -19,12 +20,33 @@ describe("folder schemas", () => {
   });
 });
 
+describe("category schemas", () => {
+  it("trims names and holds them to 1..40 characters", () => {
+    expect(categoryRenameSchema.parse({ name: "  Case & Cooling " }).name).toBe("Case & Cooling");
+    expect(categoryRenameSchema.safeParse({ name: "   " }).success).toBe(false);
+    expect(categoryRenameSchema.safeParse({ name: "a".repeat(40) }).success).toBe(true);
+    expect(categoryRenameSchema.safeParse({ name: "a".repeat(41) }).success).toBe(false);
+    expect(categoryCreateSchema.safeParse({ id, folderId, name: "Storage" }).success).toBe(true);
+    expect(categoryCreateSchema.safeParse({ id: "nope", folderId, name: "Storage" }).success).toBe(false);
+  });
+});
+
 describe("itemCreateSchema", () => {
   it("accepts a valid row and upper-cases the currency", () => {
     expect(itemCreateSchema.parse(item).currency).toBe("USD");
   });
-  it("rejects 61-character names", () => {
-    expect(itemCreateSchema.safeParse({ ...item, name: "a".repeat(61) }).success).toBe(false);
+  it("keeps a full product title, up to 200 characters", () => {
+    const title = "MSI MAG Forge 120A Airflow Mid-Tower (6× Fans, 330mm GPU support)";
+    expect(title).toHaveLength(65);
+    expect(itemCreateSchema.parse({ ...item, name: title }).name).toBe(title);
+    expect(itemCreateSchema.safeParse({ ...item, name: "a".repeat(200) }).success).toBe(true);
+  });
+  it("rejects 201-character names", () => {
+    expect(itemCreateSchema.safeParse({ ...item, name: "a".repeat(201) }).success).toBe(false);
+  });
+  it("needs a category of the folder", () => {
+    expect(itemCreateSchema.safeParse({ ...item, categoryId: undefined }).success).toBe(false);
+    expect(itemCreateSchema.safeParse({ ...item, categoryId: "nope" }).success).toBe(false);
   });
   it("rejects prices of 0 and above MAX_MINOR", () => {
     expect(itemCreateSchema.safeParse({ ...item, priceMinor: 0 }).success).toBe(false);

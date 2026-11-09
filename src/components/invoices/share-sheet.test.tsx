@@ -8,12 +8,12 @@ import type { InvoiceMember } from "@/features/invoices/schema";
 import type { InvoiceFolderDetail } from "@/features/invoices/queries";
 
 const mocks = vi.hoisted(() => ({
-  createOrRotateLink: vi.fn(), disableLink: vi.fn(), removeMember: vi.fn(), leaveFolder: vi.fn(), setMyName: vi.fn(),
+  createOrRotateLink: vi.fn(), setLinkEnabled: vi.fn(), removeMember: vi.fn(), leaveFolder: vi.fn(), setMyName: vi.fn(),
   push: vi.fn(), refresh: vi.fn(),
   toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
 }));
 vi.mock("@/features/invoices/actions", () => ({
-  createOrRotateLink: mocks.createOrRotateLink, disableLink: mocks.disableLink, removeMember: mocks.removeMember,
+  createOrRotateLink: mocks.createOrRotateLink, setLinkEnabled: mocks.setLinkEnabled, removeMember: mocks.removeMember,
   leaveFolder: mocks.leaveFolder, setMyName: mocks.setMyName,
 }));
 vi.mock("@/features/invoices/queries", () => ({}));
@@ -42,7 +42,7 @@ const person = (userId: string, displayName: string | null, isOwner = false, rem
   ({ userId, displayName, isOwner, joinedAt: `2026-11-0${at}T00:00:00Z`, removed });
 
 const folderOf = (over: Partial<InvoiceFolderDetail> = {}): InvoiceFolderDetail => ({
-  id: FOLDER, name: "PC build", isOwner: true, viewerId: VIEWER, link: null, items: [],
+  id: FOLDER, name: "PC build", isOwner: true, viewerId: VIEWER, link: null, linkEnabled: true, items: [], categories: [],
   members: [person(VIEWER, "Dana", true)], ...over,
 });
 
@@ -68,7 +68,7 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
   };
 
   beforeEach(() => {
-    for (const fn of [mocks.createOrRotateLink, mocks.disableLink, mocks.removeMember, mocks.leaveFolder, mocks.setMyName]) fn.mockReset().mockResolvedValue({ ok: true });
+    for (const fn of [mocks.createOrRotateLink, mocks.setLinkEnabled, mocks.removeMember, mocks.leaveFolder, mocks.setMyName]) fn.mockReset().mockResolvedValue({ ok: true });
     mocks.createOrRotateLink.mockResolvedValue({ ok: true, token: FRESH });
     for (const fn of [mocks.push, mocks.refresh, mocks.toast, mocks.toast.error, mocks.toast.success]) fn.mockReset();
     setNavigator("clipboard", undefined);
@@ -229,19 +229,55 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       expect(screen.queryByRole("dialog", { name: t.replaceTitle })).toBeNull();
     });
 
-    it("Turn off link confirms, says people already in stay, and then offers Create link again", async () => {
+    it("has a joining switch that starts on, says people already in stay, and turns joining off at once without a prompt", async () => {
       render(view(locale, withLink()));
       const dialog = openSheet();
-      fireEvent.click(within(dialog).getByRole("button", { name: t.turnOffLink }));
-      const confirm = screen.getByRole("dialog", { name: t.turnOffTitle });
-      expect(confirm.textContent).toContain(t.turnOffHelp);
-      expect(mocks.disableLink).not.toHaveBeenCalled();
+      const joining = within(dialog).getByRole("switch", { name: t.joinSwitch }) as HTMLInputElement;
+      expect(joining.checked).toBe(true);
+      expect(dialog.textContent).toContain(t.joinSwitchOn);
 
-      await act(async () => { fireEvent.click(within(confirm).getByRole("button", { name: t.turnOffConfirm })); });
-      expect(mocks.disableLink).toHaveBeenCalledWith(FOLDER);
+      await act(async () => { fireEvent.click(joining); });
+      expect(mocks.setLinkEnabled).toHaveBeenCalledWith(FOLDER, false);
+      expect(mocks.toast).toHaveBeenCalledWith(t.joinTurnedOff);
       expect(mocks.refresh).toHaveBeenCalled();
+      // The link is kept, just not handed out: no field, Copy or Replace while joining is off.
+      expect(joining.checked).toBe(false);
+      expect(dialog.textContent).toContain(t.joinSwitchOff);
       expect(within(dialog).queryByRole("textbox", { name: t.linkLabel })).toBeNull();
-      expect(within(dialog).getByRole("button", { name: t.createLink })).toBeTruthy();
+      for (const name of [t.copyLink, t.replaceLink, t.createLink]) expect(within(dialog).queryByRole("button", { name })).toBeNull();
+    });
+
+    it("turning joining back on shows the same link again", async () => {
+      render(view(locale, folderOf({ link: TOKEN, linkEnabled: false })));
+      const dialog = openSheet();
+      const joining = within(dialog).getByRole("switch", { name: t.joinSwitch }) as HTMLInputElement;
+      expect(joining.checked).toBe(false);
+      expect(within(dialog).queryByRole("textbox", { name: t.linkLabel })).toBeNull();
+
+      await act(async () => { fireEvent.click(joining); });
+      expect(mocks.setLinkEnabled).toHaveBeenCalledWith(FOLDER, true);
+      expect(mocks.toast).toHaveBeenCalledWith(t.joinTurnedOn);
+      expect(joining.checked).toBe(true);
+      expect((within(dialog).getByRole("textbox", { name: t.linkLabel }) as HTMLInputElement).value).toBe(urlFor(TOKEN));
+    });
+
+    it("a failed switch goes back to where it was and says why", async () => {
+      mocks.setLinkEnabled.mockResolvedValueOnce({ ok: false, error: "failed" });
+      render(view(locale, withLink()));
+      const dialog = openSheet();
+      const joining = within(dialog).getByRole("switch", { name: t.joinSwitch }) as HTMLInputElement;
+      await act(async () => { fireEvent.click(joining); });
+      expect(within(dialog).getByRole("alert").textContent).toBe(t.errorFailed);
+      expect(joining.checked).toBe(true);
+      expect(within(dialog).getByRole("textbox", { name: t.linkLabel })).toBeTruthy();
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it("follows the switch from the server (another tab turned joining off)", () => {
+      const { rerender } = render(view(locale, withLink()));
+      const dialog = openSheet();
+      rerender(view(locale, folderOf({ link: TOKEN, linkEnabled: false })));
+      expect((within(dialog).getByRole("switch", { name: t.joinSwitch }) as HTMLInputElement).checked).toBe(false);
     });
 
     it("a failed replace keeps the confirmation open with the reason, and confirming again repeats the same request", async () => {
@@ -350,9 +386,10 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       const rows = within(within(dialog).getByRole("list", { name: t.membersLabel })).getAllByRole("listitem");
       expect(rows.map((row) => row.querySelector("bdi")!.textContent)).toEqual(["Karim", "Dana", "Lina"]);
       expect(rows[1].textContent).toContain(t.youLabel);
-      for (const name of [t.createLink, t.replaceLink, t.turnOffLink, t.copyLink, t.shareLink]) {
+      for (const name of [t.createLink, t.replaceLink, t.copyLink, t.shareLink]) {
         expect(within(dialog).queryByRole("button", { name })).toBeNull();
       }
+      expect(within(dialog).queryByRole("switch")).toBeNull();
       expect(within(dialog).queryByRole("textbox", { name: t.linkLabel })).toBeNull();
       expect(within(dialog).queryByRole("button", { name: new RegExp(fill(t.removePersonNamed, { name: "" }).trim()) })).toBeNull();
     });
@@ -454,11 +491,11 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       expect(mocks.createOrRotateLink).toHaveBeenCalledTimes(1);
     });
 
-    it("Turn off", async () => {
+    it("the joining switch", async () => {
       render(view(locale, team()));
-      fireEvent.click(within(openSheet()).getByRole("button", { name: t.turnOffLink }));
-      await twice(within(screen.getByRole("dialog", { name: t.turnOffTitle })).getByRole("button", { name: t.turnOffConfirm }));
-      expect(mocks.disableLink).toHaveBeenCalledTimes(1);
+      const joining = within(openSheet()).getByRole("switch", { name: t.joinSwitch });
+      await twice(joining);
+      expect(mocks.setLinkEnabled).toHaveBeenCalledTimes(1);
     });
 
     it("Leave, also after it succeeded and while the address is still changing", async () => {

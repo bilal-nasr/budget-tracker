@@ -7,7 +7,7 @@ import ar from "@/messages/ar.json";
 import { AppDataProvider } from "@/components/providers/app-data";
 import type { CurrencyDefinition } from "@/lib/currency";
 import { MAX_MINOR } from "@/lib/money";
-import type { InvoiceItem, InvoiceMember } from "@/features/invoices/schema";
+import type { InvoiceCategory, InvoiceItem, InvoiceMember } from "@/features/invoices/schema";
 import type { InvoiceFolderDetail } from "@/features/invoices/queries";
 import { fakeRealtime } from "@/test/fake-realtime";
 
@@ -53,8 +53,11 @@ const GONE = "1a000000-0000-4000-8000-000000000009";
 const FOLDER = "1f000000-0000-4000-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+const OTHER = "1c000000-0000-4000-8000-000000000001";
+const otherCategory: InvoiceCategory = { id: OTHER, folderId: FOLDER, name: "Other", isDefault: true, createdAt: "2026-11-01T00:00:00Z" };
+
 const item = (n: number, name: string, currency: string, decimalPlaces: number, priceMinor: number, createdBy: string | null = VIEWER): InvoiceItem => ({
-  id: `1d000000-0000-4000-8000-${String(n).padStart(12, "0")}`, folderId: FOLDER, name, currency, decimalPlaces, priceMinor, createdBy,
+  id: `1d000000-0000-4000-8000-${String(n).padStart(12, "0")}`, folderId: FOLDER, categoryId: OTHER, name, currency, decimalPlaces, priceMinor, createdBy,
   createdAt: `2026-11-0${Math.min(9, n)}T00:00:00Z`, updatedAt: `2026-11-0${Math.min(9, n)}T00:00:00Z`,
 });
 const person = (userId: string, displayName: string | null, isOwner = false, removed = false): InvoiceMember =>
@@ -67,8 +70,8 @@ const pcItems = [
 ];
 
 const folderOf = (over: Partial<InvoiceFolderDetail> = {}): InvoiceFolderDetail => ({
-  id: FOLDER, name: "PC build", isOwner: true, viewerId: VIEWER, link: null,
-  members: [person(VIEWER, null, true)], items: pcItems, ...over,
+  id: FOLDER, name: "PC build", isOwner: true, viewerId: VIEWER, link: null, linkEnabled: true,
+  members: [person(VIEWER, null, true)], items: pcItems, categories: [otherCategory], ...over,
 });
 
 const view = (locale: Locale, folder: InvoiceFolderDetail) => (
@@ -471,11 +474,292 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  describe("selection", () => {
+    const pick = (name: string) => screen.getByRole("checkbox", { name: t.selectRow.replace("{name}", name) }) as HTMLInputElement;
+    const tick = (name: string) => fireEvent.click(pick(name));
+    const selectedLabel = (count: number) => t.selectedLabel.replace("{count}", String(count));
+    const header = () => screen.getByRole("banner");
+    const headerLines = () => within(within(header()).getByRole("list", { name: t.selectedTotalsLabel })).getAllByRole("listitem").map((line) => line.textContent);
+    const bar = () => screen.queryByRole("region", { name: t.selectionBarLabel });
+    const barLines = () => within(within(bar()!).getByRole("list", { name: t.selectedTotalsLabel })).getAllByRole("listitem").map((line) => line.textContent);
+    const channel = () => mocks.realtime!.active()[0];
+    const shared = () => folderOf({ isOwner: false, members: [person(KARIM, "Karim", true), person(VIEWER, "Dana")] });
+    const idOf = (n: number) => item(n, "", "USD", 2, 0).id;
+
+    it("every row has its own checkbox, unticked, and the header says nothing is selected", () => {
+      render(view(locale, folderOf()));
+      expect(screen.getAllByRole("checkbox")).toHaveLength(5);
+      expect(screen.getAllByRole("checkbox").every((box) => !(box as HTMLInputElement).checked)).toBe(true);
+      expect(within(header()).getByText(selectedLabel(0))).toBeTruthy();
+      expect(within(header()).queryByRole("list", { name: t.selectedTotalsLabel })).toBeNull();
+      expect(bar()).toBeNull();
+    });
+
+    it("ticking a USD row and an LBP row shows two separate selected totals, never one number", () => {
+      render(view(locale, folderOf()));
+      tick("GPU"); tick("Fans");
+      expect(within(header()).getByText(selectedLabel(2))).toBeTruthy();
+      expect(headerLines()).toEqual(["$450.00", "LBP 1,000,000"]);
+      expect(header().textContent).not.toMatch(/1,000,450|1,000,000450/);
+      expect(within(header()).getByRole("list", { name: t.selectedTotalsLabel }).querySelectorAll('bdi[dir="ltr"]')).toHaveLength(2);
+      // The folder's own totals are untouched.
+      expect(within(within(header()).getByRole("list", { name: t.totalsLabel })).getAllByRole("listitem").map((line) => line.textContent)).toEqual(["$800.00", "LBP 2,500,000"]);
+    });
+
+    it("sums only the ticked rows of one currency, and follows the totals' currency order", () => {
+      render(view(locale, folderOf()));
+      tick("Fans"); tick("Cables"); tick("CPU"); tick("GPU");
+      expect(headerLines()).toEqual(["$700.00", "LBP 2,500,000"]);
+      tick("GPU");
+      expect(headerLines()).toEqual(["$250.00", "LBP 2,500,000"]);
+      tick("CPU");
+      expect(headerLines()).toEqual(["LBP 2,500,000"]);
+    });
+
+    it("a ticked row is tinted, and unticking restores it", () => {
+      render(view(locale, folderOf()));
+      tick("GPU");
+      expect(rowOf("GPU").className).toContain("bg-secondary");
+      expect(rowOf("CPU").className).not.toContain("bg-secondary");
+      tick("GPU");
+      expect(rowOf("GPU").className).not.toContain("bg-secondary");
+    });
+
+    it("the checkbox sits in its own 48px column, apart from the row's edit button", () => {
+      render(view(locale, folderOf()));
+      const box = pick("GPU");
+      expect(box.className).toContain("size-5");
+      expect(box.className).toContain("accent-primary");
+      expect(box.closest("label")!.className).toContain("w-12");
+      expect(within(rowOf("GPU")).getByRole("button").contains(box)).toBe(false);
+    });
+
+    it("ticking does not open the edit sheet; tapping the rest of the row still does", async () => {
+      render(view(locale, folderOf()));
+      tick("GPU");
+      expect(screen.queryByRole("dialog")).toBeNull();
+      openRow("GPU");
+      expect(await screen.findByRole("dialog", { name: t.editTitle })).toBeTruthy();
+    });
+
+    it("Select all ticks every row and becomes Clear; Clear unticks them", () => {
+      render(view(locale, folderOf()));
+      fireEvent.click(screen.getByRole("button", { name: t.selectAll }));
+      expect(screen.getAllByRole("checkbox").every((box) => (box as HTMLInputElement).checked)).toBe(true);
+      expect(within(header()).getByText(selectedLabel(5))).toBeTruthy();
+      expect(headerLines()).toEqual(["$800.00", "LBP 2,500,000"]);
+      expect(screen.queryByRole("button", { name: t.selectAll })).toBeNull();
+      fireEvent.click(screen.getAllByRole("button", { name: t.clearSelection })[0]);
+      expect(screen.getAllByRole("checkbox").every((box) => !(box as HTMLInputElement).checked)).toBe(true);
+      expect(within(header()).getByText(selectedLabel(0))).toBeTruthy();
+      expect(screen.getByRole("button", { name: t.selectAll })).toBeTruthy();
+    });
+
+    it("with some rows ticked the button still says Select all and completes the selection", () => {
+      render(view(locale, folderOf()));
+      tick("GPU");
+      fireEvent.click(screen.getByRole("button", { name: t.selectAll }));
+      expect(within(header()).getByText(selectedLabel(5))).toBeTruthy();
+    });
+
+    it("an empty folder has no Select all button", () => {
+      render(view(locale, folderOf({ items: [] })));
+      expect(screen.queryByRole("button", { name: t.selectAll })).toBeNull();
+      expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    });
+
+    it("the sticky bar appears with the count and per-currency totals, and its X clears the selection", () => {
+      render(view(locale, folderOf()));
+      expect(bar()).toBeNull();
+      tick("CPU"); tick("Cables");
+      expect(bar()).not.toBeNull();
+      expect(within(bar()!).getByText(selectedLabel(2))).toBeTruthy();
+      expect(barLines()).toEqual(["$250.00", "LBP 1,500,000"]);
+      expect(bar()!.className).toContain("sticky");
+      fireEvent.click(within(bar()!).getByRole("button", { name: t.clearSelection }));
+      expect(bar()).toBeNull();
+      expect(pick("CPU").checked).toBe(false);
+      expect(within(header()).getByText(selectedLabel(0))).toBeTruthy();
+    });
+
+    it("unticking the last row removes the bar", () => {
+      render(view(locale, folderOf()));
+      tick("CPU");
+      expect(bar()).not.toBeNull();
+      tick("CPU");
+      expect(bar()).toBeNull();
+    });
+
+    it("the header does not change height when ticking: the line is reserved for every currency", () => {
+      render(view(locale, folderOf()));
+      const reserved = (within(header()).getByText(selectedLabel(0)).parentElement as HTMLElement).style.minHeight;
+      expect(reserved).not.toBe("");
+      tick("GPU");
+      expect((within(header()).getByText(selectedLabel(1)).parentElement as HTMLElement).style.minHeight).toBe(reserved);
+    });
+
+    it("a ticked row in a currency the viewer lacks shows its own code and stored decimals in the selected total", () => {
+      render(view(locale, folderOf({ items: [item(2, "Imported", "EUR", 2, 12_345), item(1, "Old", "SYP", 0, 5000), item(3, "Case", "USD", 2, 10_000)] })));
+      tick("Imported"); tick("Old");
+      expect(headerLines()).toEqual(["EUR 123.45", "SYP 5,000"]);
+      expect(barLines()).toEqual(["EUR 123.45", "SYP 5,000"]);
+    });
+
+    it("a selected total that cannot be summed says it is too large to show, without hiding the others", () => {
+      render(view(locale, folderOf({ items: [item(2, "A", "USD", 2, MAX_MINOR), item(1, "B", "USD", 2, MAX_MINOR), item(3, "C", "LBP", 0, 100)] })));
+      tick("A");
+      expect(headerLines()[0]).toMatch(/^\$/);
+      tick("B"); tick("C");
+      const lines = headerLines();
+      expect(lines[0]).toBe(t.totalTooLarge.replace("<bdi>{currency}</bdi>", "USD"));
+      expect(lines[1]).toBe("LBP 100");
+      expect(barLines()[0]).toContain("USD:");
+    });
+
+    it("a row that is still saving cannot be ticked, like the rest of its row", async () => {
+      let finish!: (value: { ok: true; createdAt: string; updatedAt: string }) => void;
+      mocks.addItem.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+      render(view(locale, folderOf()));
+      const name = screen.getByRole("textbox", { name: t.itemName }) as HTMLInputElement;
+      fireEvent.change(name, { target: { value: "Monitor" } });
+      fireEvent.change(screen.getByRole("textbox", { name: t.price }), { target: { value: "199.99" } });
+      await act(async () => { fireEvent.submit(name.form!); });
+      expect(pick("Monitor").disabled).toBe(true);
+      expect(within(rowOf("Monitor")).queryByRole("button")).toBeNull();
+      // Select all leaves it out until it is saved.
+      fireEvent.click(screen.getByRole("button", { name: t.selectAll }));
+      expect(within(header()).getByText(selectedLabel(5))).toBeTruthy();
+      expect(pick("Monitor").checked).toBe(false);
+      expect(screen.queryByRole("button", { name: t.selectAll })).toBeNull();
+      const now = serverNow();
+      await act(async () => { finish({ ok: true, createdAt: now, updatedAt: now }); });
+      expect(pick("Monitor").disabled).toBe(false);
+      expect(screen.getByRole("button", { name: t.selectAll })).toBeTruthy();
+    });
+
+    it("selects rows added by anyone, including someone else's arriving live", async () => {
+      render(view(locale, shared()));
+      await act(async () => {});
+      act(() => channel().emit("invoice_items", { eventType: "INSERT", old: {}, new: {
+        id: idOf(6), folder_id: FOLDER, category_id: OTHER, name: "Monitor", currency: "USD", decimal_places: 2, price_minor: 20_000,
+        created_by: KARIM, updated_by: KARIM, created_at: item(6, "", "USD", 2, 0).createdAt, updated_at: item(6, "", "USD", 2, 0).updatedAt } }));
+      tick("Monitor");
+      expect(headerLines()).toEqual(["$200.00"]);
+    });
+
+    it("selection survives an edit of the ticked row, and the selected total follows the new price", async () => {
+      render(view(locale, folderOf()));
+      tick("GPU");
+      openRow("GPU");
+      const dialog = await screen.findByRole("dialog", { name: t.editTitle });
+      fireEvent.change(within(dialog).getByRole("textbox", { name: t.price }), { target: { value: "400" } });
+      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t.saveItem })); });
+      expect(pick("GPU").checked).toBe(true);
+      expect(headerLines()).toEqual(["$400.00"]);
+    });
+
+    it("a row deleted here leaves the selection, and Undo brings it back unticked", async () => {
+      render(view(locale, folderOf()));
+      tick("GPU"); tick("CPU");
+      openRow("GPU");
+      const dialog = await screen.findByRole("dialog", { name: t.editTitle });
+      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t.deleteItem })); });
+      expect(within(header()).getByText(selectedLabel(1))).toBeTruthy();
+      expect(headerLines()).toEqual(["$250.00"]);
+      const undo = mocks.toast.mock.calls.at(-1)![1].action.onClick as () => void;
+      await act(async () => { undo(); });
+      expect(rowOf("GPU")).toBeTruthy();
+      expect(pick("GPU").checked).toBe(false);
+      expect(pick("CPU").checked).toBe(true);
+      expect(within(header()).getByText(selectedLabel(1))).toBeTruthy();
+      expect(headerLines()).toEqual(["$250.00"]);
+    });
+
+    it("deleting the only ticked row clears the bar", async () => {
+      render(view(locale, folderOf()));
+      tick("GPU");
+      openRow("GPU");
+      const dialog = await screen.findByRole("dialog", { name: t.editTitle });
+      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t.deleteItem })); });
+      expect(bar()).toBeNull();
+      expect(within(header()).getByText(selectedLabel(0))).toBeTruthy();
+    });
+
+    it("a row deleted by someone else leaves the selection, and does not return ticked if it comes back", async () => {
+      render(view(locale, shared()));
+      await act(async () => {});
+      tick("GPU"); tick("Case");
+      act(() => channel().emit("invoice_items", { eventType: "DELETE", new: {}, old: { id: idOf(2) } }));
+      expect(screen.queryByText("GPU", { selector: "bdi" })).toBeNull();
+      expect(within(header()).getByText(selectedLabel(1))).toBeTruthy();
+      expect(headerLines()).toEqual(["$100.00"]);
+      // Someone's Undo brings it back later.
+      act(() => channel().emit("invoice_items", { eventType: "INSERT", old: {}, new: {
+        id: idOf(2), folder_id: FOLDER, category_id: OTHER, name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45_000,
+        created_by: KARIM, updated_by: KARIM, created_at: item(2, "", "USD", 2, 0).createdAt, updated_at: "2026-11-09T12:00:00Z" } }));
+      expect(pick("GPU").checked).toBe(false);
+      expect(within(header()).getByText(selectedLabel(1))).toBeTruthy();
+    });
+
+    it("a row missing from a refreshed page leaves the selection", () => {
+      const { rerender } = render(view(locale, shared()));
+      tick("GPU"); tick("CPU");
+      rerender(view(locale, { ...shared(), items: pcItems.filter((row) => row.name !== "GPU") }));
+      expect(within(header()).getByText(selectedLabel(1))).toBeTruthy();
+      rerender(view(locale, { ...shared(), items: pcItems }));
+      expect(pick("GPU").checked).toBe(false);
+      expect(pick("CPU").checked).toBe(true);
+    });
+  });
+
+  describe("categories", () => {
+    const CASE_ID = "1c000000-0000-4000-8000-000000000002";
+    const caseCategory: InvoiceCategory = { id: CASE_ID, folderId: FOLDER, name: "Case & Cooling", isDefault: false, createdAt: "2026-11-02T00:00:00Z" };
+    const sorted = () => folderOf({
+      categories: [caseCategory, otherCategory],
+      items: [{ ...item(3, "Case", "USD", 2, 10_000), categoryId: CASE_ID }, item(2, "GPU", "USD", 2, 45_000)],
+    });
+
+    it("shows rows under their category with a subtotal, custom categories first and \"Other\" last", () => {
+      render(view(locale, sorted()));
+      const t = catalogsT();
+      const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+      expect(headings).toEqual(["Case & Cooling(1)", `${t.categoryOther}(1)`]);
+      const group = screen.getByRole("list", { name: "Case & Cooling" });
+      expect(within(group).getByText("Case", { selector: "bdi" })).toBeTruthy();
+      expect(within(screen.getByRole("list", { name: t.categoryTotalsLabel.replace("{name}", "Case & Cooling") })).getByText(/100\.00/)).toBeTruthy();
+    });
+
+    it("shows no headings while the folder only has \"Other\"", () => {
+      render(view(locale, folderOf()));
+      expect(screen.queryAllByRole("heading", { level: 2 })).toHaveLength(0);
+    });
+
+    it("starts with every category open, and a category can be closed and opened again", () => {
+      render(view(locale, sorted()));
+      const toggles = screen.getAllByRole("button", { expanded: true });
+      expect(toggles.map((b) => b.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
+      const caseToggle = screen.getByRole("button", { name: /Case & Cooling/ });
+      fireEvent.click(caseToggle);
+      expect(caseToggle.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByRole("list", { name: "Case & Cooling" })).toBeNull(); // hidden from the accessibility tree
+      expect(screen.getByText("GPU", { selector: "bdi" })).toBeTruthy(); // the other group is untouched
+      fireEvent.click(caseToggle);
+      expect(caseToggle.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByRole("list", { name: "Case & Cooling" })).toBeTruthy();
+    });
+
+    it("puts a row of a category this screen does not know under \"Other\"", () => {
+      render(view(locale, folderOf({ categories: [caseCategory, otherCategory], items: [{ ...item(3, "Case", "USD", 2, 10_000), categoryId: "1c000000-0000-4000-8000-0000000000ff" }] })));
+      expect(within(screen.getByRole("list", { name: catalogsT().categoryOther })).getByText("Case", { selector: "bdi" })).toBeTruthy();
+    });
+  });
+
   describe("live updates", () => {
     const channel = () => mocks.realtime!.active()[0];
     const remoteRow = (n: number, name: string, priceMinor: number, createdBy = KARIM) => {
       const row = item(n, name, "USD", 2, priceMinor, createdBy);
-      return { id: row.id, folder_id: FOLDER, name, currency: "USD", decimal_places: 2, price_minor: priceMinor,
+      return { id: row.id, folder_id: FOLDER, category_id: OTHER, name, currency: "USD", decimal_places: 2, price_minor: priceMinor,
         created_by: createdBy, updated_by: createdBy, created_at: row.createdAt, updated_at: row.updatedAt };
     };
     const shared = () => folderOf({ isOwner: false, members: [person(KARIM, "Karim", true), person(VIEWER, "Dana")] });
@@ -507,7 +791,7 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       const createdAt = new Date().toISOString();
       for (let echo = 0; echo < 2; echo++) {
         act(() => channel().emit("invoice_items", { eventType: "INSERT", old: {}, new: {
-          id: sent.id, folder_id: FOLDER, name: "Monitor", currency: "USD", decimal_places: 2, price_minor: 19_999,
+          id: sent.id, folder_id: FOLDER, category_id: OTHER, name: "Monitor", currency: "USD", decimal_places: 2, price_minor: 19_999,
           created_by: VIEWER, updated_by: VIEWER, created_at: createdAt, updated_at: createdAt } }));
       }
       const names = within(list()).getAllByRole("listitem").map((row) => row.querySelector("bdi:not([dir])")?.textContent);

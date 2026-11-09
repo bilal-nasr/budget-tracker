@@ -4,16 +4,19 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { actionClient, databaseActionError, type ActionError, type ActionResult } from "@/lib/supabase/action";
 import {
-  folderCreateSchema, folderRenameSchema, itemCreateSchema, itemEditSchema, personNameSchema, tokenSchema,
-  type FolderCreateInput, type ItemCreateInput, type ItemEditInput, type SavedTimes,
+  categoryCreateSchema, categoryRenameSchema, folderCreateSchema, folderRenameSchema, itemCreateSchema, itemEditSchema, personNameSchema, tokenSchema,
+  type CategoryCreateInput, type FolderCreateInput, type ItemCreateInput, type ItemEditInput, type SavedTimes,
 } from "./schema";
 
 const idSchema = z.uuid();
 type DatabaseError = { code?: string; message?: string };
 
-/** A duplicate key here means a reused id, never a duplicate currency. */
+/**
+ * A duplicate key here means a reused id or name, never a duplicate currency; a missing foreign
+ * key means a category someone deleted meanwhile. Both are "changed meanwhile".
+ */
 function databaseError(error: DatabaseError): ActionError {
-  return error.code === "23505" ? "conflict" : databaseActionError(error);
+  return error.code === "23505" || error.code === "23503" ? "conflict" : databaseActionError(error);
 }
 
 /**
@@ -97,17 +100,69 @@ export async function deleteFolder(id: string): Promise<ActionResult> {
   } catch { return { ok: false, error: "failed" }; }
 }
 
+/**
+ * Categories. Everyone in the folder can add, rename and delete them (the database enforces it).
+ * `isLimit` covers the 30-category cap; a name already used in the folder is a `conflict`.
+ */
+export async function addCategory(input: CategoryCreateInput): Promise<ActionResult> {
+  const parsed = categoryCreateSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    // The id is chosen by the sheet, so a retry after a lost response is a no-op.
+    const { data, error } = await ctx.supabase.from("invoice_categories")
+      .upsert({ id: parsed.data.id, folder_id: parsed.data.folderId, name: parsed.data.name }, { onConflict: "id", ignoreDuplicates: true }).select("id");
+    if (error && !isDuplicate(error) && !isLimit(error)) return { ok: false, error: databaseError(error) };
+    if (error || !data?.length) {
+      // Skipped: fine only if that category is already there in this folder (a retry); otherwise the name or id is taken.
+      const mine = await ctx.supabase.from("invoice_categories").select("id").eq("id", parsed.data.id).eq("folder_id", parsed.data.folderId).maybeSingle();
+      if (mine.error) return { ok: false, error: "failed" };
+      if (!mine.data) return { ok: false, error: error && isLimit(error) ? "limitReached" : "conflict" };
+    }
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+export async function renameCategory(id: string, input: { name: string }): Promise<ActionResult> {
+  const parsed = categoryRenameSchema.safeParse(input);
+  if (!idSchema.safeParse(id).success || !parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const { data, error } = await ctx.supabase.from("invoice_categories").update({ name: parsed.data.name }).eq("id", id).select("id");
+    if (error) return { ok: false, error: databaseError(error) };
+    if (!data?.length) return { ok: false, error: "conflict" };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+/** The category's rows move to "Other". "Other" itself cannot be deleted; a category already gone counts as deleted. */
+export async function deleteCategory(id: string): Promise<ActionResult> {
+  if (!idSchema.safeParse(id).success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const { error } = await ctx.supabase.rpc("delete_invoice_category", { p_category: id });
+    if (error) return { ok: false, error: databaseError(error) };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
 /** Answers with the saved row's server timestamps (also for a retry of a row already saved). */
 export async function addItem(input: ItemCreateInput): Promise<ActionResult<SavedTimes>> {
   const parsed = itemCreateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const { id, folderId, name, currency, decimalPlaces, priceMinor, expectedUnits } = parsed.data;
+  const { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, expectedUnits } = parsed.data;
   try {
     const ctx = await actionClient(expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
     // The id is chosen by the form, so a retry after a lost response is a no-op.
     const { data, error } = await ctx.supabase.from("invoice_items")
-      .upsert({ id, folder_id: folderId, name, currency, decimal_places: decimalPlaces, price_minor: priceMinor }, { onConflict: "id", ignoreDuplicates: true })
+      .upsert({ id, folder_id: folderId, category_id: categoryId, name, currency, decimal_places: decimalPlaces, price_minor: priceMinor }, { onConflict: "id", ignoreDuplicates: true })
       .select(SAVED_COLUMNS);
     if (error && !isDuplicate(error) && !isLimit(error)) return { ok: false, error: itemWriteError(error) };
     let row = error ? undefined : data?.[0];
@@ -131,12 +186,12 @@ export async function addItem(input: ItemCreateInput): Promise<ActionResult<Save
 export async function updateItem(id: string, input: ItemEditInput): Promise<ActionResult<SavedTimes>> {
   const parsed = itemEditSchema.safeParse(input);
   if (!idSchema.safeParse(id).success || !parsed.success) return { ok: false, error: "invalid" };
-  const { name, priceMinor, currency, decimalPlaces } = parsed.data;
+  const { name, priceMinor, categoryId, currency, decimalPlaces } = parsed.data;
   try {
     const ctx = await actionClient();
     if (ctx.error) return { ok: false, error: ctx.error };
     const { data, error } = await ctx.supabase.from("invoice_items")
-      .update({ name, price_minor: priceMinor, ...(currency !== undefined && decimalPlaces !== undefined ? { currency, decimal_places: decimalPlaces } : {}) })
+      .update({ name, price_minor: priceMinor, ...(categoryId !== undefined ? { category_id: categoryId } : {}), ...(currency !== undefined && decimalPlaces !== undefined ? { currency, decimal_places: decimalPlaces } : {}) })
       .eq("id", id).select(SAVED_COLUMNS);
     if (error) return { ok: false, error: itemWriteError(error) };
     if (!data?.length) return { ok: false, error: "conflict" };
@@ -194,13 +249,16 @@ export async function createOrRotateLink(folderId: string, ownerName?: string): 
   } catch { return { ok: false, error: "failed" }; }
 }
 
-/** Owner only. Nobody new can join; people already in the folder stay. */
-export async function disableLink(folderId: string): Promise<ActionResult> {
-  if (!idSchema.safeParse(folderId).success) return { ok: false, error: "invalid" };
+/**
+ * Owner only. The joining switch: off means nobody new can join with the link (it stays, so
+ * switching back on needs no new URL); people already in the folder stay either way.
+ */
+export async function setLinkEnabled(folderId: string, enabled: boolean): Promise<ActionResult> {
+  if (!idSchema.safeParse(folderId).success || typeof enabled !== "boolean") return { ok: false, error: "invalid" };
   try {
     const ctx = await actionClient();
     if (ctx.error) return { ok: false, error: ctx.error };
-    const { error } = await ctx.supabase.rpc("disable_invoice_link", { p_folder: folderId });
+    const { error } = await ctx.supabase.rpc("set_invoice_link_enabled", { p_folder: folderId, p_enabled: enabled });
     if (error) return { ok: false, error: databaseError(error) };
     revalidatePath("/", "layout");
     return { ok: true };

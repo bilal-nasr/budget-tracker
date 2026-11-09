@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, Pencil, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
@@ -14,20 +14,22 @@ import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
 import { addItem, deleteFolder, deleteItem, renameFolder, restoreItem, updateItem } from "@/features/invoices/actions";
-import { rowDefinition } from "@/features/invoices/display";
+import { categoryLabel, categoryOf, rowDefinition, sortCategories } from "@/features/invoices/display";
 import { invoiceErrorKey } from "@/features/invoices/errors";
 import type { InvoiceFolderDetail } from "@/features/invoices/queries";
-import { folderRenameSchema, MAX_NAME, type CurrencyTotal, type InvoiceItem, type ItemEditInput, type SavedTimes } from "@/features/invoices/schema";
+import { folderRenameSchema, MAX_NAME, type CurrencyTotal, type InvoiceCategory, type InvoiceItem, type ItemEditInput, type SavedTimes } from "@/features/invoices/schema";
 import { totalsByCurrency } from "@/features/invoices/totals";
 import { indexCurrencies, type CurrencyDefinition } from "@/lib/currency";
 import type { ActionResult } from "@/lib/supabase/action";
 import { Link, useRouter } from "@/i18n/navigation";
 import { AddInvoiceItemForm } from "./add-invoice-item-form";
+import { SelectedTotals, SelectionBar } from "./selection-bar";
 import { ShareSheet } from "./share-sheet";
 import { useLiveFolder } from "./use-live-folder";
 
 // Sheets load on first open; the folder renders without their code.
 const InvoiceItemSheet = dynamic(() => import("./invoice-item-sheet").then((m) => m.InvoiceItemSheet));
+const CategoriesSheet = dynamic(() => import("./categories-sheet").then((m) => m.CategoriesSheet));
 const ConfirmSheet = dynamic(() => import("@/components/ui/confirm-sheet").then((m) => m.ConfirmSheet));
 
 /** A finished change from someone else (arriving live), or a local one once it is saved. */
@@ -198,9 +200,10 @@ function orderTotals(totals: CurrencyTotal[], enabled: readonly CurrencyDefiniti
   return totals.map((total, at) => ({ total, at })).sort((a, b) => rank(a.total.currency) - rank(b.total.currency) || a.at - b.at).map(({ total }) => total);
 }
 
-type Sheet = { mode: "edit"; id: string } | { mode: "rename" } | { mode: "deleteFolder" } | null;
+type Sheet = { mode: "edit"; id: string } | { mode: "rename" } | { mode: "deleteFolder" } | { mode: "categories" } | null;
 
-const rowClass = "flex min-h-[60px] w-full items-center gap-3 px-3.5 py-3 text-start";
+const rowClass = "flex min-h-[60px] min-w-0 flex-1 items-center gap-3 py-3 pe-3.5 text-start";
+const totalKey = (total: Pick<CurrencyTotal, "currency" | "decimalPlaces">) => `${total.currency}:${total.decimalPlaces}`;
 const shellButton = "bg-shell-foreground/12 text-shell-foreground hover:bg-shell-foreground/20 focus-visible:ring-shell-foreground/60";
 
 /**
@@ -216,7 +219,7 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   const { items, isSaving, add, update, remove, restore, applyRemote } = useFolderItems(folder.items);
   const [sheet, setSheet] = useState<Sheet>(null);
   const close = () => setSheet(null);
-  const nameField = useRef<HTMLInputElement>(null);
+  const nameField = useRef<HTMLTextAreaElement>(null);
   // Rows whose removal by someone else was already announced while their edit was being saved.
   const announced = useRef(new Set<string>());
   // Set when the folder is gone for this viewer: nothing of it stays on screen while the list opens.
@@ -246,7 +249,44 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   const [name, setName] = useState(folder.name);
   if (serverName !== folder.name) { setServerName(folder.name); setName(folder.name); }
 
+  // Categories follow the server too, and a change made here shows at once (before the page refreshes).
+  const categoriesKey = useMemo(() => JSON.stringify(folder.categories), [folder.categories]);
+  const [categoryState, setCategoryState] = useState({ key: categoriesKey, list: folder.categories });
+  if (categoryState.key !== categoriesKey) setCategoryState({ key: categoriesKey, list: folder.categories });
+  const categories = categoryState.list;
+  const changeCategories = (change: (list: InvoiceCategory[]) => InvoiceCategory[]) =>
+    setCategoryState((current) => ({ key: current.key, list: sortCategories(change(current.list)) }));
+  // The category the add form uses next; it stays until changed, falling back to "Other" if it is deleted.
+  const [addCategory, setAddCategory] = useState<string | null>(null);
+  // Category groups the viewer folded away (on this screen only); every group starts open.
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+  const toggleGroup = (id: string) => setClosed((current) => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
+  const formCategory = categories.find((category) => category.id === addCategory)?.id ?? categories.find((category) => category.isDefault)?.id ?? categories[0]?.id ?? "";
+  // A row in a category this screen does not know (yet) sits under "Other".
+  const grouped = new Map<string, InvoiceItem[]>();
+  for (const row of items) {
+    const id = categoryOf(row.categoryId, categories) ?? row.categoryId;
+    grouped.set(id, [...(grouped.get(id) ?? []), row]);
+  }
+  const groups = categories.map((category) => ({ category, rows: grouped.get(category.id) ?? [] })).filter((group) => group.rows.length);
+  const headed = categories.length > 1;
+
   const totals = orderTotals(totalsByCurrency(items), enabledCurrencies, defaultCurrency);
+
+  // Ticked rows live on this screen only. A row that leaves the list (deleted here, by someone
+  // else, or gone from a refreshed page) leaves the selection too, so it is not ticked again if it returns.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const present = new Set(items.map((row) => row.id));
+  if ([...selected].some((id) => !present.has(id))) setSelected(new Set([...selected].filter((id) => present.has(id))));
+  const picked = items.filter((row) => selected.has(row.id));
+  // A row still being saved is not a button yet, so it cannot be ticked either.
+  const tickable = items.filter((row) => !isSaving(row.id));
+  const allPicked = tickable.length > 0 && tickable.every((row) => selected.has(row.id));
+  // Same order as the totals above; a currency that is not ticked simply has no line.
+  const rank = new Map(totals.map((total, at) => [totalKey(total), at]));
+  const pickedTotals = totalsByCurrency(picked).sort((a, b) => (rank.get(totalKey(a)) ?? totals.length) - (rank.get(totalKey(b)) ?? totals.length));
+  const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
+  const clearSelection = () => setSelected(new Set());
   const active = folder.members.filter((member) => !member.removed);
   const shared = active.length > 1;
   const people = new Map(active.map((member) => [member.userId, member]));
@@ -262,7 +302,7 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   };
 
   const save = async (row: InvoiceItem, input: ItemEditInput) => {
-    const next: InvoiceItem = { ...row, name: input.name, priceMinor: input.priceMinor,
+    const next: InvoiceItem = { ...row, name: input.name, priceMinor: input.priceMinor, categoryId: input.categoryId ?? row.categoryId,
       currency: input.currency ?? row.currency, decimalPlaces: input.decimalPlaces ?? row.decimalPlaces };
     announced.current.delete(row.id);
     const result = await update(next, () => updateItem(row.id, input));
@@ -313,9 +353,15 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
                 className={`block max-w-full whitespace-normal! [overflow-wrap:anywhere] font-bold tracking-[-0.025em] text-shell-foreground ${index === 0 ? "text-[40px] leading-[1.1]" : "text-[28px] leading-tight"}`} />}
           </li>)}
         </ul>
+        {/* One line is kept for every currency, so ticking never makes the header jump. */}
+        <div className="mt-2 text-[15px] text-shell-foreground" style={{ minHeight: `${22 + totals.length * 24}px` }}>
+          <p className="text-[13px] text-shell-muted">{t("selectedLabel", { count: picked.length })}</p>
+          {picked.length ? <SelectedTotals totals={pickedTotals} catalog={catalog} className="flex flex-col" lineClassName="text-[17px] leading-6 font-semibold" /> : null}
+        </div>
       </> : <p className="text-[15px] text-shell-muted">{t("folderEmptyLead")}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
         <ShareSheet folder={folder} />
+        <Button size="sm" className={shellButton} onClick={() => setSheet({ mode: "categories" })}><Tags aria-hidden />{t("categories")}</Button>
         {folder.isOwner ? <Button size="sm" className={shellButton} onClick={() => setSheet({ mode: "rename" })}><Pencil aria-hidden />{t("renameFolder")}</Button> : null}
       </div>
     </ScreenHeader>
@@ -323,30 +369,71 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
       <Link href="/invoices" className="-my-3 inline-flex min-h-11 items-center gap-1 self-start rounded-lg text-[15px] text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">
         <ChevronLeft aria-hidden className="size-4 rtl:-scale-x-100" />{t("backToFolders")}
       </Link>
-      <AddInvoiceItemForm nameRef={nameField} folderId={folder.id} viewerId={folder.viewerId} onAdd={(row, input) => add(row, () => addItem(input))} />
+      <AddInvoiceItemForm nameRef={nameField} folderId={folder.id} viewerId={folder.viewerId}
+        categories={categories} categoryId={formCategory} onCategoryChange={setAddCategory} onNewCategory={() => setSheet({ mode: "categories" })} onAdd={(row, input) => add(row, () => addItem(input))} />
       {items.length ? (
-        <ul aria-label={t("itemsLabel")} className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-          {items.map((row) => {
-            const saving = isSaving(row.id);
-            const body = <>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="min-w-0 font-medium [overflow-wrap:anywhere]"><bdi>{row.name}</bdi></span>
-                {shared ? <span className="min-w-0 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">{addedBy(row)}</span> : null}
-              </span>
-              <Amount minor={row.priceMinor} currency={rowDefinition(row, catalog)} className="shrink-0 text-[15px] font-semibold" />
-            </>;
-            return <li key={row.id} aria-busy={saving || undefined}>
-              {saving
-                ? <div className={`${rowClass} opacity-70`}>{body}</div>
-                : <button type="button" onClick={() => setSheet({ mode: "edit", id: row.id })}
-                  className={`${rowClass} hover:bg-accent/50 active:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`}>{body}</button>}
-            </li>;
-          })}
-        </ul>
+        <section className="flex flex-col gap-2">
+          <Button variant="ghost" size="sm" className="self-end" disabled={!tickable.length}
+            onClick={() => setSelected(allPicked ? new Set() : new Set(tickable.map((row) => row.id)))}>{t(allPicked ? "clearSelection" : "selectAll")}</Button>
+          <div className="flex flex-col gap-4">
+            {groups.map(({ category, rows }) => {
+              const label = categoryLabel(category, t("categoryOther"));
+              const subtotals = orderTotals(totalsByCurrency(rows), enabledCurrencies, defaultCurrency);
+              const folded = headed && closed.has(category.id);
+              return <div key={category.id} className="flex flex-col gap-0.5">
+                {headed ? <div className="flex items-center justify-between gap-3">
+                  <h2 className="min-w-0 flex-1 text-[15px] font-semibold">
+                    <button type="button" aria-expanded={!folded} aria-controls={`group-${category.id}`} onClick={() => toggleGroup(category.id)}
+                      className="-ms-1 flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-lg px-1 text-start hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring">
+                      <ChevronDown aria-hidden className={`size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${folded ? "-rotate-90 rtl:rotate-90" : ""}`} />
+                      <span className="min-w-0 [overflow-wrap:anywhere]"><bdi>{label}</bdi></span>
+                      <span className="shrink-0 text-[13px] font-normal text-muted-foreground">({rows.length})</span>
+                    </button>
+                  </h2>
+                  <ul aria-label={t("categoryTotalsLabel", { name: label })} className="flex min-w-0 flex-wrap justify-end gap-x-3 text-[13px] text-muted-foreground">
+                    {subtotals.map((total) => <li key={totalKey(total)}>
+                      {total.minor === null
+                        ? t.rich("totalTooLarge", { currency: total.currency, bdi: (chunks) => <bdi dir="ltr">{chunks}</bdi> })
+                        : <Amount minor={total.minor} currency={rowDefinition(total, catalog)} className="whitespace-normal! [overflow-wrap:anywhere]" />}
+                    </li>)}
+                  </ul>
+                </div> : null}
+                <ul id={`group-${category.id}`} hidden={folded} aria-label={headed ? label : t("itemsLabel")} className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+                {rows.map((row) => {
+                  const saving = isSaving(row.id);
+                  const on = selected.has(row.id);
+                  const body = <>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="min-w-0 font-medium [overflow-wrap:anywhere]"><bdi>{row.name}</bdi></span>
+                      {shared ? <span className="min-w-0 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">{addedBy(row)}</span> : null}
+                    </span>
+                    <Amount minor={row.priceMinor} currency={rowDefinition(row, catalog)} className="shrink-0 text-[15px] font-semibold" />
+                  </>;
+                  return <li key={row.id} aria-busy={saving || undefined} className={`flex items-stretch ${on ? "bg-secondary" : ""}`}>
+                    <label className={`grid w-12 shrink-0 place-items-center ${saving ? "opacity-70" : "cursor-pointer"}`}>
+                      <input type="checkbox" checked={on} disabled={saving} onChange={() => toggle(row.id)} aria-label={t("selectRow", { name: row.name })} className="size-5 accent-primary" />
+                    </label>
+                    {saving
+                      ? <div className={`${rowClass} opacity-70`}>{body}</div>
+                      : <button type="button" onClick={() => setSheet({ mode: "edit", id: row.id })}
+                        className={`${rowClass} hover:bg-accent/50 active:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring`}>{body}</button>}
+                  </li>;
+                })}
+                </ul>
+              </div>;
+            })}
+          </div>
+        </section>
       ) : <EmptyState title={t("emptyItemsTitle")} body={t("emptyItemsBody")} />}
+      {picked.length ? <SelectionBar count={picked.length} totals={pickedTotals} catalog={catalog} onClear={clearSelection} /> : null}
       {folder.isOwner ? <Button variant="destructive" className="self-start" onClick={() => setSheet({ mode: "deleteFolder" })}><Trash2 aria-hidden />{t("deleteFolder")}</Button> : null}
     </PageBody>
-    {target ? <InvoiceItemSheet key={target.id} item={target} onClose={close} onSave={(input) => save(target, input)} onDelete={() => removeRow(target)} /> : null}
+    {target ? <InvoiceItemSheet key={target.id} item={target} categories={categories} onClose={close} onSave={(input) => save(target, input)} onDelete={() => removeRow(target)} /> : null}
+    {sheet?.mode === "categories" ? <CategoriesSheet folderId={folder.id} categories={categories}
+      counts={new Map(groups.map((group) => [group.category.id, group.rows.length]))} onClose={close}
+      onAdded={(category) => { changeCategories((list) => [...list, category]); setAddCategory(category.id); }}
+      onRenamed={(id, next) => changeCategories((list) => list.map((category) => category.id === id ? { ...category, name: next } : category))}
+      onDeleted={(id) => changeCategories((list) => list.filter((category) => category.id !== id))} /> : null}
     {sheet?.mode === "rename" ? <RenameSheet folderId={folder.id} name={name} onClose={close} onRenamed={(next) => { setName(next); close(); toast(t("folderRenamed")); }} /> : null}
     {sheet?.mode === "deleteFolder" ? <DeleteFolderSheet folderId={folder.id} name={name} onClose={close} onDeleted={() => { router.push("/invoices"); router.refresh(); }} /> : null}
   </>;

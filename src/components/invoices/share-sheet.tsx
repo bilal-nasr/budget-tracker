@@ -7,8 +7,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmSheet } from "@/components/ui/confirm-sheet";
 import { SheetShell } from "@/components/ui/sheet-shell";
+import { Switch } from "@/components/ui/switch";
 import { TextField } from "@/components/ui/text-field";
-import { createOrRotateLink, disableLink, leaveFolder, removeMember, setMyName } from "@/features/invoices/actions";
+import { createOrRotateLink, leaveFolder, removeMember, setLinkEnabled, setMyName } from "@/features/invoices/actions";
 import { invoiceErrorKey } from "@/features/invoices/errors";
 import type { InvoiceFolderDetail } from "@/features/invoices/queries";
 import { MAX_PERSON_NAME, personNameSchema, type InvoiceMember } from "@/features/invoices/schema";
@@ -43,7 +44,7 @@ function useAction() {
 
 const Problem = ({ message }: { message: string | null }) => message ? <p role="alert" className="text-sm text-over">{message}</p> : null;
 
-type Confirm = { kind: "replace" } | { kind: "turnOff" } | { kind: "remove"; member: InvoiceMember } | { kind: "leave" };
+type Confirm = { kind: "replace" } | { kind: "remove"; member: InvoiceMember } | { kind: "leave" };
 
 /**
  * The Share button for the folder header and the sheet behind it: the invite link (owner only),
@@ -67,6 +68,9 @@ function ShareContent({ folder, onClose }: { folder: InvoiceFolderDetail; onClos
   const [serverLink, setServerLink] = useState(folder.link);
   const [link, setLink] = useState(folder.link);
   if (serverLink !== folder.link) { setServerLink(folder.link); setLink(folder.link); }
+  const [serverEnabled, setServerEnabled] = useState(folder.linkEnabled);
+  const [joinable, setJoinable] = useState(folder.linkEnabled);
+  if (serverEnabled !== folder.linkEnabled) { setServerEnabled(folder.linkEnabled); setJoinable(folder.linkEnabled); }
   const [removed, setRemoved] = useState<string[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
 
@@ -81,13 +85,14 @@ function ShareContent({ folder, onClose }: { folder: InvoiceFolderDetail; onClos
     <SheetShell open title={t("shareTitle")} onOpenChange={(next) => !next && onClose()}>
       <div className="flex flex-col gap-6">
         {folder.isOwner
-          ? <LinkSection folderId={folder.id} folderName={folder.name} link={link} needsOwnerName={needsOwnerName}
+          ? <LinkSection folderId={folder.id} folderName={folder.name} link={link} joinable={joinable} needsOwnerName={needsOwnerName}
             onLink={(token, ownerName) => {
               setLink(token);
               if (ownerName) setNames((current) => ({ ...current, [folder.viewerId]: ownerName }));
               router.refresh();
             }}
-            onReplace={() => setConfirm({ kind: "replace" })} onTurnOff={() => setConfirm({ kind: "turnOff" })} />
+            onJoinable={(next) => { setJoinable(next); toast(t(next ? "joinTurnedOn" : "joinTurnedOff")); router.refresh(); }}
+            onReplace={() => setConfirm({ kind: "replace" })} />
           : <p className="text-[15px] text-muted-foreground">{t("memberNote")}</p>}
 
         <section aria-labelledby={`${folder.id}-people`} className="flex flex-col gap-2">
@@ -130,13 +135,6 @@ function ShareContent({ folder, onClose }: { folder: InvoiceFolderDetail; onClos
         <p>{t("replaceHelp")}</p>
       </ConfirmAction>
     ) : null}
-    {confirm?.kind === "turnOff" ? (
-      <ConfirmAction title={t("turnOffTitle")} confirmLabel={t("turnOffConfirm")} cancelLabel={t("keepLinkOn")}
-        call={() => disableLink(folder.id)} onClose={() => setConfirm(null)}
-        onDone={() => { setLink(null); setConfirm(null); toast(t("linkTurnedOff")); router.refresh(); }}>
-        <p>{t("turnOffHelp")}</p>
-      </ConfirmAction>
-    ) : null}
     {confirm?.kind === "remove" ? (
       <ConfirmAction tone="danger" title={t("removeTitle")} confirmLabel={t("removePerson")} cancelLabel={t("keepPerson")}
         call={() => removeMember(folder.id, confirm.member.userId)} onClose={() => setConfirm(null)}
@@ -175,13 +173,18 @@ function ConfirmAction<T extends object>({ title, confirmLabel, cancelLabel, ton
   </ConfirmSheet>;
 }
 
-function LinkSection({ folderId, folderName, link, needsOwnerName, onLink, onReplace, onTurnOff }: {
-  folderId: string; folderName: string; link: string | null; needsOwnerName: boolean;
-  onLink: (token: string, ownerName?: string) => void; onReplace: () => void; onTurnOff: () => void;
+function LinkSection({ folderId, folderName, link, joinable, needsOwnerName, onLink, onJoinable, onReplace }: {
+  folderId: string; folderName: string; link: string | null; joinable: boolean; needsOwnerName: boolean;
+  onLink: (token: string, ownerName?: string) => void; onJoinable: (next: boolean) => void; onReplace: () => void;
 }) {
   const t = useTranslations("Invoices");
   const locale = useLocale();
   const create = useAction();
+  const toggle = useAction();
+  // While the request is out the switch already shows where it is going; a failure puts it back.
+  const [wanted, setWanted] = useState(joinable);
+  const switchOn = toggle.pending ? wanted : joinable;
+  const flip = (next: boolean) => { setWanted(next); toggle.run(() => setLinkEnabled(folderId, next), () => onJoinable(next)); };
   const formId = useId();
   const field = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
@@ -228,25 +231,37 @@ function LinkSection({ folderId, folderName, link, needsOwnerName, onLink, onRep
     catch { /* closing the device share sheet is not an error */ }
   };
 
+  // With joining off the link is kept but not shown: there is nothing to hand out until it is on again.
   return <div className="flex flex-col gap-3">
-    <p className="text-[15px] text-muted-foreground">{t("shareHelp")}</p>
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <label htmlFor={`${formId}-link`} className="text-sm font-medium">{t("linkLabel")}</label>
-        <span role="status" className="text-[13px] text-muted-foreground">{note}</span>
+    {joinable ? <>
+      <p className="text-[15px] text-muted-foreground">{t("shareHelp")}</p>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+          <label htmlFor={`${formId}-link`} className="text-sm font-medium">{t("linkLabel")}</label>
+          <span role="status" className="text-[13px] text-muted-foreground">{note}</span>
+        </div>
+        <input ref={field} id={`${formId}-link`} readOnly dir="ltr" value={url} autoComplete="off" spellCheck={false}
+          onFocus={(event) => event.currentTarget.select()}
+          className="h-12 w-full min-w-0 rounded-lg border border-input bg-background px-3.5 text-start text-base text-foreground select-all outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40" />
       </div>
-      <input ref={field} id={`${formId}-link`} readOnly dir="ltr" value={url} autoComplete="off" spellCheck={false}
-        onFocus={(event) => event.currentTarget.select()}
-        className="h-12 w-full min-w-0 rounded-lg border border-input bg-background px-3.5 text-start text-base text-foreground select-all outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40" />
-    </div>
-    <div className="flex flex-wrap gap-2">
-      <Button className="min-w-0 flex-1" onClick={() => void copy()}><Copy aria-hidden />{t("copyLink")}</Button>
-      {canShare ? <Button variant="outline" className="min-w-0 flex-1" onClick={() => void send()}><Share2 aria-hidden />{t("shareLink")}</Button> : null}
-    </div>
-    <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button className="min-w-0 flex-1" onClick={() => void copy()}><Copy aria-hidden />{t("copyLink")}</Button>
+        {canShare ? <Button variant="outline" className="min-w-0 flex-1" onClick={() => void send()}><Share2 aria-hidden />{t("shareLink")}</Button> : null}
+      </div>
+    </> : null}
+
+    <label className="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-border bg-background py-2 ps-3.5 pe-3">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span id={`${formId}-join`} className="font-medium">{t("joinSwitch")}</span>
+        <span id={`${formId}-join-help`} className="text-[13px] text-muted-foreground">{t(joinable ? "joinSwitchOn" : "joinSwitchOff")}</span>
+      </span>
+      <Switch checked={switchOn} onChange={flip} disabled={toggle.pending} aria-labelledby={`${formId}-join`} aria-describedby={`${formId}-join-help`} />
+    </label>
+    <Problem message={toggle.error} />
+
+    {joinable ? <div className="flex flex-wrap gap-2">
       <Button variant="outline" size="sm" onClick={onReplace}>{t("replaceLink")}</Button>
-      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={onTurnOff}>{t("turnOffLink")}</Button>
-    </div>
+    </div> : null}
   </div>;
 }
 

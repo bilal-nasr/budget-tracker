@@ -26,7 +26,7 @@ it.each(["en", "ar"])("a folder the viewer cannot open (missing, never joined or
 });
 
 it("renders the folder for an active member", async () => {
-  const folder = { id: FOLDER, name: "PC build", isOwner: true, viewerId: "v", items: [], members: [], link: null };
+  const folder = { id: FOLDER, name: "PC build", isOwner: true, viewerId: "v", items: [], members: [], link: null, linkEnabled: true };
   mocks.getInvoiceFolder.mockResolvedValue(folder);
   const element = await page();
   expect(element.props.folder).toBe(folder);

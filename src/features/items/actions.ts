@@ -6,10 +6,10 @@ import { getProfile } from "@/features/profile/queries";
 import { todayIn } from "@/features/transactions/group";
 import { createTransactionCore, type TransactionMutation } from "@/features/transactions/mutations-core";
 import { sumMinor } from "@/lib/money";
-import { actionClient, type ActionError, type ActionResult } from "@/lib/supabase/action";
+import { actionClient, databaseActionError, type ActionError, type ActionResult } from "@/lib/supabase/action";
 import {
-  itemBuySchema, itemCreateSchema, itemEditSchema,
-  type ItemBuyInput, type ItemCreateInput, type ItemEditInput,
+  itemBuySchema, itemCreateSchema, itemEditSchema, itemMoveSchema,
+  type ItemBuyInput, type ItemCreateInput, type ItemEditInput, type ItemMoveInput,
 } from "./schema";
 
 const idSchema = z.uuid();
@@ -61,6 +61,57 @@ export async function deleteItem(id: string): Promise<ActionResult> {
     if (error) return { ok: false, error: databaseError(error) };
     revalidatePath("/", "layout");
     return { ok: true };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+/** Same mapping as the folder screen's own row writes: a disabled currency is `currencyUnavailable`, a lost seat in the folder a `conflict`. */
+function moveError(error: { code?: string; message?: string }): ActionError {
+  return error.code === "P0001" && error.message === "invoices.invalid" ? "currencyUnavailable" : databaseActionError(error);
+}
+
+/**
+ * "Move to folder": the chosen items become rows of an invoice folder and leave the list. Nothing
+ * reaches Activity. The rows reuse the items' ids, so a retry (or a lost response) never
+ * duplicates them: items already moved are recognised in the folder and only the rest is done.
+ * The insert is one statement, so a full folder moves nothing.
+ */
+export async function moveItemsToFolder(input: ItemMoveInput): Promise<ActionResult<{ moved: number }>> {
+  const parsed = itemMoveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { folderId, itemIds, expectedUnits } = parsed.data;
+  try {
+    const ctx = await actionClient(expectedUnits);
+    if (ctx.error) return { ok: false, error: ctx.error };
+
+    const found = await ctx.supabase.from("shopping_item_status").select("id,name,currency,price_minor,bought_on").in("id", itemIds);
+    if (found.error) return { ok: false, error: "failed" };
+    const rows = found.data ?? [];
+    if (rows.some((row) => row.bought_on !== null)) return { ok: false, error: "conflict" };
+
+    const present = new Set(rows.map((row) => row.id as string));
+    const missing = itemIds.filter((id) => !present.has(id));
+    if (missing.length) {
+      // Gone from the list: fine only if an earlier attempt already put them in this folder.
+      const moved = await ctx.supabase.from("invoice_items").select("id").eq("folder_id", folderId).in("id", missing);
+      if (moved.error) return { ok: false, error: "failed" };
+      if ((moved.data?.length ?? 0) !== missing.length) return { ok: false, error: "conflict" };
+    }
+
+    if (rows.length) {
+      const inserts = [];
+      for (const row of rows) {
+        const decimalPlaces = expectedUnits[row.currency as string];
+        if (decimalPlaces === undefined) return { ok: false, error: "invalid" };
+        inserts.push({ id: row.id as string, folder_id: folderId, name: row.name as string, currency: row.currency as string, decimal_places: decimalPlaces, price_minor: Number(row.price_minor) });
+      }
+      const { error } = await ctx.supabase.from("invoice_items").upsert(inserts, { onConflict: "id", ignoreDuplicates: true });
+      if (error) return { ok: false, error: moveError(error) };
+      // A failed delete leaves the rows in both places; the same request completes it.
+      const removed = await ctx.supabase.from("shopping_items").delete().in("id", rows.map((row) => row.id as string)).eq("user_id", ctx.userId);
+      if (removed.error) return { ok: false, error: "failed" };
+    }
+    revalidatePath("/", "layout");
+    return { ok: true, moved: itemIds.length };
   } catch { return { ok: false, error: "failed" }; }
 }
 

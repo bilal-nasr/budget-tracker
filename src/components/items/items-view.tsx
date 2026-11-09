@@ -3,7 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
-import { Check, Trash2, X } from "lucide-react";
+import { Check, FolderInput, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRuntimeBalances } from "@/components/add/runtime-balances";
 import { TileBar } from "@/components/budget/tile-bar";
@@ -13,9 +13,10 @@ import { EmptyState } from "@/components/shell/empty-state";
 import { PageBody } from "@/components/shell/page-body";
 import { ScreenHeader } from "@/components/shell/screen-header";
 import { Button } from "@/components/ui/button";
+import type { InvoiceFolderChoice } from "@/features/invoices/choices";
 import { createItem, deleteItem } from "@/features/items/actions";
 import { itemErrorKey } from "@/features/items/errors";
-import { MAX_BUY_ITEMS, type ItemCreateInput, type ShoppingItem } from "@/features/items/schema";
+import { MAX_BUY_ITEMS, MAX_MOVE_ITEMS, type ItemCreateInput, type ShoppingItem } from "@/features/items/schema";
 import { sumMinor } from "@/lib/money";
 import { Link } from "@/i18n/navigation";
 import { AddItemForm } from "./add-item-form";
@@ -23,9 +24,10 @@ import { AddItemForm } from "./add-item-form";
 // Sheets load on first open; the list renders without their code.
 const ItemSheet = dynamic(() => import("./item-sheet").then((m) => m.ItemSheet));
 const BuySheet = dynamic(() => import("./buy-sheet").then((m) => m.BuySheet));
+const MoveSheet = dynamic(() => import("./move-sheet").then((m) => m.MoveSheet));
 const ConfirmSheet = dynamic(() => import("@/components/ui/confirm-sheet").then((m) => m.ConfirmSheet));
 
-type SheetState = { mode: "edit" | "buy" | "delete"; ids: string[] } | null;
+type SheetState = { mode: "edit" | "buy" | "move" | "delete"; ids: string[] } | null;
 
 function totalOf(items: readonly ShoppingItem[]): number | null {
   try { return sumMinor(items.map((item) => item.priceMinor)); } catch { return null; }
@@ -35,7 +37,7 @@ function totalOf(items: readonly ShoppingItem[]): number | null {
  * Price things, tick some to total just those, and say "I bought this" to put them in
  * Activity. Every total is per currency: tabs pick the currency, nothing is ever mixed.
  */
-export function ItemsView({ items }: { items: ShoppingItem[] }) {
+export function ItemsView({ items, folders = [] }: { items: ShoppingItem[]; folders?: InvoiceFolderChoice[] }) {
   const t = useTranslations("Items");
   const locale = useLocale();
   const { enabledCurrencies: catalog, defaultCurrency } = useRuntimeBalances();
@@ -118,13 +120,18 @@ export function ItemsView({ items }: { items: ShoppingItem[] }) {
           })}
         </ul>
       </section> : null}
-      {picked.length ? <div className="sticky bottom-[calc(124px+var(--safe-bottom))] z-20 flex items-center gap-2 rounded-xl border border-border bg-card p-2 ps-3.5 md:bottom-4">
-        <p className="min-w-0 flex-1 text-sm">
-          <span className="block text-muted-foreground">{t("selectedLabel", { count: picked.length })}</span>
-          {pickedTotal === null ? null : <Amount minor={pickedTotal} currency={code} className="text-[17px] font-semibold" />}
-        </p>
-        <Button variant="ghost" size="icon" aria-label={t("clearSelection")} onClick={() => setSelected(new Set())}><X aria-hidden /></Button>
-        <Button disabled={picked.length > MAX_BUY_ITEMS} onClick={() => setSheet({ mode: "buy", ids: picked.map((item) => item.id) })}><Check aria-hidden />{t("buySelected", { count: picked.length })}</Button>
+      {picked.length ? <div role="region" aria-label={t("selectionBarLabel")} className="sticky bottom-[calc(124px+var(--safe-bottom))] z-20 flex flex-col gap-2 rounded-xl border border-border bg-card p-2 ps-3.5 md:bottom-4">
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 text-sm">
+            <span className="block text-muted-foreground">{t("selectedLabel", { count: picked.length })}</span>
+            {pickedTotal === null ? null : <Amount minor={pickedTotal} currency={code} className="text-[17px] font-semibold" />}
+          </p>
+          <Button variant="ghost" size="icon" aria-label={t("clearSelection")} onClick={() => setSelected(new Set())}><X aria-hidden /></Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 pe-0.5">
+          <Button variant="outline" disabled={picked.length > MAX_MOVE_ITEMS} onClick={() => setSheet({ mode: "move", ids: picked.map((item) => item.id) })}><FolderInput aria-hidden />{t("moveToFolder")}</Button>
+          <Button disabled={picked.length > MAX_BUY_ITEMS} onClick={() => setSheet({ mode: "buy", ids: picked.map((item) => item.id) })}><Check aria-hidden />{t("buySelected", { count: picked.length })}</Button>
+        </div>
       </div> : null}
       {picked.length > MAX_BUY_ITEMS ? <p role="status" className="text-sm">{t("tooMany", { max: MAX_BUY_ITEMS })}</p> : null}
       {bought.length ? <details>
@@ -145,6 +152,7 @@ export function ItemsView({ items }: { items: ShoppingItem[] }) {
     </PageBody>
     {target[0] && sheet?.mode === "edit" ? <ItemSheet key={target[0].id} item={target[0]} onClose={close} onDelete={() => setSheet({ mode: "delete", ids: [target[0].id] })} /> : null}
     {target.length && sheet?.mode === "buy" ? <BuySheet key={sheet.ids.join()} items={target} onClose={close} onDone={() => setSelected(new Set())} /> : null}
+    {target.length && sheet?.mode === "move" ? <MoveSheet key={sheet.ids.join()} items={target} folders={folders} onClose={close} onDone={() => setSelected(new Set())} /> : null}
     {target[0] && sheet?.mode === "delete" ? <ConfirmSheet open tone="danger" title={t("confirmDelete")} onOpenChange={(open) => !open && !deleting && close()} confirmLabel={t("delete")} cancelLabel={t("cancel")} pending={deleting} onConfirm={remove}>
       <p><bdi>{target[0].name}</bdi></p><p>{t("deleteHelp")}</p>{deleteError ? <p role="alert">{deleteError}</p> : null}
     </ConfirmSheet> : null}

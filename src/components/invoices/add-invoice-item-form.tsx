@@ -6,15 +6,17 @@ import { useTranslations } from "next-intl";
 import { useMoneyDraftUnit } from "@/components/add/runtime-balances";
 import { useAppData } from "@/components/providers/app-data";
 import { Button } from "@/components/ui/button";
+import { TextAreaField } from "@/components/ui/text-area-field";
 import { TextField } from "@/components/ui/text-field";
 import { canAddIn } from "@/features/invoices/display";
 import { invoiceErrorKey } from "@/features/invoices/errors";
-import { itemCreateSchema, MAX_NAME, type InvoiceItem, type ItemCreateInput } from "@/features/invoices/schema";
+import { itemCreateSchema, MAX_ITEM_NAME, type InvoiceCategory, type InvoiceItem, type ItemCreateInput } from "@/features/invoices/schema";
 import { currencyIntent } from "@/lib/currency-intent";
 import { parseAmount } from "@/lib/money";
 import type { ActionResult } from "@/lib/supabase/action";
+import { CategorySelect, fieldSelectClass } from "./category-select";
 
-export const fieldSelectClass = "h-12 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
+export { fieldSelectClass };
 
 /**
  * Quick entry: name, price and one of the viewer's enabled currencies; Enter adds the row at
@@ -22,12 +24,18 @@ export const fieldSelectClass = "h-12 w-full min-w-0 rounded-lg border border-in
  * row. If the save fails the text comes back with the reason; a retry reuses the same id only
  * while the text is unchanged and the failure was not a `conflict` (the id is taken, so it
  * would fail again), so an edited retry is never swallowed as a duplicate of the old one.
- * `nameRef` lets the folder screen put focus back here (after a row is deleted).
+ * `nameRef` lets the folder screen put focus back here (after a row is deleted). The category
+ * is chosen by the folder screen (so a category made in the manager is picked at once) and stays
+ * for the next row, like the currency.
  */
-export function AddInvoiceItemForm({ folderId, viewerId, onAdd, nameRef: outerNameRef }: {
+export function AddInvoiceItemForm({ folderId, viewerId, categories, categoryId, onCategoryChange, onNewCategory, onAdd, nameRef: outerNameRef }: {
   folderId: string;
   viewerId: string;
-  nameRef?: React.RefObject<HTMLInputElement | null>;
+  categories: readonly InvoiceCategory[];
+  categoryId: string;
+  onCategoryChange: (categoryId: string) => void;
+  onNewCategory: () => void;
+  nameRef?: React.RefObject<HTMLTextAreaElement | null>;
   onAdd: (item: InvoiceItem, input: ItemCreateInput) => Promise<ActionResult>;
 }) {
   const t = useTranslations("Invoices");
@@ -40,19 +48,19 @@ export function AddInvoiceItemForm({ folderId, viewerId, onAdd, nameRef: outerNa
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [fresh, setFresh] = useState(() => crypto.randomUUID());
-  const [retry, setRetry] = useState<{ id: string; name: string; text: string; currency: string } | null>(null);
+  const [retry, setRetry] = useState<{ id: string; name: string; text: string; currency: string; categoryId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const ownNameRef = useRef<HTMLInputElement>(null);
+  const ownNameRef = useRef<HTMLTextAreaElement>(null);
   const nameRef = outerNameRef ?? ownNameRef;
   const priceRef = useRef<HTMLInputElement>(null);
   const currencyRef = useRef<HTMLSelectElement>(null);
   const currencyId = useId();
   useMoneyDraftUnit(unit, () => setText(""), !!unit);
 
-  const id = retry && retry.name === name && retry.text === text && retry.currency === code ? retry.id : fresh;
+  const id = retry && retry.name === name && retry.text === text && retry.currency === code && retry.categoryId === categoryId ? retry.id : fresh;
   const minor = unit ? parseAmount(text, unit) : null;
   const parsed = itemCreateSchema.safeParse({
-    expectedUnits: currencyIntent(unit), id, folderId, name, currency: code, decimalPlaces: unit?.decimalPlaces, priceMinor: minor,
+    expectedUnits: currencyIntent(unit), id, folderId, categoryId, name, currency: code, decimalPlaces: unit?.decimalPlaces, priceMinor: minor,
   });
   const valid = !!unit && canAddIn(code, currencies) && parsed.success;
 
@@ -64,7 +72,7 @@ export function AddInvoiceItemForm({ folderId, viewerId, onAdd, nameRef: outerNa
     nameRef.current?.focus();
     const now = new Date().toISOString();
     const item: InvoiceItem = {
-      id: input.id, folderId, name: input.name, currency: input.currency, decimalPlaces: input.decimalPlaces,
+      id: input.id, folderId, categoryId: input.categoryId, name: input.name, currency: input.currency, decimalPlaces: input.decimalPlaces,
       priceMinor: input.priceMinor, createdBy: viewerId, createdAt: now, updatedAt: now,
     };
     void onAdd(item, input).then((result) => {
@@ -75,7 +83,7 @@ export function AddInvoiceItemForm({ folderId, viewerId, onAdd, nameRef: outerNa
       if (!untouched) return;
       setName(draft.name); setText(draft.text);
       // A taken id would fail the same way again, so the next attempt gets the fresh id.
-      if (result.error !== "conflict") setRetry({ id: input.id, name: draft.name, text: draft.text, currency: input.currency });
+      if (result.error !== "conflict") setRetry({ id: input.id, name: draft.name, text: draft.text, currency: input.currency, categoryId: input.categoryId });
     });
   };
 
@@ -84,8 +92,8 @@ export function AddInvoiceItemForm({ folderId, viewerId, onAdd, nameRef: outerNa
   const many = currencies.length > 1;
   return (
     <form noValidate onSubmit={(event) => { event.preventDefault(); submit(); }} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3.5">
-      <TextField ref={nameRef} label={t("itemName")} placeholder={t("itemNamePlaceholder")} value={name} maxLength={MAX_NAME}
-        onChange={(event) => setName(event.target.value)} autoComplete="off" enterKeyHint="next" />
+      <TextAreaField ref={nameRef} label={t("itemName")} placeholder={t("itemNamePlaceholder")} value={name} maxLength={MAX_ITEM_NAME}
+        onChange={(event) => setName(event.target.value)} autoComplete="off" enterKeyHint="next" onEnter={() => priceRef.current?.focus()} />
       <div className={many ? "grid grid-cols-[minmax(0,1fr)_6.5rem] items-start gap-2.5" : "flex flex-col"}>
         <TextField ref={priceRef} label={many ? t("price") : t("priceIn", { currency: code })} value={text} onChange={(event) => setText(event.target.value)}
           inputMode={unit.decimalPlaces ? "decimal" : "numeric"} enterKeyHint="done"
@@ -98,6 +106,7 @@ export function AddInvoiceItemForm({ folderId, viewerId, onAdd, nameRef: outerNa
           </select>
         </div> : null}
       </div>
+      <CategorySelect categories={categories} value={categoryId} onChange={onCategoryChange} onNew={onNewCategory} />
       {error ? <p role="alert" className="text-sm text-over">{error}</p> : null}
       <Button type="submit" disabled={!valid}><Plus aria-hidden />{t("addItem")}</Button>
     </form>

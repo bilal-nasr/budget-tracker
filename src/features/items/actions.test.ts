@@ -4,10 +4,10 @@ type Result = { data?: unknown; error?: { code?: string; message?: string } | nu
 const mocks = vi.hoisted(() => ({ ctx: vi.fn(), invalidate: vi.fn(), create: vi.fn(), tables: {} as Record<string, unknown>, calls: [] as [string, string, unknown[]][] }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.invalidate }));
-vi.mock("@/lib/supabase/action", () => ({ actionClient: mocks.ctx }));
+vi.mock("@/lib/supabase/action", async (original) => ({ ...(await original<typeof import("@/lib/supabase/action")>()), actionClient: mocks.ctx }));
 vi.mock("@/features/profile/queries", () => ({ getProfile: async () => ({ timezone: "Asia/Beirut" }) }));
 vi.mock("@/features/transactions/mutations-core", () => ({ createTransactionCore: mocks.create }));
-import { buyItems, createItem, deleteItem, updateItem } from "./actions";
+import { buyItems, createItem, deleteItem, moveItemsToFolder, updateItem } from "./actions";
 
 const uid = (n: number) => `ac000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const [milk, bread, request, balance, category] = [uid(1), uid(2), uid(3), uid(4), uid(5)];
@@ -98,6 +98,72 @@ describe("buyItems", () => {
   it("reports preview mode", async () => {
     mocks.ctx.mockResolvedValueOnce({ error: "notConfigured" });
     expect(await buyItems(input)).toEqual({ ok: false, error: "notConfigured" });
+  });
+});
+
+describe("moveItemsToFolder", () => {
+  const folder = uid(20);
+  const move = { expectedUnits: { USD: 2 }, folderId: folder, itemIds: [milk, bread] };
+
+  it("validates before any database access", async () => {
+    expect(await moveItemsToFolder({ ...move, itemIds: [] })).toEqual({ ok: false, error: "invalid" });
+    expect(await moveItemsToFolder({ ...move, itemIds: [milk, milk] })).toEqual({ ok: false, error: "invalid" });
+    expect(await moveItemsToFolder({ ...move, folderId: "x" })).toEqual({ ok: false, error: "invalid" });
+    expect(await moveItemsToFolder({ ...move, expectedUnits: {} })).toEqual({ ok: false, error: "invalid" });
+    expect(mocks.ctx).not.toHaveBeenCalled();
+  });
+
+  it("adds the items as folder rows under their own ids, then removes them from the list", async () => {
+    mocks.tables.invoice_items = { data: [], error: null };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: true, moved: 2 });
+    expect(called("invoice_items", "upsert")[0][2]).toEqual([
+      [
+        { id: milk, folder_id: folder, name: "Milk", currency: "USD", decimal_places: 2, price_minor: 350 },
+        { id: bread, folder_id: folder, name: "Bread", currency: "USD", decimal_places: 2, price_minor: 150 },
+      ],
+      { onConflict: "id", ignoreDuplicates: true },
+    ]);
+    expect(called("shopping_items", "delete")).toHaveLength(1);
+    expect(called("shopping_items", "in")[0][2]).toEqual(["id", [milk, bread]]);
+    expect(mocks.invalidate).toHaveBeenCalledWith("/", "layout");
+  });
+
+  it("treats items already in the folder as moved (a retry after a lost response)", async () => {
+    mocks.tables.shopping_item_status = { data: [], error: null };
+    mocks.tables.invoice_items = { data: [{ id: milk }, { id: bread }], error: null };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: true, moved: 2 });
+    expect(called("invoice_items", "upsert")).toHaveLength(0);
+    expect(called("shopping_items", "delete")).toHaveLength(0);
+  });
+
+  it("refuses items that vanished, were bought or have no units", async () => {
+    mocks.tables.shopping_item_status = { data: [row(milk, "Milk", 350)], error: null };
+    mocks.tables.invoice_items = { data: [], error: null };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: false, error: "conflict" });
+    mocks.tables.shopping_item_status = { data: [row(milk, "Milk", 350, { bought_on: "2026-01-01", transaction_id: uid(8) }), row(bread, "Bread", 150)], error: null };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: false, error: "conflict" });
+    mocks.tables.shopping_item_status = { data: [row(milk, "Milk", 350), row(bread, "Bread", 150, { currency: "LBP" })], error: null };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: false, error: "invalid" });
+    expect(called("invoice_items", "upsert")).toHaveLength(0);
+    expect(called("shopping_items", "delete")).toHaveLength(0);
+  });
+
+  it("maps folder rules and keeps the items when the insert fails", async () => {
+    mocks.tables.invoice_items = { data: null, error: { code: "P0001", message: "invoices.limit" } };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: false, error: "limitReached" });
+    mocks.tables.invoice_items = { data: null, error: { code: "42501", message: "invoices.invalid" } };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: false, error: "conflict" });
+    mocks.tables.invoice_items = { data: null, error: { code: "P0001", message: "invoices.invalid" } };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: false, error: "currencyUnavailable" });
+    expect(called("shopping_items", "delete")).toHaveLength(0);
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed removal as retryable", async () => {
+    mocks.tables.invoice_items = { data: [], error: null };
+    mocks.tables.shopping_items = { data: null, error: { message: "boom" } };
+    expect(await moveItemsToFolder(move)).toEqual({ ok: false, error: "failed" });
+    expect(mocks.invalidate).not.toHaveBeenCalled();
   });
 });
 

@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase/action", async () => ({
   actionClient: mocks.ctx,
 }));
 import {
-  addItem, createFolder, createOrRotateLink, deleteFolder, deleteItem, disableLink, joinFolder,
+  addItem, createFolder, createOrRotateLink, deleteFolder, deleteItem, joinFolder, setLinkEnabled,
   leaveFolder, removeMember, renameFolder, restoreItem, setMyName, updateItem,
 } from "./actions";
 
@@ -43,7 +43,7 @@ const rpc = (name: string, args: unknown) => {
 const called = (table: string, method: string) => mocks.calls.filter(([t, m]) => t === table && m === method);
 const rpcCalled = (name: string) => mocks.rpcCalls.filter(([n]) => n === name);
 
-const newItem = { id: item, folderId: folder, name: " Cement ", currency: "usd", decimalPlaces: 2, priceMinor: 1500 };
+const newItem = { id: item, folderId: folder, categoryId: uid(7), name: " Cement ", currency: "usd", decimalPlaces: 2, priceMinor: 1500 };
 /** The saved row's timestamps as the database reports them (server clock). */
 const saved = { id: item, created_at: "2026-11-09T10:00:00.123456+00:00", updated_at: "2026-11-09T10:05:00.654321+00:00" };
 const savedTimes = { createdAt: saved.created_at, updatedAt: saved.updated_at };
@@ -75,7 +75,8 @@ describe("validation", () => {
       restoreItem("x"),
       createOrRotateLink("x"),
       createOrRotateLink(folder, "a".repeat(31)),
-      disableLink("x"),
+      setLinkEnabled("x", false),
+      setLinkEnabled(folder, "no" as unknown as boolean),
       joinFolder("short", "Karim"),
       joinFolder(token, "   "),
       joinFolder(token, "a".repeat(31)),
@@ -102,7 +103,7 @@ describe("preview mode", () => {
       deleteItem(item),
       restoreItem(item),
       createOrRotateLink(folder),
-      disableLink(folder),
+      setLinkEnabled(folder, false),
       joinFolder(token, "Karim"),
       setMyName(folder, "Karim"),
       removeMember(folder, other),
@@ -168,7 +169,7 @@ describe("addItem", () => {
     mocks.tables["invoice_items.upsert"] = { data: [saved], error: null };
     expect(await addItem(newItem)).toEqual({ ok: true, ...savedTimes });
     expect(called("invoice_items", "upsert")[0][2]).toEqual([
-      { id: item, folder_id: folder, name: "Cement", currency: "USD", decimal_places: 2, price_minor: 1500 },
+      { id: item, folder_id: folder, category_id: uid(7), name: "Cement", currency: "USD", decimal_places: 2, price_minor: 1500 },
       { onConflict: "id", ignoreDuplicates: true },
     ]);
     expect(called("invoice_items", "select")).toHaveLength(1);
@@ -326,9 +327,13 @@ describe("sharing", () => {
     expect(await createOrRotateLink(folder, "Sam")).toEqual({ ok: false, error: "failed" });
   });
 
-  it("switches the link off", async () => {
-    expect(await disableLink(folder)).toEqual({ ok: true });
-    expect(rpcCalled("disable_invoice_link")).toEqual([["disable_invoice_link", { p_folder: folder }]]);
+  it("switches joining off and on again without touching the link", async () => {
+    expect(await setLinkEnabled(folder, false)).toEqual({ ok: true });
+    expect(await setLinkEnabled(folder, true)).toEqual({ ok: true });
+    expect(rpcCalled("set_invoice_link_enabled")).toEqual([
+      ["set_invoice_link_enabled", { p_folder: folder, p_enabled: false }],
+      ["set_invoice_link_enabled", { p_folder: folder, p_enabled: true }],
+    ]);
   });
 
   it("joins through the RPC exactly once and returns the folder id", async () => {
