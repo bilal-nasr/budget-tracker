@@ -18,7 +18,7 @@ import { categoryLabel, categoryOf, rowDefinition, sortCategories } from "@/feat
 import { invoiceErrorKey } from "@/features/invoices/errors";
 import type { InvoiceFolderDetail } from "@/features/invoices/queries";
 import { folderRenameSchema, MAX_NAME, type CurrencyTotal, type InvoiceCategory, type InvoiceItem, type ItemEditInput, type SavedTimes } from "@/features/invoices/schema";
-import { totalsByCurrency } from "@/features/invoices/totals";
+import { lineMinor, totalsByCurrency } from "@/features/invoices/totals";
 import { indexCurrencies, type CurrencyDefinition } from "@/lib/currency";
 import type { ActionResult } from "@/lib/supabase/action";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -302,7 +302,7 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   };
 
   const save = async (row: InvoiceItem, input: ItemEditInput) => {
-    const next: InvoiceItem = { ...row, name: input.name, priceMinor: input.priceMinor, categoryId: input.categoryId ?? row.categoryId,
+    const next: InvoiceItem = { ...row, name: input.name, priceMinor: input.priceMinor, quantity: input.quantity, categoryId: input.categoryId ?? row.categoryId,
       currency: input.currency ?? row.currency, decimalPlaces: input.decimalPlaces ?? row.decimalPlaces };
     announced.current.delete(row.id);
     const result = await update(next, () => updateItem(row.id, input));
@@ -405,9 +405,13 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
                   const body = <>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="min-w-0 font-medium [overflow-wrap:anywhere]"><bdi>{row.name}</bdi></span>
-                      {shared ? <span className="min-w-0 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">{addedBy(row)}</span> : null}
+                      {row.quantity > 1 || shared ? <span className="min-w-0 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">
+                        {row.quantity > 1 ? <bdi dir="ltr">{row.quantity} × <Amount minor={row.priceMinor} currency={rowDefinition(row, catalog)} /></bdi> : null}
+                        {row.quantity > 1 && shared ? " · " : null}
+                        {shared ? addedBy(row) : null}
+                      </span> : null}
                     </span>
-                    <Amount minor={row.priceMinor} currency={rowDefinition(row, catalog)} className="shrink-0 text-[15px] font-semibold" />
+                    <Amount minor={lineMinor(row)} currency={rowDefinition(row, catalog)} className="shrink-0 text-[15px] font-semibold" />
                   </>;
                   return <li key={row.id} aria-busy={saving || undefined} className={`flex items-stretch ${on ? "bg-secondary" : ""}`}>
                     <label className={`grid w-12 shrink-0 place-items-center ${saving ? "opacity-70" : "cursor-pointer"}`}>

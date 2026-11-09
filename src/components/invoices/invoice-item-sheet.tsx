@@ -9,13 +9,14 @@ import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextAreaField } from "@/components/ui/text-area-field";
 import { TextField } from "@/components/ui/text-field";
-import { canAddIn, categoryOf, rowDefinition } from "@/features/invoices/display";
+import { canAddIn, categoryOf, parseQuantity, rowDefinition } from "@/features/invoices/display";
 import { invoiceErrorKey } from "@/features/invoices/errors";
 import { itemEditSchema, MAX_ITEM_NAME, type InvoiceCategory, type InvoiceItem, type ItemEditInput } from "@/features/invoices/schema";
 import { indexCurrencies } from "@/lib/currency";
 import { parseAmount, toInputText } from "@/lib/money";
 import type { ActionResult } from "@/lib/supabase/action";
 import { CategorySelect, fieldSelectClass } from "./category-select";
+import { LineTotal, QuantityField } from "./quantity-field";
 
 /**
  * Edit any row in the folder, whoever added it. The price keeps the row's own currency and
@@ -46,13 +47,15 @@ export function InvoiceItemSheet({ item, categories, onClose, onSave, onDelete }
   const ownCategory = categoryOf(item.categoryId, categories) ?? item.categoryId;
   const [categoryId, setCategoryId] = useState(ownCategory);
   const [text, setText] = useState(() => toInputText(item.priceMinor, own));
+  const [quantityText, setQuantityText] = useState(String(item.quantity));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   useMoneyDraftUnit(unit, () => setText(""), !!unit);
 
   const minor = unit ? parseAmount(text, unit) : null;
+  const quantity = parseQuantity(quantityText);
   const parsed = itemEditSchema.safeParse({
-    name, priceMinor: minor, ...(categoryId !== ownCategory ? { categoryId } : {}), ...(moving && unit ? { currency: unit.code, decimalPlaces: unit.decimalPlaces } : {}),
+    name, priceMinor: minor, quantity, ...(categoryId !== ownCategory ? { categoryId } : {}), ...(moving && unit ? { currency: unit.code, decimalPlaces: unit.decimalPlaces } : {}),
   });
   const valid = !!unit && (!moving || canAddIn(code, others)) && parsed.success;
 
@@ -83,7 +86,11 @@ export function InvoiceItemSheet({ item, categories, onClose, onSave, onDelete }
             </select>
           </div> : null}
         </div>
-        <CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} />
+        <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-2.5">
+          <QuantityField text={quantityText} onChange={setQuantityText} valid={quantity !== null} />
+          <CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} />
+        </div>
+        <LineTotal unit={unit} priceMinor={minor} quantity={quantity} />
         <Button type="button" variant="destructive" className="self-start" onClick={onDelete}><Trash2 aria-hidden />{t("deleteItem")}</Button>
       </fieldset>
       {error ? <p role="alert" className="text-sm text-over">{error}</p> : null}

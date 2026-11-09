@@ -34,7 +34,7 @@ type FolderRow = { id: string; name: string; owner_id: string; created_at: strin
 type CategoryRow = { id: string; folder_id: string; name: string; is_default: boolean; created_at: string };
 type ItemRow = {
   id: string; folder_id: string; category_id: string; name: string; currency: string; decimal_places: number | string;
-  price_minor: number | string; created_by: string | null; created_at: string; updated_at: string;
+  price_minor: number | string; quantity: number | string; created_by: string | null; created_at: string; updated_at: string;
 };
 type MemberRow = { folder_id: string; user_id: string; display_name: string | null; joined_at: string; removed_at: string | null };
 
@@ -48,7 +48,7 @@ function toItem(row: ItemRow): InvoiceItem {
   }
   return {
     id: row.id, folderId: row.folder_id, categoryId: row.category_id, name: row.name, currency: row.currency, decimalPlaces,
-    priceMinor: readMinor(row.price_minor), createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
+    priceMinor: readMinor(row.price_minor), quantity: Number(row.quantity), createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
   };
 }
 
@@ -73,17 +73,17 @@ const DEMO_CATEGORIES: InvoiceCategory[] = [
   demoCategory(4, DEMO_LIVING, "Other", true, "2026-11-02T07:00:00Z"),
 ];
 
-const demoItem = (n: number, folderId: string, categoryId: string, name: string, currency: string, decimalPlaces: number, priceMinor: number, createdBy: string, createdAt: string): InvoiceItem =>
-  ({ id: `1d000000-0000-4000-8000-${String(n).padStart(12, "0")}`, folderId, categoryId, name, currency, decimalPlaces, priceMinor, createdBy, createdAt, updatedAt: createdAt });
+const demoItem = (n: number, folderId: string, categoryId: string, name: string, currency: string, decimalPlaces: number, priceMinor: number, createdBy: string, createdAt: string, quantity = 1): InvoiceItem =>
+  ({ id: `1d000000-0000-4000-8000-${String(n).padStart(12, "0")}`, folderId, categoryId, name, currency, decimalPlaces, priceMinor, quantity, createdBy, createdAt, updatedAt: createdAt });
 
 const DEMO_ITEMS: InvoiceItem[] = [
   demoItem(4, DEMO_PC, demoCategoryId(1), "MSI MAG Forge 120A Airflow Mid-Tower (6× Fans, 330mm GPU support)", "USD", 2, 10000, DEMO_VIEWER, "2026-11-05T09:00:00Z"),
   demoItem(5, DEMO_PC, demoCategoryId(3), "Cables", "LBP", 0, 1350000, DEMO_VIEWER, "2026-11-05T08:00:00Z"),
   demoItem(3, DEMO_PC, demoCategoryId(2), "GPU", "USD", 2, 45000, DEMO_VIEWER, "2026-11-04T08:00:00Z"),
   demoItem(2, DEMO_PC, demoCategoryId(2), "CPU", "USD", 2, 25000, DEMO_VIEWER, "2026-11-04T07:00:00Z"),
-  demoItem(1, DEMO_PC, demoCategoryId(1), "Thermal paste", "LBP", 0, 450000, DEMO_VIEWER, "2026-11-03T07:00:00Z"),
+  demoItem(1, DEMO_PC, demoCategoryId(1), "Thermal paste", "LBP", 0, 225000, DEMO_VIEWER, "2026-11-03T07:00:00Z", 2),
   demoItem(8, DEMO_LIVING, demoCategoryId(4), "Curtains", "LBP", 0, 2700000, DEMO_LINA, "2026-11-03T09:00:00Z"),
-  demoItem(7, DEMO_LIVING, demoCategoryId(4), "Lamp", "USD", 2, 4500, DEMO_VIEWER, "2026-11-02T10:00:00Z"),
+  demoItem(7, DEMO_LIVING, demoCategoryId(4), "Lamp", "USD", 2, 4500, DEMO_VIEWER, "2026-11-02T10:00:00Z", 3),
   demoItem(6, DEMO_LIVING, demoCategoryId(4), "Sofa", "USD", 2, 38000, DEMO_KARIM, "2026-11-02T08:00:00Z"),
 ];
 
@@ -133,7 +133,7 @@ export async function getInvoiceFolders(): Promise<InvoiceFolderSummary[]> {
     ),
     readAllByKey<ItemRow>(
       (after, limit) => {
-        let query = db.from("invoice_items").select("id,folder_id,category_id,name,currency,decimal_places,price_minor,created_by,created_at,updated_at").order("id").limit(limit);
+        let query = db.from("invoice_items").select("id,folder_id,category_id,name,currency,decimal_places,price_minor,quantity,created_by,created_at,updated_at").order("id").limit(limit);
         if (after) query = query.gt("id", after);
         return query;
       },
@@ -203,7 +203,7 @@ export async function getInvoiceFolder(id: string): Promise<InvoiceFolderDetail 
   const [items, categories, members, link] = await Promise.all([
     readAllByKey<ItemRow>(
       (after, limit) => {
-        let query = db.from("invoice_items").select("id,folder_id,category_id,name,currency,decimal_places,price_minor,created_by,created_at,updated_at").eq("folder_id", id).order("id").limit(limit);
+        let query = db.from("invoice_items").select("id,folder_id,category_id,name,currency,decimal_places,price_minor,quantity,created_by,created_at,updated_at").eq("folder_id", id).order("id").limit(limit);
         if (after) query = query.gt("id", after);
         return query;
       },

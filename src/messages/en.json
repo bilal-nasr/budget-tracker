@@ -1223,8 +1223,8 @@
     "selectionBarLabel": "Selected items",
     "itemName": "Item",
     "itemNamePlaceholder": "e.g. Graphics card",
-    "price": "Price",
-    "priceIn": "Price ({currency})",
+    "price": "Price each",
+    "priceIn": "Price each ({currency})",
     "currency": "Currency",
     "addItem": "Add item",
     "noCurrency": "Turn on a currency in Settings to add items.",
@@ -1309,6 +1309,9 @@
     "categoryTotalsLabel": "{name} totals by currency",
     "cancel": "Cancel",
     "done": "Done",
+    "quantity": "Quantity",
+    "errorQuantity": "Use a whole number from 1 to {max}.",
+    "lineTotal": "Total",
     "nameSaved": "Name saved"
   }
 }

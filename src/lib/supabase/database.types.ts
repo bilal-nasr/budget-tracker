@@ -644,6 +644,7 @@ export type Database = {
                     "id": string;
                     "name": string;
                     "price_minor": number;
+                    "quantity": number;
                     "updated_at": string;
                     "updated_by": string | null;
                 };
@@ -658,6 +659,7 @@ export type Database = {
                     "id": string;
                     "name": string;
                     "price_minor": number;
+                    "quantity"?: number;
                     "updated_at"?: string;
                     "updated_by"?: string | null;
                 };
@@ -671,6 +673,7 @@ export type Database = {
                     "id"?: string;
                     "name"?: string;
                     "price_minor"?: number;
+                    "quantity"?: number;
                     "updated_at"?: string;
                     "updated_by"?: string | null;
                 };

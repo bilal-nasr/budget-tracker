@@ -1,4 +1,6 @@
 import type { CurrencyDefinition } from "@/lib/currency";
+import { normalizeNumericDigits } from "@/lib/numeric-text";
+import { MAX_QUANTITY } from "./schema";
 
 /**
  * How to format a row's amount for this viewer. A shared row may be in a currency the viewer never enabled,
@@ -37,4 +39,12 @@ export function categoryLabel(category: { name: string; isDefault: boolean }, ot
 /** The category a row shows under: its own, or "Other" when it names one this screen does not know yet. */
 export function categoryOf(categoryId: string, categories: readonly { id: string; isDefault: boolean }[]): string | undefined {
   return (categories.find((c) => c.id === categoryId) ?? categories.find((c) => c.isDefault))?.id;
+}
+
+/** A typed quantity: a whole number from 1 to the cap, in any keyboard digit script; anything else is null. */
+export function parseQuantity(text: string): number | null {
+  const digits = normalizeNumericDigits(text).trim();
+  if (!/^\d{1,5}$/.test(digits)) return null;
+  const value = Number(digits);
+  return value >= 1 && value <= MAX_QUANTITY ? value : null;
 }

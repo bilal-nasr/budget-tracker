@@ -1,10 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
-import { totalsByCurrency } from "./totals";
+import { lineMinor, totalsByCurrency } from "./totals";
 
-const row = (currency: string, decimalPlaces: number, priceMinor: number) => ({ currency, decimalPlaces, priceMinor });
+const row = (currency: string, decimalPlaces: number, priceMinor: number, quantity = 1) => ({ currency, decimalPlaces, priceMinor, quantity });
+
+describe("lineMinor", () => {
+  it("is the unit price times the quantity", () => {
+    expect(lineMinor({ priceMinor: 5000, quantity: 1 })).toBe(5000);
+    expect(lineMinor({ priceMinor: 1_350_000, quantity: 3 })).toBe(4_050_000);
+  });
+  it("stays exact at the top of the range", () => {
+    expect(lineMinor({ priceMinor: MAX_MINOR / 10, quantity: 10 })).toBe(MAX_MINOR);
+  });
+});
 
 describe("totalsByCurrency", () => {
+  it("adds each row's total (price x quantity), not its unit price", () => {
+    expect(totalsByCurrency([row("USD", 2, 5000, 2), row("USD", 2, 300, 3), row("LBP", 0, 450_000, 2)])).toEqual([
+      { currency: "USD", decimalPlaces: 2, minor: 10_900 },
+      { currency: "LBP", decimalPlaces: 0, minor: 900_000 },
+    ]);
+  });
+
   it("sums per currency in order of first appearance", () => {
     expect(totalsByCurrency([row("USD", 2, 250), row("USD", 2, 450), row("USD", 2, 100), row("LBP", 0, 1_500_000)])).toEqual([
       { currency: "USD", decimalPlaces: 2, minor: 800 },

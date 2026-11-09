@@ -156,13 +156,13 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
 export async function addItem(input: ItemCreateInput): Promise<ActionResult<SavedTimes>> {
   const parsed = itemCreateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, expectedUnits } = parsed.data;
+  const { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, quantity, expectedUnits } = parsed.data;
   try {
     const ctx = await actionClient(expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
     // The id is chosen by the form, so a retry after a lost response is a no-op.
     const { data, error } = await ctx.supabase.from("invoice_items")
-      .upsert({ id, folder_id: folderId, category_id: categoryId, name, currency, decimal_places: decimalPlaces, price_minor: priceMinor }, { onConflict: "id", ignoreDuplicates: true })
+      .upsert({ id, folder_id: folderId, category_id: categoryId, name, currency, decimal_places: decimalPlaces, price_minor: priceMinor, quantity }, { onConflict: "id", ignoreDuplicates: true })
       .select(SAVED_COLUMNS);
     if (error && !isDuplicate(error) && !isLimit(error)) return { ok: false, error: itemWriteError(error) };
     let row = error ? undefined : data?.[0];
@@ -186,12 +186,12 @@ export async function addItem(input: ItemCreateInput): Promise<ActionResult<Save
 export async function updateItem(id: string, input: ItemEditInput): Promise<ActionResult<SavedTimes>> {
   const parsed = itemEditSchema.safeParse(input);
   if (!idSchema.safeParse(id).success || !parsed.success) return { ok: false, error: "invalid" };
-  const { name, priceMinor, categoryId, currency, decimalPlaces } = parsed.data;
+  const { name, priceMinor, quantity, categoryId, currency, decimalPlaces } = parsed.data;
   try {
     const ctx = await actionClient();
     if (ctx.error) return { ok: false, error: ctx.error };
     const { data, error } = await ctx.supabase.from("invoice_items")
-      .update({ name, price_minor: priceMinor, ...(categoryId !== undefined ? { category_id: categoryId } : {}), ...(currency !== undefined && decimalPlaces !== undefined ? { currency, decimal_places: decimalPlaces } : {}) })
+      .update({ name, price_minor: priceMinor, quantity, ...(categoryId !== undefined ? { category_id: categoryId } : {}), ...(currency !== undefined && decimalPlaces !== undefined ? { currency, decimal_places: decimalPlaces } : {}) })
       .eq("id", id).select(SAVED_COLUMNS);
     if (error) return { ok: false, error: itemWriteError(error) };
     if (!data?.length) return { ok: false, error: "conflict" };

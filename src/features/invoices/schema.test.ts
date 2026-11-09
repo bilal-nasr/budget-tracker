@@ -7,7 +7,7 @@ import {
 const id = "11111111-1111-4111-8111-111111111111";
 const folderId = "22222222-2222-4222-8222-222222222222";
 const categoryId = "33333333-3333-4333-8333-333333333333";
-const item = { id, folderId, categoryId, name: "Cement", currency: "usd", decimalPlaces: 2, priceMinor: 1500 };
+const item = { id, folderId, categoryId, name: "Cement", currency: "usd", decimalPlaces: 2, priceMinor: 1500, quantity: 1 };
 
 describe("folder schemas", () => {
   it("accepts a trimmed name and rejects empty or 61-character names", () => {
@@ -44,6 +44,17 @@ describe("itemCreateSchema", () => {
   it("rejects 201-character names", () => {
     expect(itemCreateSchema.safeParse({ ...item, name: "a".repeat(201) }).success).toBe(false);
   });
+  it("takes a whole quantity from 1 to 9999", () => {
+    expect(itemCreateSchema.safeParse({ ...item, quantity: 9999 }).success).toBe(true);
+    for (const quantity of [0, -1, 1.5, 10_000, undefined, "2"]) {
+      expect(itemCreateSchema.safeParse({ ...item, quantity }).success).toBe(false);
+    }
+  });
+  it("keeps price x quantity inside the money range", () => {
+    expect(itemCreateSchema.safeParse({ ...item, priceMinor: MAX_MINOR / 10, quantity: 10 }).success).toBe(true);
+    expect(itemCreateSchema.safeParse({ ...item, priceMinor: MAX_MINOR / 10, quantity: 11 }).success).toBe(false);
+    expect(itemEditSchema.safeParse({ name: "Cement", priceMinor: MAX_MINOR, quantity: 2 }).success).toBe(false);
+  });
   it("needs a category of the folder", () => {
     expect(itemCreateSchema.safeParse({ ...item, categoryId: undefined }).success).toBe(false);
     expect(itemCreateSchema.safeParse({ ...item, categoryId: "nope" }).success).toBe(false);
@@ -64,14 +75,14 @@ describe("itemCreateSchema", () => {
 
 describe("itemEditSchema", () => {
   it("allows a name and price change alone", () => {
-    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5 }).success).toBe(true);
+    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5, quantity: 1 }).success).toBe(true);
   });
   it("allows currency and decimals together", () => {
-    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5, currency: "LBP", decimalPlaces: 0 }).success).toBe(true);
+    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5, quantity: 1, currency: "LBP", decimalPlaces: 0 }).success).toBe(true);
   });
   it("rejects currency without decimalPlaces and the reverse", () => {
-    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5, currency: "LBP" }).success).toBe(false);
-    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5, decimalPlaces: 0 }).success).toBe(false);
+    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5, quantity: 1, currency: "LBP" }).success).toBe(false);
+    expect(itemEditSchema.safeParse({ name: "Sand", priceMinor: 5, quantity: 1, decimalPlaces: 0 }).success).toBe(false);
   });
 });
 

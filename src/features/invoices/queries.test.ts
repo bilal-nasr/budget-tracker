@@ -39,7 +39,7 @@ const token = "cd".repeat(32);
 
 const folderRow = (id: string, name: string, owner: string, created: string) => ({ id, name, owner_id: owner, created_at: created });
 const itemRow = (id: string, folder: string, extra: Record<string, unknown> = {}) =>
-  ({ id, folder_id: folder, name: "Thing", currency: "USD", decimal_places: 2, price_minor: 100, created_by: me, created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z", ...extra });
+  ({ id, folder_id: folder, name: "Thing", currency: "USD", decimal_places: 2, price_minor: 100, quantity: 1, created_by: me, created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z", ...extra });
 const memberRow = (folder: string, user: string, extra: Record<string, unknown> = {}) =>
   ({ folder_id: folder, user_id: user, display_name: null, joined_at: "2026-11-01T00:00:00Z", removed_at: null, ...extra });
 

@@ -43,7 +43,7 @@ const rpc = (name: string, args: unknown) => {
 const called = (table: string, method: string) => mocks.calls.filter(([t, m]) => t === table && m === method);
 const rpcCalled = (name: string) => mocks.rpcCalls.filter(([n]) => n === name);
 
-const newItem = { id: item, folderId: folder, categoryId: uid(7), name: " Cement ", currency: "usd", decimalPlaces: 2, priceMinor: 1500 };
+const newItem = { id: item, folderId: folder, categoryId: uid(7), quantity: 1, name: " Cement ", currency: "usd", decimalPlaces: 2, priceMinor: 1500 };
 /** The saved row's timestamps as the database reports them (server clock). */
 const saved = { id: item, created_at: "2026-11-09T10:00:00.123456+00:00", updated_at: "2026-11-09T10:05:00.654321+00:00" };
 const savedTimes = { createdAt: saved.created_at, updatedAt: saved.updated_at };
@@ -68,9 +68,9 @@ describe("validation", () => {
       addItem({ ...newItem, priceMinor: 0 }),
       addItem({ ...newItem, name: "" }),
       addItem({ ...newItem, folderId: "x" }),
-      updateItem("x", { name: "Cement", priceMinor: 1 }),
-      updateItem(item, { name: "Cement", priceMinor: 0 }),
-      updateItem(item, { name: "Cement", priceMinor: 1, currency: "USD" }),
+      updateItem("x", { name: "Cement", quantity: 1, priceMinor: 1 }),
+      updateItem(item, { name: "Cement", quantity: 1, priceMinor: 0 }),
+      updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1, currency: "USD" }),
       deleteItem("x"),
       restoreItem("x"),
       createOrRotateLink("x"),
@@ -99,7 +99,7 @@ describe("preview mode", () => {
       renameFolder(folder, { name: "PC" }),
       deleteFolder(folder),
       addItem(newItem),
-      updateItem(item, { name: "Cement", priceMinor: 1 }),
+      updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1 }),
       deleteItem(item),
       restoreItem(item),
       createOrRotateLink(folder),
@@ -169,7 +169,7 @@ describe("addItem", () => {
     mocks.tables["invoice_items.upsert"] = { data: [saved], error: null };
     expect(await addItem(newItem)).toEqual({ ok: true, ...savedTimes });
     expect(called("invoice_items", "upsert")[0][2]).toEqual([
-      { id: item, folder_id: folder, category_id: uid(7), name: "Cement", currency: "USD", decimal_places: 2, price_minor: 1500 },
+      { id: item, folder_id: folder, category_id: uid(7), name: "Cement", currency: "USD", decimal_places: 2, price_minor: 1500, quantity: 1 },
       { onConflict: "id", ignoreDuplicates: true },
     ]);
     expect(called("invoice_items", "select")).toHaveLength(1);
@@ -242,36 +242,36 @@ describe("addItem", () => {
 describe("updateItem and deleteItem", () => {
   it("edits name and price, adding currency and decimals only when both are given, and returns the server's timestamps", async () => {
     mocks.tables["invoice_items.update"] = { data: [saved], error: null };
-    expect(await updateItem(item, { name: " Cement ", priceMinor: 1600 })).toEqual({ ok: true, ...savedTimes });
-    expect(called("invoice_items", "update")[0][2]).toEqual([{ name: "Cement", price_minor: 1600 }]);
+    expect(await updateItem(item, { name: " Cement ", priceMinor: 1600, quantity: 1 })).toEqual({ ok: true, ...savedTimes });
+    expect(called("invoice_items", "update")[0][2]).toEqual([{ name: "Cement", price_minor: 1600, quantity: 1 }]);
     expect(called("invoice_items", "select")[0][2]).toEqual(["id,created_at,updated_at"]);
-    expect(await updateItem(item, { name: "Cement", priceMinor: 1600, currency: "lbp", decimalPlaces: 0 })).toEqual({ ok: true, ...savedTimes });
-    expect(called("invoice_items", "update")[1][2]).toEqual([{ name: "Cement", price_minor: 1600, currency: "LBP", decimal_places: 0 }]);
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1600, currency: "lbp", decimalPlaces: 0 })).toEqual({ ok: true, ...savedTimes });
+    expect(called("invoice_items", "update")[1][2]).toEqual([{ name: "Cement", price_minor: 1600, quantity: 1, currency: "LBP", decimal_places: 0 }]);
   });
 
   it("an updated row without readable timestamps is reported as failed", async () => {
     mocks.tables["invoice_items.update"] = { data: [{ id: item }], error: null };
-    expect(await updateItem(item, { name: "Cement", priceMinor: 1 })).toEqual({ ok: false, error: "failed" });
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1 })).toEqual({ ok: false, error: "failed" });
   });
 
   it("reports a row that no longer exists as a conflict, not an error", async () => {
     mocks.tables["invoice_items.update"] = { data: [], error: null };
-    expect(await updateItem(item, { name: "Cement", priceMinor: 1 })).toEqual({ ok: false, error: "conflict" });
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1 })).toEqual({ ok: false, error: "conflict" });
     expect(mocks.invalidate).not.toHaveBeenCalled();
   });
 
   it("an edit rejected by the currency rule (P0001) is currencyUnavailable, a lost membership (42501) a conflict", async () => {
     mocks.tables["invoice_items.update"] = { data: null, error: { code: "P0001", message: "invoices.invalid" } };
-    expect(await updateItem(item, { name: "Cement", priceMinor: 1, currency: "EUR", decimalPlaces: 2 })).toEqual({ ok: false, error: "currencyUnavailable" });
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1, currency: "EUR", decimalPlaces: 2 })).toEqual({ ok: false, error: "currencyUnavailable" });
     mocks.tables["invoice_items.update"] = { data: null, error: { code: "42501", message: "invoices.invalid" } };
-    expect(await updateItem(item, { name: "Cement", priceMinor: 1 })).toEqual({ ok: false, error: "conflict" });
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1 })).toEqual({ ok: false, error: "conflict" });
   });
 
   it("maps database rules", async () => {
     mocks.tables["invoice_items.update"] = { data: null, error: { message: "invoices.invalid" } };
-    expect(await updateItem(item, { name: "Cement", priceMinor: 1, currency: "EUR", decimalPlaces: 2 })).toEqual({ ok: false, error: "conflict" });
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1, currency: "EUR", decimalPlaces: 2 })).toEqual({ ok: false, error: "conflict" });
     mocks.tables["invoice_items.update"] = { data: null, error: { message: "internal details" } };
-    expect(await updateItem(item, { name: "Cement", priceMinor: 1 })).toEqual({ ok: false, error: "failed" });
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1 })).toEqual({ ok: false, error: "failed" });
   });
 
   it("deletes, and a row already gone is fine", async () => {

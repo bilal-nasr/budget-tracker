@@ -1223,8 +1223,8 @@
     "selectionBarLabel": "البنود المحدّدة",
     "itemName": "البند",
     "itemNamePlaceholder": "مثلاً: بطاقة رسوميات",
-    "price": "السعر",
-    "priceIn": "السعر ({currency})",
+    "price": "سعر الوحدة",
+    "priceIn": "سعر الوحدة ({currency})",
     "currency": "العملة",
     "addItem": "إضافة بند",
     "noCurrency": "فعّل عملة من الإعدادات لإضافة بنود.",
@@ -1309,6 +1309,9 @@
     "categoryTotalsLabel": "إجماليات {name} حسب العملة",
     "cancel": "إلغاء",
     "done": "تم",
+    "quantity": "الكمية",
+    "errorQuantity": "أدخل عدداً صحيحاً من 1 إلى {max}.",
+    "lineTotal": "الإجمالي",
     "nameSaved": "تم حفظ الاسم"
   }
 }

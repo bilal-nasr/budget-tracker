@@ -8,13 +8,14 @@ import { useAppData } from "@/components/providers/app-data";
 import { Button } from "@/components/ui/button";
 import { TextAreaField } from "@/components/ui/text-area-field";
 import { TextField } from "@/components/ui/text-field";
-import { canAddIn } from "@/features/invoices/display";
+import { canAddIn, parseQuantity } from "@/features/invoices/display";
 import { invoiceErrorKey } from "@/features/invoices/errors";
 import { itemCreateSchema, MAX_ITEM_NAME, type InvoiceCategory, type InvoiceItem, type ItemCreateInput } from "@/features/invoices/schema";
 import { currencyIntent } from "@/lib/currency-intent";
 import { parseAmount } from "@/lib/money";
 import type { ActionResult } from "@/lib/supabase/action";
 import { CategorySelect, fieldSelectClass } from "./category-select";
+import { LineTotal, QuantityField } from "./quantity-field";
 
 export { fieldSelectClass };
 
@@ -47,8 +48,9 @@ export function AddInvoiceItemForm({ folderId, viewerId, categories, categoryId,
 
   const [name, setName] = useState("");
   const [text, setText] = useState("");
+  const [quantityText, setQuantityText] = useState("1");
   const [fresh, setFresh] = useState(() => crypto.randomUUID());
-  const [retry, setRetry] = useState<{ id: string; name: string; text: string; currency: string; categoryId: string } | null>(null);
+  const [retry, setRetry] = useState<{ id: string; name: string; text: string; quantityText: string; currency: string; categoryId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ownNameRef = useRef<HTMLTextAreaElement>(null);
   const nameRef = outerNameRef ?? ownNameRef;
@@ -57,23 +59,24 @@ export function AddInvoiceItemForm({ folderId, viewerId, categories, categoryId,
   const currencyId = useId();
   useMoneyDraftUnit(unit, () => setText(""), !!unit);
 
-  const id = retry && retry.name === name && retry.text === text && retry.currency === code && retry.categoryId === categoryId ? retry.id : fresh;
+  const id = retry && retry.name === name && retry.text === text && retry.quantityText === quantityText && retry.currency === code && retry.categoryId === categoryId ? retry.id : fresh;
   const minor = unit ? parseAmount(text, unit) : null;
+  const quantity = parseQuantity(quantityText);
   const parsed = itemCreateSchema.safeParse({
-    expectedUnits: currencyIntent(unit), id, folderId, categoryId, name, currency: code, decimalPlaces: unit?.decimalPlaces, priceMinor: minor,
+    expectedUnits: currencyIntent(unit), id, folderId, categoryId, name, currency: code, decimalPlaces: unit?.decimalPlaces, priceMinor: minor, quantity,
   });
   const valid = !!unit && canAddIn(code, currencies) && parsed.success;
 
   const submit = () => {
     if (!valid || !parsed.success) return;
     const input = parsed.data;
-    const draft = { name, text };
-    setName(""); setText(""); setFresh(crypto.randomUUID()); setRetry(null); setError(null);
+    const draft = { name, text, quantityText };
+    setName(""); setText(""); setQuantityText("1"); setFresh(crypto.randomUUID()); setRetry(null); setError(null);
     nameRef.current?.focus();
     const now = new Date().toISOString();
     const item: InvoiceItem = {
       id: input.id, folderId, categoryId: input.categoryId, name: input.name, currency: input.currency, decimalPlaces: input.decimalPlaces,
-      priceMinor: input.priceMinor, createdBy: viewerId, createdAt: now, updatedAt: now,
+      priceMinor: input.priceMinor, quantity: input.quantity, createdBy: viewerId, createdAt: now, updatedAt: now,
     };
     void onAdd(item, input).then((result) => {
       if (result.ok) return;
@@ -81,9 +84,9 @@ export function AddInvoiceItemForm({ folderId, viewerId, categories, categoryId,
       // Put the text back only into empty fields still on the same currency, under the id it was sent with.
       const untouched = !nameRef.current?.value && !priceRef.current?.value && (currencyRef.current?.value ?? input.currency) === input.currency;
       if (!untouched) return;
-      setName(draft.name); setText(draft.text);
+      setName(draft.name); setText(draft.text); setQuantityText(draft.quantityText);
       // A taken id would fail the same way again, so the next attempt gets the fresh id.
-      if (result.error !== "conflict") setRetry({ id: input.id, name: draft.name, text: draft.text, currency: input.currency, categoryId: input.categoryId });
+      if (result.error !== "conflict") setRetry({ id: input.id, name: draft.name, text: draft.text, quantityText: draft.quantityText, currency: input.currency, categoryId: input.categoryId });
     });
   };
 
@@ -106,7 +109,11 @@ export function AddInvoiceItemForm({ folderId, viewerId, categories, categoryId,
           </select>
         </div> : null}
       </div>
-      <CategorySelect categories={categories} value={categoryId} onChange={onCategoryChange} onNew={onNewCategory} />
+      <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-2.5">
+        <QuantityField text={quantityText} onChange={setQuantityText} valid={quantity !== null} />
+        <CategorySelect categories={categories} value={categoryId} onChange={onCategoryChange} onNew={onNewCategory} />
+      </div>
+      <LineTotal unit={unit} priceMinor={minor} quantity={quantity} />
       {error ? <p role="alert" className="text-sm text-over">{error}</p> : null}
       <Button type="submit" disabled={!valid}><Plus aria-hidden />{t("addItem")}</Button>
     </form>

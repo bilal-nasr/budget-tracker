@@ -16,11 +16,11 @@ const ITEM = "1d000000-0000-4000-8000-000000000001";
 const USER = "1a000000-0000-4000-8000-000000000001";
 
 const row = (over: Record<string, unknown> = {}) => ({
-  id: ITEM, folder_id: FOLDER, category_id: "1c000000-0000-4000-8000-000000000001", name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45000,
+  id: ITEM, folder_id: FOLDER, category_id: "1c000000-0000-4000-8000-000000000001", name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45000, quantity: 2,
   created_by: USER, updated_by: USER, created_at: "2026-11-09T10:00:00.123456+00:00", updated_at: "2026-11-09T10:00:00.123456+00:00", ...over,
 });
 const mapped = {
-  id: ITEM, folderId: FOLDER, categoryId: "1c000000-0000-4000-8000-000000000001", name: "GPU", currency: "USD", decimalPlaces: 2, priceMinor: 45000,
+  id: ITEM, folderId: FOLDER, categoryId: "1c000000-0000-4000-8000-000000000001", name: "GPU", currency: "USD", decimalPlaces: 2, priceMinor: 45000, quantity: 2,
   createdBy: USER, createdAt: "2026-11-09T10:00:00.123456+00:00", updatedAt: "2026-11-09T10:00:00.123456+00:00",
 };
 

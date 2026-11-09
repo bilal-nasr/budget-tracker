@@ -21,6 +21,7 @@ const itemRow = z.object({
   id: z.uuid(), folder_id: z.uuid(), category_id: z.uuid(), name: z.string().min(1), currency: currencyCodeSchema,
   decimal_places: z.number().int().min(0).max(8),
   price_minor: z.union([z.number(), z.string()]),
+  quantity: z.number().int().min(1),
   created_by: z.uuid().nullable(), created_at: z.string().min(1), updated_at: z.string().min(1),
 });
 const keyRow = z.object({ id: z.uuid() });
@@ -31,8 +32,8 @@ function toItem(value: unknown, folderId: string): InvoiceItem | null {
   if (!row.success || row.data.folder_id !== folderId) return null;
   let priceMinor: number;
   try { priceMinor = readMinor(row.data.price_minor); } catch { return null; }
-  const { id, category_id: categoryId, name, currency, decimal_places: decimalPlaces, created_by: createdBy, created_at: createdAt, updated_at: updatedAt } = row.data;
-  return { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, createdBy, createdAt, updatedAt };
+  const { id, category_id: categoryId, name, currency, decimal_places: decimalPlaces, quantity, created_by: createdBy, created_at: createdAt, updated_at: updatedAt } = row.data;
+  return { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, quantity, createdBy, createdAt, updatedAt };
 }
 
 let opened = 0;

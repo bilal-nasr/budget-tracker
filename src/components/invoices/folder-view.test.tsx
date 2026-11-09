@@ -56,8 +56,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 const OTHER = "1c000000-0000-4000-8000-000000000001";
 const otherCategory: InvoiceCategory = { id: OTHER, folderId: FOLDER, name: "Other", isDefault: true, createdAt: "2026-11-01T00:00:00Z" };
 
-const item = (n: number, name: string, currency: string, decimalPlaces: number, priceMinor: number, createdBy: string | null = VIEWER): InvoiceItem => ({
-  id: `1d000000-0000-4000-8000-${String(n).padStart(12, "0")}`, folderId: FOLDER, categoryId: OTHER, name, currency, decimalPlaces, priceMinor, createdBy,
+const item = (n: number, name: string, currency: string, decimalPlaces: number, priceMinor: number, createdBy: string | null = VIEWER, quantity = 1): InvoiceItem => ({
+  id: `1d000000-0000-4000-8000-${String(n).padStart(12, "0")}`, folderId: FOLDER, categoryId: OTHER, name, currency, decimalPlaces, priceMinor, quantity, createdBy,
   createdAt: `2026-11-0${Math.min(9, n)}T00:00:00Z`, updatedAt: `2026-11-0${Math.min(9, n)}T00:00:00Z`,
 });
 const person = (userId: string, displayName: string | null, isOwner = false, removed = false): InvoiceMember =>
@@ -271,7 +271,7 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
     const dialog = await screen.findByRole("dialog", { name: t.editTitle });
     fireEvent.change(within(dialog).getByRole("textbox", { name: t.price }), { target: { value: "400" } });
     await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t.saveItem })); });
-    expect(mocks.updateItem).toHaveBeenCalledWith(item(1, "Sofa", "USD", 2, 0).id, { name: "Sofa", priceMinor: 40_000 });
+    expect(mocks.updateItem).toHaveBeenCalledWith(item(1, "Sofa", "USD", 2, 0).id, { name: "Sofa", priceMinor: 40_000, quantity: 1 });
     expect(mocks.toast).toHaveBeenCalledWith(t.itemSaved);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(rowOf("Sofa").textContent).toContain("$400.00");
@@ -287,14 +287,14 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
     expect([...select.options].map((option) => option.value)).toEqual(["EUR", "USD", "LBP"]);
     fireEvent.change(price, { target: { value: "150.5" } });
     await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t.saveItem })); });
-    expect(mocks.updateItem).toHaveBeenLastCalledWith(item(1, "", "EUR", 2, 0).id, { name: "Imported", priceMinor: 15_050 });
+    expect(mocks.updateItem).toHaveBeenLastCalledWith(item(1, "", "EUR", 2, 0).id, { name: "Imported", priceMinor: 15_050, quantity: 1 });
 
     openRow("Imported");
     const again = await screen.findByRole("dialog", { name: t.editTitle });
     fireEvent.change(within(again).getByRole("combobox", { name: t.currency }), { target: { value: "LBP" } });
     fireEvent.change(within(again).getByRole("textbox", { name: t.price }), { target: { value: "90000" } });
     await act(async () => { fireEvent.click(within(again).getByRole("button", { name: t.saveItem })); });
-    expect(mocks.updateItem).toHaveBeenLastCalledWith(item(1, "", "EUR", 2, 0).id, { name: "Imported", priceMinor: 90_000, currency: "LBP", decimalPlaces: 0 });
+    expect(mocks.updateItem).toHaveBeenLastCalledWith(item(1, "", "EUR", 2, 0).id, { name: "Imported", priceMinor: 90_000, quantity: 1, currency: "LBP", decimalPlaces: 0 });
     expect(rowOf("Imported").textContent).toContain("LBP 90,000");
   });
 
@@ -641,7 +641,7 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       render(view(locale, shared()));
       await act(async () => {});
       act(() => channel().emit("invoice_items", { eventType: "INSERT", old: {}, new: {
-        id: idOf(6), folder_id: FOLDER, category_id: OTHER, name: "Monitor", currency: "USD", decimal_places: 2, price_minor: 20_000,
+        id: idOf(6), folder_id: FOLDER, category_id: OTHER, name: "Monitor", currency: "USD", decimal_places: 2, price_minor: 20_000, quantity: 1,
         created_by: KARIM, updated_by: KARIM, created_at: item(6, "", "USD", 2, 0).createdAt, updated_at: item(6, "", "USD", 2, 0).updatedAt } }));
       tick("Monitor");
       expect(headerLines()).toEqual(["$200.00"]);
@@ -695,7 +695,7 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       expect(headerLines()).toEqual(["$100.00"]);
       // Someone's Undo brings it back later.
       act(() => channel().emit("invoice_items", { eventType: "INSERT", old: {}, new: {
-        id: idOf(2), folder_id: FOLDER, category_id: OTHER, name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45_000,
+        id: idOf(2), folder_id: FOLDER, category_id: OTHER, name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45_000, quantity: 1,
         created_by: KARIM, updated_by: KARIM, created_at: item(2, "", "USD", 2, 0).createdAt, updated_at: "2026-11-09T12:00:00Z" } }));
       expect(pick("GPU").checked).toBe(false);
       expect(within(header()).getByText(selectedLabel(1))).toBeTruthy();
@@ -755,11 +755,76 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
     });
   });
 
+  describe("quantity", () => {
+    const t = () => catalogsT();
+    const quantityField = (scope: { getByRole: typeof screen.getByRole } = screen) => scope.getByRole("textbox", { name: t().quantity }) as HTMLInputElement;
+
+    it("starts at 1, and a row is added with the quantity typed, priced per unit", async () => {
+      render(view(locale, folderOf()));
+      expect(quantityField().value).toBe("1");
+      const name = screen.getByRole("textbox", { name: t().itemName }) as HTMLTextAreaElement;
+      fireEvent.change(name, { target: { value: "Fan" } });
+      fireEvent.change(screen.getByRole("textbox", { name: t().price }), { target: { value: "5" } });
+      fireEvent.change(quantityField(), { target: { value: "3" } });
+      await act(async () => { fireEvent.submit(name.form!); });
+      expect(mocks.addItem.mock.calls[0][0]).toMatchObject({ name: "Fan", priceMinor: 500, quantity: 3 });
+      // The list shows the row's total, with "3 × unit price" under the name.
+      const first = within(list()).getAllByRole("listitem")[0];
+      expect(first.textContent).toContain("$15.00");
+      expect(first.textContent).toContain("3 × $5.00");
+      // The next row starts at 1 again.
+      expect(quantityField().value).toBe("1");
+    });
+
+    it("shows the row total under the fields once more than one unit is entered", () => {
+      render(view(locale, folderOf()));
+      fireEvent.change(screen.getByRole("textbox", { name: t().price }), { target: { value: "5" } });
+      expect(screen.queryByText(/\$5\.00/, { selector: "bdi" })).toBeNull(); // quantity 1: nothing to add up
+      fireEvent.change(quantityField(), { target: { value: "4" } });
+      expect(screen.getByText(/\$20\.00/, { selector: "bdi" })).toBeTruthy();
+    });
+
+    it("refuses 0, fractions, text and anything above 9999", async () => {
+      render(view(locale, folderOf()));
+      const name = screen.getByRole("textbox", { name: t().itemName }) as HTMLTextAreaElement;
+      fireEvent.change(name, { target: { value: "Fan" } });
+      fireEvent.change(screen.getByRole("textbox", { name: t().price }), { target: { value: "5" } });
+      for (const bad of ["0", "1.5", "abc", "10000", ""]) {
+        fireEvent.change(quantityField(), { target: { value: bad } });
+        await act(async () => { fireEvent.submit(name.form!); });
+        expect(mocks.addItem).not.toHaveBeenCalled();
+      }
+      fireEvent.change(quantityField(), { target: { value: "9999" } });
+      await act(async () => { fireEvent.submit(name.form!); });
+      expect(mocks.addItem).toHaveBeenCalledTimes(1);
+    });
+
+    it("counts price x quantity in the folder total, and a quantity of 1 shows no extra line", () => {
+      const rows = [{ ...item(2, "Fans", "USD", 2, 500), quantity: 4 }, item(1, "Case", "USD", 2, 10_000)];
+      render(view(locale, folderOf({ items: rows })));
+      expect(screen.getByRole("banner").textContent).toContain("$120.00");
+      expect(rowOf("Fans").textContent).toContain("4 × $5.00");
+      expect(rowOf("Fans").textContent).toContain("$20.00");
+      expect(rowOf("Case").textContent).not.toContain("×");
+    });
+
+    it("edits the quantity of a row, starting from the one it has", async () => {
+      render(view(locale, folderOf({ items: [{ ...item(1, "Fans", "USD", 2, 500), quantity: 4 }] })));
+      openRow("Fans");
+      const dialog = await screen.findByRole("dialog", { name: t().editTitle });
+      expect(quantityField(within(dialog)).value).toBe("4");
+      fireEvent.change(quantityField(within(dialog)), { target: { value: "6" } });
+      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t().saveItem })); });
+      expect(mocks.updateItem).toHaveBeenCalledWith(item(1, "Fans", "USD", 2, 0).id, { name: "Fans", priceMinor: 500, quantity: 6 });
+      expect(rowOf("Fans").textContent).toContain("6 × $5.00");
+    });
+  });
+
   describe("live updates", () => {
     const channel = () => mocks.realtime!.active()[0];
     const remoteRow = (n: number, name: string, priceMinor: number, createdBy = KARIM) => {
       const row = item(n, name, "USD", 2, priceMinor, createdBy);
-      return { id: row.id, folder_id: FOLDER, category_id: OTHER, name, currency: "USD", decimal_places: 2, price_minor: priceMinor,
+      return { id: row.id, folder_id: FOLDER, category_id: OTHER, name, currency: "USD", decimal_places: 2, price_minor: priceMinor, quantity: 1,
         created_by: createdBy, updated_by: createdBy, created_at: row.createdAt, updated_at: row.updatedAt };
     };
     const shared = () => folderOf({ isOwner: false, members: [person(KARIM, "Karim", true), person(VIEWER, "Dana")] });
@@ -791,7 +856,7 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       const createdAt = new Date().toISOString();
       for (let echo = 0; echo < 2; echo++) {
         act(() => channel().emit("invoice_items", { eventType: "INSERT", old: {}, new: {
-          id: sent.id, folder_id: FOLDER, category_id: OTHER, name: "Monitor", currency: "USD", decimal_places: 2, price_minor: 19_999,
+          id: sent.id, folder_id: FOLDER, category_id: OTHER, name: "Monitor", currency: "USD", decimal_places: 2, price_minor: 19_999, quantity: 1,
           created_by: VIEWER, updated_by: VIEWER, created_at: createdAt, updated_at: createdAt } }));
       }
       const names = within(list()).getAllByRole("listitem").map((row) => row.querySelector("bdi:not([dir])")?.textContent);
