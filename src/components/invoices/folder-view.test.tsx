@@ -739,7 +739,7 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       render(view(locale, sorted()));
       const toggles = screen.getAllByRole("button", { expanded: true });
       expect(toggles.map((b) => b.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
-      const caseToggle = screen.getByRole("button", { name: /Case & Cooling/ });
+      const caseToggle = screen.getByRole("button", { name: /^Case & Cooling/ });
       fireEvent.click(caseToggle);
       expect(caseToggle.getAttribute("aria-expanded")).toBe("false");
       expect(screen.queryByRole("list", { name: "Case & Cooling" })).toBeNull(); // hidden from the accessibility tree
@@ -747,6 +747,27 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
       fireEvent.click(caseToggle);
       expect(caseToggle.getAttribute("aria-expanded")).toBe("true");
       expect(screen.getByRole("list", { name: "Case & Cooling" })).toBeTruthy();
+    });
+
+    it("selects every row of one category with its own button, and clears just that category again", () => {
+      const t = catalogsT();
+      render(view(locale, folderOf({
+        categories: [caseCategory, otherCategory],
+        items: [{ ...item(4, "Fan", "USD", 2, 2_000), categoryId: CASE_ID }, { ...item(3, "Case", "USD", 2, 10_000), categoryId: CASE_ID }, item(2, "GPU", "USD", 2, 45_000)],
+      })));
+      const selectCase = () => screen.getByRole("button", { name: t.selectCategory.replace("{name}", "Case & Cooling") });
+      fireEvent.click(selectCase());
+      const checkbox = (name: string) => within(rowOf(name)).getByRole("checkbox") as HTMLInputElement;
+      expect([checkbox("Fan").checked, checkbox("Case").checked, checkbox("GPU").checked]).toEqual([true, true, false]);
+      expect(screen.getByRole("region", { name: t.selectionBarLabel }).textContent).toContain("120.00");
+      // Every row of the category is ticked, so its button now clears them; the other category stays as it was.
+      fireEvent.click(checkbox("GPU"));
+      fireEvent.click(screen.getByRole("button", { name: t.clearCategory.replace("{name}", "Case & Cooling") }));
+      expect([checkbox("Fan").checked, checkbox("Case").checked, checkbox("GPU").checked]).toEqual([false, false, true]);
+      // A partly ticked category selects the rest, not nothing.
+      fireEvent.click(checkbox("Fan"));
+      fireEvent.click(selectCase());
+      expect([checkbox("Fan").checked, checkbox("Case").checked]).toEqual([true, true]);
     });
 
     it("puts a row of a category this screen does not know under \"Other\"", () => {

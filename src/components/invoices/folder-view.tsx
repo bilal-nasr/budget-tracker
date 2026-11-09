@@ -287,6 +287,12 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   const pickedTotals = totalsByCurrency(picked).sort((a, b) => (rank.get(totalKey(a)) ?? totals.length) - (rank.get(totalKey(b)) ?? totals.length));
   const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
   const clearSelection = () => setSelected(new Set());
+  // Ticks (or, when all of them are already ticked, unticks) the rows of one category; other categories keep their ticks.
+  const toggleCategory = (ids: string[], allOn: boolean) => setSelected((current) => {
+    const next = new Set(current);
+    for (const id of ids) { if (allOn) next.delete(id); else next.add(id); }
+    return next;
+  });
   const active = folder.members.filter((member) => !member.removed);
   const shared = active.length > 1;
   const people = new Map(active.map((member) => [member.userId, member]));
@@ -373,24 +379,30 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
         categories={categories} categoryId={formCategory} onCategoryChange={setAddCategory} onNewCategory={() => setSheet({ mode: "categories" })} onAdd={(row, input) => add(row, () => addItem(input))} />
       {items.length ? (
         <section className="flex flex-col gap-2">
-          <Button variant="ghost" size="sm" className="self-end" disabled={!tickable.length}
-            onClick={() => setSelected(allPicked ? new Set() : new Set(tickable.map((row) => row.id)))}>{t(allPicked ? "clearSelection" : "selectAll")}</Button>
+          <Button variant="outline" size="sm" className="self-end" disabled={!tickable.length}
+            onClick={() => setSelected(allPicked ? new Set() : new Set(tickable.map((row) => row.id)))}>{t(allPicked ? (headed ? "clearAllItems" : "clearSelection") : (headed ? "selectAllItems" : "selectAll"))}</Button>
           <div className="flex flex-col gap-4">
             {groups.map(({ category, rows }) => {
               const label = categoryLabel(category, t("categoryOther"));
               const subtotals = orderTotals(totalsByCurrency(rows), enabledCurrencies, defaultCurrency);
               const folded = headed && closed.has(category.id);
+              const groupIds = rows.filter((row) => !isSaving(row.id)).map((row) => row.id);
+              const groupPicked = groupIds.length > 0 && groupIds.every((id) => selected.has(id));
               return <div key={category.id} className="flex flex-col gap-0.5">
-                {headed ? <div className="flex items-center justify-between gap-3">
-                  <h2 className="min-w-0 flex-1 text-[15px] font-semibold">
-                    <button type="button" aria-expanded={!folded} aria-controls={`group-${category.id}`} onClick={() => toggleGroup(category.id)}
-                      className="-ms-1 flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-lg px-1 text-start hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring">
-                      <ChevronDown aria-hidden className={`size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${folded ? "-rotate-90 rtl:rotate-90" : ""}`} />
-                      <span className="min-w-0 [overflow-wrap:anywhere]"><bdi>{label}</bdi></span>
-                      <span className="shrink-0 text-[13px] font-normal text-muted-foreground">({rows.length})</span>
-                    </button>
-                  </h2>
-                  <ul aria-label={t("categoryTotalsLabel", { name: label })} className="flex min-w-0 flex-wrap justify-end gap-x-3 text-[13px] text-muted-foreground">
+                {headed ? <div className="flex flex-col">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="min-w-0 flex-1 text-[15px] font-semibold">
+                      <button type="button" aria-expanded={!folded} aria-controls={`group-${category.id}`} onClick={() => toggleGroup(category.id)}
+                        className="-ms-1 flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-lg px-1 text-start hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring">
+                        <ChevronDown aria-hidden className={`size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${folded ? "-rotate-90 rtl:rotate-90" : ""}`} />
+                        <span className="min-w-0 [overflow-wrap:anywhere]"><bdi>{label}</bdi></span>
+                        <span className="shrink-0 text-[13px] font-normal text-muted-foreground">({rows.length})</span>
+                      </button>
+                    </h2>
+                    <Button variant="outline" size="sm" className="shrink-0" disabled={!groupIds.length} aria-label={t(groupPicked ? "clearCategory" : "selectCategory", { name: label })}
+                      onClick={() => toggleCategory(groupIds, groupPicked)}>{t(groupPicked ? "clearSelection" : "selectAll")}</Button>
+                  </div>
+                  <ul aria-label={t("categoryTotalsLabel", { name: label })} className="-mt-2 flex min-w-0 flex-wrap gap-x-3 pb-1 ps-5.5 text-[13px] text-muted-foreground">
                     {subtotals.map((total) => <li key={totalKey(total)}>
                       {total.minor === null
                         ? t.rich("totalTooLarge", { currency: total.currency, bdi: (chunks) => <bdi dir="ltr">{chunks}</bdi> })
