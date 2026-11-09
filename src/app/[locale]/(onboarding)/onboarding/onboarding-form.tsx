@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { WalletForm } from "@/components/wallets/wallet-sheet";
 import { useRouter } from "@/i18n/navigation";
+import { afterSignInPath } from "@/features/auth/actions";
 import { completeOnboarding, updateProfile } from "@/features/profile/actions";
 
 import type { CurrencyDefinition } from "@/lib/currency";
@@ -35,7 +36,9 @@ export function OnboardingForm({ currencies }: { currencies: CurrencyDefinition[
         setError(true);
         return;
       }
-      router.replace("/", { locale: lang });
+      // A share link opened before signing up waits until setup is done.
+      const next = await afterSignInPath().catch(() => null);
+      router.replace(next ?? "/", { locale: lang });
     });
   };
 

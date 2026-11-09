@@ -128,6 +128,70 @@ describe("session and locale response composition", () => {
     expect(auth.calls).toBe(0);
   });
 
+  describe("remembering a share link for a signed-out visitor", () => {
+    const token = "0f".repeat(32);
+
+    it.each(["en", "ar"])("%s: sends the visitor to sign in and remembers the link for 24 hours", async (locale) => {
+      auth.email = null;
+      const response = await proxy(new NextRequest(`https://budget.example/${locale}/invoices/join/${token}`));
+      expect(response.headers.get("location")).toBe(`https://budget.example/${locale}/sign-in`);
+      expect(response.cookies.get("join_invoice")).toMatchObject({
+        value: token, path: "/", httpOnly: true, sameSite: "lax", maxAge: 86400, secure: true,
+      });
+      expectCookies(response);
+    });
+
+    it.each([
+      "/en/wallets",
+      "/en/sign-in",
+      `/en/invoices/join/${token.slice(1)}`,
+      `/en/invoices/join/${token.toUpperCase()}`,
+      `/en/invoices/join/${token}/extra`,
+      `/en/invoices/${token}`,
+      `/fr/invoices/join/${token}`,
+    ])("does not remember anything for %s", async (path) => {
+      auth.email = null;
+      const response = await proxy(new NextRequest(`https://budget.example${path}`));
+      expect(response.cookies.has("join_invoice")).toBe(false);
+    });
+
+    it("marks the cookie Secure behind a TLS-terminating proxy, which forwards plain http to the app", async () => {
+      auth.email = null;
+      const secureFor = async (headers: Record<string, string>, node?: string) => {
+        if (node) vi.stubEnv("NODE_ENV", node);
+        const response = await proxy(new NextRequest(`http://budget.internal:3000/en/invoices/join/${token}`, { headers }));
+        vi.unstubAllEnvs();
+        vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://synthetic.supabase.co");
+        vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "synthetic-public-key");
+        return response.cookies.get("join_invoice")?.secure;
+      };
+      expect(await secureFor({ "x-forwarded-proto": "https" })).toBe(true);
+      expect(await secureFor({ "x-forwarded-proto": "https, http" })).toBe(true);
+      // A plain-http visit (local development) must still receive the cookie back.
+      expect(await secureFor({ "x-forwarded-proto": "http" }, "production")).toBe(false);
+      expect(await secureFor({})).toBe(false);
+      // No forwarded header in a production build: assume the TLS-terminating proxy.
+      expect(await secureFor({}, "production")).toBe(true);
+    });
+
+    it("tells browsers not to send a referrer from the join page, signed in or not", async () => {
+      auth.email = null;
+      const redirect = await proxy(new NextRequest(`https://budget.example/en/invoices/join/${token}`));
+      expect(redirect.headers.get("referrer-policy")).toBe("no-referrer");
+      auth.email = "PERSON@example.test";
+      const page = await proxy(new NextRequest(`https://budget.example/ar/invoices/join/${token}`));
+      expect(page.headers.get("referrer-policy")).toBe("no-referrer");
+      const other = await proxy(new NextRequest("https://budget.example/en/wallets"));
+      expect(other.headers.has("referrer-policy")).toBe(false);
+    });
+
+    it("lets a signed-in person open the link without remembering it", async () => {
+      const response = await proxy(new NextRequest(`https://budget.example/en/invoices/join/${token}`));
+      expect(response.headers.has("location")).toBe(false);
+      expect(response.cookies.has("join_invoice")).toBe(false);
+    });
+  });
+
   it("keeps auth decisions private even when no token refresh writes cookies", async () => {
     auth.writes = [];
     auth.headers = {};

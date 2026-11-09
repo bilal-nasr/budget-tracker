@@ -32,11 +32,11 @@ export function ScreenHeader({
               <MonthSwitcher className="-ms-2" />
             </Suspense>
           ) : null}
-          {title ? <h1 className={month || cycle ? "sr-only" : "text-lg font-semibold"}>{title}</h1> : month || cycle ? <span /> : null}
+          {title ? <h1 className={month || cycle ? "sr-only" : "min-w-0 text-lg font-semibold [overflow-wrap:anywhere]"}><bdi>{title}</bdi></h1> : month || cycle ? <span /> : null}
           <Link
             href="/settings"
             aria-label={t("settings")}
-            className="grid size-11 place-items-center rounded-lg hover:bg-white/10 md:hidden"
+            className="grid size-11 shrink-0 place-items-center rounded-lg hover:bg-white/10 md:hidden"
           >
             <Settings aria-hidden className="size-5" />
           </Link>

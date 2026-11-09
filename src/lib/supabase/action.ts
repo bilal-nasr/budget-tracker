@@ -16,7 +16,7 @@ export type ActionError =
   | "currencyNonzero" | "currencyInUse" | "lastEnabledCurrency" | "lastWalletBalance"
   | "balanceUnavailable" | "balanceDetached" | "balanceNonzero" | "balanceInUse"
   | "invalidDefault" | "walletDeleted" | "walletNeedsAttention" | "walletNonzero"
-  | "reorderConflict" | "deletionConflict";
+  | "reorderConflict" | "deletionConflict" | "linkInvalid" | "limitReached";
 export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: ActionError };
 
 /** Signed-in Supabase client for a Server Action, or the reason there is none. */
@@ -58,6 +58,10 @@ const databaseErrors: Readonly<Record<string, ActionError>> = {
   "wallet.reorderConflict": "reorderConflict",
   "wallet.invalidSettlement": "settlementMismatch",
   "wallet.deletionConflict": "deletionConflict",
+  "invoices.invalid": "conflict",
+  "invoices.link": "linkInvalid",
+  "invoices.full": "limitReached",
+  "invoices.limit": "limitReached",
 };
 
 /** Stable public error mapping; unknown database diagnostics never cross the action boundary. */

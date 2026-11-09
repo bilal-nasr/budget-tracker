@@ -514,6 +514,202 @@ export type Database = {
                     }
                 ];
             };
+            "invoice_folders": {
+                Row: {
+                    "created_at": string;
+                    "id": string;
+                    "name": string;
+                    "owner_id": string;
+                    "updated_at": string;
+                };
+                ComputedFields: never;
+                Insert: {
+                    "created_at"?: string;
+                    "id": string;
+                    "name": string;
+                    "owner_id"?: string;
+                    "updated_at"?: string;
+                };
+                Update: {
+                    "created_at"?: string;
+                    "id"?: string;
+                    "name"?: string;
+                    "owner_id"?: string;
+                    "updated_at"?: string;
+                };
+                Relationships: [
+                ];
+            };
+            "invoice_item_tombstones": {
+                Row: {
+                    "created_at": string;
+                    "created_by": string | null;
+                    "currency": string;
+                    "decimal_places": number;
+                    "deleted_at": string;
+                    "deleted_by": string | null;
+                    "folder_id": string;
+                    "id": string;
+                    "name": string;
+                    "price_minor": number;
+                    "restoring_txid": number | null;
+                    "updated_at": string;
+                    "updated_by": string | null;
+                };
+                ComputedFields: never;
+                Insert: {
+                    "created_at": string;
+                    "created_by"?: string | null;
+                    "currency": string;
+                    "decimal_places": number;
+                    "deleted_at"?: string;
+                    "deleted_by"?: string | null;
+                    "folder_id": string;
+                    "id": string;
+                    "name": string;
+                    "price_minor": number;
+                    "restoring_txid"?: number | null;
+                    "updated_at": string;
+                    "updated_by"?: string | null;
+                };
+                Update: {
+                    "created_at"?: string;
+                    "created_by"?: string | null;
+                    "currency"?: string;
+                    "decimal_places"?: number;
+                    "deleted_at"?: string;
+                    "deleted_by"?: string | null;
+                    "folder_id"?: string;
+                    "id"?: string;
+                    "name"?: string;
+                    "price_minor"?: number;
+                    "restoring_txid"?: number | null;
+                    "updated_at"?: string;
+                    "updated_by"?: string | null;
+                };
+                Relationships: [
+                ];
+            };
+            "invoice_items": {
+                Row: {
+                    "created_at": string;
+                    "created_by": string | null;
+                    "currency": string;
+                    "decimal_places": number;
+                    "folder_id": string;
+                    "id": string;
+                    "name": string;
+                    "price_minor": number;
+                    "updated_at": string;
+                    "updated_by": string | null;
+                };
+                ComputedFields: never;
+                Insert: {
+                    "created_at"?: string;
+                    "created_by"?: string | null;
+                    "currency": string;
+                    "decimal_places": number;
+                    "folder_id": string;
+                    "id": string;
+                    "name": string;
+                    "price_minor": number;
+                    "updated_at"?: string;
+                    "updated_by"?: string | null;
+                };
+                Update: {
+                    "created_at"?: string;
+                    "created_by"?: string | null;
+                    "currency"?: string;
+                    "decimal_places"?: number;
+                    "folder_id"?: string;
+                    "id"?: string;
+                    "name"?: string;
+                    "price_minor"?: number;
+                    "updated_at"?: string;
+                    "updated_by"?: string | null;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "invoice_items_folder_id_fkey";
+                        columns: [
+                            "folder_id"
+                        ];
+                        isOneToOne: false;
+                        referencedRelation: "invoice_folders";
+                        referencedColumns: [
+                            "id"
+                        ];
+                    }
+                ];
+            };
+            "invoice_links": {
+                Row: {
+                    "created_at": string;
+                    "folder_id": string;
+                    "token": string;
+                };
+                ComputedFields: never;
+                Insert: {
+                    "created_at"?: string;
+                    "folder_id": string;
+                    "token": string;
+                };
+                Update: {
+                    "created_at"?: string;
+                    "folder_id"?: string;
+                    "token"?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "invoice_links_folder_id_fkey";
+                        columns: [
+                            "folder_id"
+                        ];
+                        isOneToOne: true;
+                        referencedRelation: "invoice_folders";
+                        referencedColumns: [
+                            "id"
+                        ];
+                    }
+                ];
+            };
+            "invoice_members": {
+                Row: {
+                    "display_name": string | null;
+                    "folder_id": string;
+                    "joined_at": string;
+                    "removed_at": string | null;
+                    "user_id": string;
+                };
+                ComputedFields: never;
+                Insert: {
+                    "display_name"?: string | null;
+                    "folder_id": string;
+                    "joined_at"?: string;
+                    "removed_at"?: string | null;
+                    "user_id": string;
+                };
+                Update: {
+                    "display_name"?: string | null;
+                    "folder_id"?: string;
+                    "joined_at"?: string;
+                    "removed_at"?: string | null;
+                    "user_id"?: string;
+                };
+                Relationships: [
+                    {
+                        foreignKeyName: "invoice_members_folder_id_fkey";
+                        columns: [
+                            "folder_id"
+                        ];
+                        isOneToOne: false;
+                        referencedRelation: "invoice_folders";
+                        referencedColumns: [
+                            "id"
+                        ];
+                    }
+                ];
+            };
             "loan_deleted_requests": {
                 Row: {
                     "request_id": string;
@@ -1751,6 +1947,12 @@ export type Database = {
                 };
                 Returns: undefined;
             };
+            "disable_invoice_link": {
+                Args: {
+                    "p_folder": string;
+                };
+                Returns: undefined;
+            };
             "installment_cycle_snapshot": {
                 Args: Record<PropertyKey, never>;
                 Returns: Json;
@@ -1758,6 +1960,43 @@ export type Database = {
             "installment_cycle_summary": {
                 Args: Record<PropertyKey, never>;
                 Returns: Json;
+            };
+            "invoice_item_restorable": {
+                Args: {
+                    "p_deleted_at": string;
+                };
+                Returns: boolean;
+            };
+            "invoice_link_preview": {
+                Args: {
+                    "p_token": string;
+                };
+                Returns: string;
+            };
+            "is_invoice_member": {
+                Args: {
+                    "folder": string;
+                };
+                Returns: boolean;
+            };
+            "is_invoice_owner": {
+                Args: {
+                    "folder": string;
+                };
+                Returns: boolean;
+            };
+            "join_invoice_folder": {
+                Args: {
+                    "p_name": string;
+                    "p_token": string;
+                };
+                Returns: string;
+            };
+            "leave_invoice_folder": {
+                Args: {
+                    "p_folder": string;
+                };
+                Returns: undefined;
             };
             "loan_today": {
                 Args: Record<PropertyKey, never>;
@@ -1907,6 +2146,13 @@ export type Database = {
                 };
                 Returns: string;
             };
+            "remove_invoice_member": {
+                Args: {
+                    "p_folder": string;
+                    "p_user": string;
+                };
+                Returns: undefined;
+            };
             "reorder_categories": {
                 Args: {
                     "p_ids": (string)[];
@@ -1917,6 +2163,12 @@ export type Database = {
             "reorder_wallets": {
                 Args: {
                     "p_ids": (string)[];
+                };
+                Returns: undefined;
+            };
+            "restore_invoice_item": {
+                Args: {
+                    "p_item": string;
                 };
                 Returns: undefined;
             };
@@ -1937,6 +2189,13 @@ export type Database = {
                     "p_user_id": string;
                 };
                 Returns: undefined;
+            };
+            "rotate_invoice_link": {
+                Args: {
+                    "p_folder": string;
+                    "p_owner_name": string;
+                };
+                Returns: string;
             };
             "save_transaction": {
                 Args: {

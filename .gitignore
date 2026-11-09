@@ -52,3 +52,6 @@ test-results/
 
 # supabase CLI local state
 /supabase/.branches
+
+# Local scratch from brainstorming and subagent runs
+.superpowers/

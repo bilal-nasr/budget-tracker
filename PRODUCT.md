@@ -19,7 +19,7 @@ Delegated details (chosen by Claude, owner may override): TypeScript, Tailwind C
 
 One primary user: the owner (Bilal), tracking personal money day to day, mostly on a phone, often right after paying for something (in a shop, a taxi, at a counter). The job is "log this in a few seconds, then later see where my month is going." Money is held in both US dollars and Lebanese lira.
 
-Anyone can create an account with email and password; it works once they confirm the email. The owner is the primary user, but each account is private to its own person: data is keyed by `user_id` with Row Level Security, so accounts never see each other's money.
+Anyone can create an account with email and password; it works once they confirm the email. The owner is the primary user, but each account is private to its own person: data is keyed by `user_id` with Row Level Security, so accounts never see each other's money. The one exception is an invoice folder shared by link, which is visible to the people in it.
 
 ## Product Purpose
 
@@ -52,6 +52,7 @@ v1 scope:
 - Installment paid status follows actual salary receipt cycles, with an explicit repeat-payment action. Principal progress remains lifetime progress.
 - Borrowed and lent loans with one additive, one-time percentage fee, principal-first repayments, fee-only income/spending and an explicit existing-loan entry that does not move cash.
 - Item calculator (`/items`, linked from Wallets): list items with prices per currency, see the total and the total of ticked items, edit or delete items, and mark them bought. Buying records one ordinary expense in Activity (several items become one expense itemised by name), and undoing that expense returns the items to the list. Items never move money themselves.
+- Invoices (`/invoices`, linked from Wallets): named folders of rows with an item name, a price and a currency (for example a "PC build"), with one total per currency that is never mixed. Folders are not connected to wallets, Activity, budgets or reports, and rows never move money. A folder can be shared by a link: everyone in it can add, edit and delete any row, and changes appear live for the others. This is a narrow, per-folder exception to "household/shared spaces" being out of v1; nothing else of an account is ever shared.
 - Monthly budgets: a limit per expense category per currency; carry forward to the next month by default.
 - Home: this month's spending vs budget, per currency; recent activity.
 - Reports: spending by category and month-over-month trend.
@@ -60,11 +61,11 @@ v1 scope:
 
 Constraints:
 - Money is stored as integer minor units with runtime precision from 0 to 8 decimal places (seeded USD cents, LBP whole lira and SYP whole pounds). Never floats. Never add different currencies. No automatic old/new SYP redenomination.
-- All data is private to its owner; Row Level Security on every table.
+- All data is private to its owner; Row Level Security on every table. The one exception is an invoice folder the owner chose to share by link: its rows and the names its people typed are visible to the people in that folder, and to nobody else.
 - Open sign-up with email verification and password recovery (Supabase Auth). No owner allowlist. Persistent login uses a 30-day absolute session policy where configured; hosted Auth must be configured separately (see `docs/ARCHITECTURE.md` §3).
 - Every user-visible string ships in English and Arabic in the same change.
 
-Explicitly out of v1 (candidates for later): household/shared spaces, envelope "ready to assign" model, recurring/compounding loan interest, automated recurring transactions, savings goals, CSV import/export, bank sync, AI entry.
+Explicitly out of v1 (candidates for later): household/shared spaces beyond the per-folder sharing of Invoices, envelope "ready to assign" model, recurring/compounding loan interest, automated recurring transactions, savings goals, CSV import/export, bank sync, AI entry.
 
 Input conventions:
 - Latin digits by default, with an Arabic-Indic display setting; numeric parsing accepts keyboard digit scripts independently of UI locale.

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { safeNext, siteBase } from "@/features/auth/redirect";
+import { pendingJoinAfterSignIn } from "@/features/invoices/pending-join";
 import { createClient } from "@/lib/supabase/server";
 
 function privateRedirect(url: URL) {
@@ -27,8 +28,14 @@ export async function GET(request: NextRequest) {
 
   if (tokenHash && (type === "email" || type === "recovery")) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error) return privateRedirect(new URL(next, origin));
+    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+    if (!error) {
+      // A share link opened before signing up. A new account still goes through onboarding,
+      // which opens the link when it finishes; a reset link always asks for the new password first.
+      const userId = type === "email" ? data?.user?.id : undefined;
+      const join = userId ? await pendingJoinAfterSignIn(supabase, userId).catch(() => null) : null;
+      return privateRedirect(new URL(join ? `/${locale}${join}` : next, origin));
+    }
   }
   // Expired, reused or malformed link. A reset link goes back to ask for a new one.
   const retry = type === "recovery" ? "forgot-password" : "sign-in";

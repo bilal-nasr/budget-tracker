@@ -7,7 +7,8 @@ export function EmptyState({
   action,
 }: {
   title: string;
-  body: string;
+  /** Left out when the title already says everything. */
+  body?: string;
   action?: React.ReactNode;
 }) {
   return (
@@ -15,7 +16,7 @@ export function EmptyState({
       <TileOrnament />
       <div className="flex flex-col gap-1.5">
         <h2 className="text-[17px] font-semibold">{title}</h2>
-        <p className="max-w-[36ch] text-[15px] text-muted-foreground">{body}</p>
+        {body ? <p className="max-w-[36ch] text-[15px] text-muted-foreground">{body}</p> : null}
       </div>
       {action}
     </div>

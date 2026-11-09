@@ -1,6 +1,7 @@
-import { Calculator, ChevronRight, HandCoins, Hourglass } from "lucide-react";
+import { Calculator, ChevronRight, FileText, HandCoins, Hourglass } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { Amount } from "@/components/money/amount";
+import { getInvoiceFolderCount } from "@/features/invoices/queries";
 import { getShoppingItems } from "@/features/items/queries";
 import { getLoans } from "@/features/loans/queries";
 import { getPendingPayments } from "@/features/pending-payments/queries";
@@ -22,7 +23,7 @@ function Amounts({ totals }: { totals: Total[] }) {
   </>;
 }
 
-function Row({ href, icon: Icon, title, hint, children }: { href: "/loans" | "/pending-payments" | "/items"; icon: typeof HandCoins; title: string; hint: string; children?: React.ReactNode }) {
+function Row({ href, icon: Icon, title, hint, children }: { href: "/loans" | "/pending-payments" | "/items" | "/invoices"; icon: typeof HandCoins; title: string; hint: string; children?: React.ReactNode }) {
   return (
     <Link href={href} className="flex min-h-[72px] items-center gap-3 px-3.5 py-3 hover:bg-accent/50 active:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
       <span className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-secondary text-primary"><Icon aria-hidden className="size-5" /></span>
@@ -36,12 +37,13 @@ function Row({ href, icon: Icon, title, hint, children }: { href: "/loans" | "/p
   );
 }
 
-/** Loans, client payments and the item calculator at a glance; each opens its own screen. Totals stay per currency, never mixed. */
+/** Loans, client payments, the item calculator and invoice folders at a glance; each opens its own screen. Totals stay per currency, never mixed. Invoice folders show only how many there are: their money is never counted here. */
 export async function Commitments() {
-  const [t, loans, jobs, items] = await Promise.all([getTranslations("Wallets"), getLoans().catch(() => []), getPendingPayments().catch(() => []), getShoppingItems().catch(() => [])]);
+  const [t, loans, jobs, items, folderCount] = await Promise.all([getTranslations("Wallets"), getLoans().catch(() => []), getPendingPayments().catch(() => []), getShoppingItems().catch(() => []), getInvoiceFolderCount().catch(() => 0)]);
   const l = await getTranslations("Loans");
   const p = await getTranslations("PendingPayments");
   const i = await getTranslations("Items");
+  const v = await getTranslations("Invoices");
   const active = loans.filter((loan) => !loan.deletedAt && !loan.archivedAt && loan.remainingMinor > 0);
   const owe = sum(active.filter((loan) => loan.direction === "borrowed").map((loan) => ({ currency: loan.currency, minor: loan.remainingMinor })));
   const owed = sum(active.filter((loan) => loan.direction === "lent").map((loan) => ({ currency: loan.currency, minor: loan.remainingMinor })));
@@ -66,6 +68,9 @@ export async function Commitments() {
         <Row href="/items" icon={Calculator} title={i("title")} hint={listed.length > 0 ? t("itemsCount", { count: listed.length }) : t("nothingListed")}>
           {toBuy.length > 0 ? <span><Amounts totals={toBuy} /></span> : null}
         </Row>
+      </li>
+      <li>
+        <Row href="/invoices" icon={FileText} title={v("title")} hint={folderCount > 0 ? t("foldersCount", { count: folderCount }) : t("noFolders")} />
       </li>
     </ul>
   );

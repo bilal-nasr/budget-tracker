@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { siteBase } from "@/features/auth/redirect";
+import { forgetPendingJoin, hasPendingJoin, pendingJoinAfterSignIn } from "@/features/invoices/pending-join";
 import { redirect } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import { createClient } from "@/lib/supabase/server";
@@ -67,7 +68,7 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   if (!supabaseConfigured()) return { error: "notConfigured" };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
     options: { captchaToken: captchaTokenOf(formData) },
@@ -77,8 +78,27 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
     return { error: error.code === "email_not_confirmed" ? "unconfirmed" : "credentials" };
   }
 
-  redirect({ href: "/", locale: parsed.data.locale });
+  // A share link opened while signed out comes first; otherwise home, as before.
+  const next = data.user ? await pendingJoinAfterSignIn(supabase, data.user.id).catch(() => null) : null;
+  redirect({ href: next ?? "/", locale: parsed.data.locale });
   return { error: null };
+}
+
+/**
+ * The share link remembered before signing in, for sign-ins that finish in the browser
+ * (a sign-in key) and for the end of onboarding. Null means "go home as usual".
+ */
+export async function afterSignInPath(): Promise<string | null> {
+  if (!supabaseConfigured()) return null;
+  try {
+    // Most people never open a share link: skip the auth round trip for them.
+    if (!(await hasPendingJoin())) return null;
+    const userId = await getUserId();
+    if (!userId) return null;
+    return await pendingJoinAfterSignIn(await createClient(), userId);
+  } catch {
+    return null;
+  }
 }
 
 const signUpSchema = z.object({
@@ -177,7 +197,8 @@ export async function updatePassword(
   }
   if (parsed.data.password !== parsed.data.confirm) return { error: "mismatch" };
   if (!supabaseConfigured()) return { error: "notConfigured" };
-  if (!(await getUserId())) return { error: "failed" };
+  const userId = await getUserId();
+  if (!userId) return { error: "failed" };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
@@ -185,7 +206,8 @@ export async function updatePassword(
     if (error.code === "weak_password" || error.code === "same_password") return { error: "weakPassword" };
     return { error: "failed" };
   }
-  redirect({ href: "/", locale });
+  const next = await pendingJoinAfterSignIn(supabase, userId).catch(() => null);
+  redirect({ href: next ?? "/", locale });
   return { error: null };
 }
 
@@ -212,5 +234,7 @@ export async function signOut(formData: FormData): Promise<void> {
     const supabase = await createClient();
     await supabase.auth.signOut();
   }
+  // A share link remembered for a sign-in must not outlive the person who opened it.
+  await forgetPendingJoin().catch(() => {});
   redirect({ href: "/sign-in", locale });
 }

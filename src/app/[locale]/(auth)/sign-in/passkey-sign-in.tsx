@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { afterSignInPath } from "@/features/auth/actions";
 import { passkeysConfigured, passkeysSupported, signInWithPasskey } from "@/features/passkeys/client";
 import type { PasskeyErrorKind } from "@/features/passkeys/errors";
 import { useRouter } from "@/i18n/navigation";
@@ -39,7 +40,9 @@ export function PasskeySignIn({
     setError(null);
     const result = await signInWithPasskey(captchaToken());
     if (result.ok) {
-      router.replace("/");
+      // A share link opened while signed out comes first; otherwise home.
+      const next = await afterSignInPath().catch(() => null);
+      router.replace(next ?? "/");
       router.refresh();
       return;
     }
