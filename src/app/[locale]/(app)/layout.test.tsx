@@ -16,7 +16,11 @@ vi.mock("@/components/shell/app-shell", () => ({ AppShell: ({ children }: { chil
 vi.mock("@/components/shell/composer", () => ({ ComposerProvider: ({ children }: { children: React.ReactNode }) => children }));
 import AppLayout from "./layout";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  queries.wallets.mockReset();
+  queries.currencies.mockReset();
+});
 
 function Probe() {
   const data = useAppData();
@@ -37,4 +41,15 @@ it("loads complete history at the layout boundary while ordinary views exclude t
   queries.wallets.mockImplementation(async (options) => options?.includeDeleted && options?.includeNeedsAttention && options?.includeDisabledBalances ? [old] : []);
   render(await AppLayout({ children: <Probe />, params: Promise.resolve({ locale: "en" }) }));
   expect(JSON.parse(screen.getByRole("status").textContent ?? "{}")).toEqual({ history: "JPY", deleted: true, ordinary: [] });
+});
+
+// A URL the proxy matcher skips (/wallets, /robots.txt) reaches this layout with that
+// segment as `locale` and no session. The sibling [locale] layout also 404s it, but they
+// render in parallel, so this one must refuse before it queries as `anon`.
+it.each(["wallets", "robots.txt", "EN", ""])("404s the unknown locale %j without querying", async (locale) => {
+  await expect(AppLayout({ children: null, params: Promise.resolve({ locale }) })).rejects.toMatchObject({
+    digest: expect.stringContaining("404"),
+  });
+  expect(queries.wallets).not.toHaveBeenCalled();
+  expect(queries.currencies).not.toHaveBeenCalled();
 });

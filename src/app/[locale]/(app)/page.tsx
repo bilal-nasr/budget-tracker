@@ -1,5 +1,8 @@
 import { Suspense } from "react";
+import { notFound } from "next/navigation";
+import { hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
+import { routing } from "@/i18n/routing";
 import { HomeView, HomeBudgetSummary, HomeCommitments, HomeRecent } from "@/components/home/home-view";
 import { buildCycles, pickCycle } from "@/features/budgets/cycles";
 import { getMonthBudgets, getSalaryReceiptDates } from "@/features/budgets/queries";
@@ -39,6 +42,8 @@ async function RecentData({ recent }: { recent: ReturnType<typeof fetchTransacti
 
 export default async function HomePage({ params }: PageProps<"/[locale]">) {
   const { locale } = await params;
+  // Same guard as the (app) layout: this page's reads start in parallel with it.
+  if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
   // Start independent reads before the profile resolves. Separate boundaries let
   // the wallet hero and recent activity render while slower sections are pending.
