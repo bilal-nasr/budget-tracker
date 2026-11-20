@@ -23,6 +23,8 @@ const itemRow = z.object({
   price_minor: z.union([z.number(), z.string()]),
   quantity: z.number().int().min(1),
   created_by: z.uuid().nullable(), created_at: z.string().min(1), updated_at: z.string().min(1),
+  // The paid marker (absent from events of a database that predates it).
+  paid_on: z.string().nullable().optional(), paid_at: z.string().nullable().optional(), paid_by: z.uuid().nullable().optional(),
 });
 const keyRow = z.object({ id: z.uuid() });
 
@@ -33,7 +35,8 @@ function toItem(value: unknown, folderId: string): InvoiceItem | null {
   let priceMinor: number;
   try { priceMinor = readMinor(row.data.price_minor); } catch { return null; }
   const { id, category_id: categoryId, name, currency, decimal_places: decimalPlaces, quantity, created_by: createdBy, created_at: createdAt, updated_at: updatedAt } = row.data;
-  return { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, quantity, createdBy, createdAt, updatedAt };
+  const paid = row.data.paid_on && row.data.paid_at ? { paidOn: row.data.paid_on, paidAt: row.data.paid_at, paidBy: row.data.paid_by ?? null } : { paidOn: null, paidAt: null, paidBy: null };
+  return { id, folderId, categoryId, name, currency, decimalPlaces, priceMinor, quantity, createdBy, createdAt, updatedAt, ...paid };
 }
 
 let opened = 0;

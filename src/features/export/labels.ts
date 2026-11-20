@@ -66,7 +66,7 @@ const en: ExportLabels = {
   enums: {
     income: "Income", expense: "Expense", transfer: "Transfer", loan: "Loan", "loan-in": "Loan cash in",
     "loan-out": "Loan cash out", "transfer-in": "Transfer in", "transfer-out": "Transfer out",
-    "cash-change": "Cash change", salary: "Salary", fixed: "Fixed expense", installment: "Installment",
+    "cash-change": "Cash change", "cash-tender": "Cash payment", salary: "Salary", fixed: "Fixed expense", installment: "Installment",
     cash: "Cash", bank: "Bank", card: "Card", paidOff: "Paid off", unpaid: "Unpaid", partial: "Partially paid",
     paid: "Paid", borrowed: "Borrowed", lent: "Lent", disbursement: "Disbursement", repayment: "Repayment",
   },
@@ -118,7 +118,7 @@ const ar: ExportLabels = {
   enums: {
     income: "دخل", expense: "مصروف", transfer: "تحويل", loan: "قرض", "loan-in": "نقد داخل من قرض",
     "loan-out": "نقد خارج لقرض", "transfer-in": "تحويل داخل", "transfer-out": "تحويل خارج",
-    "cash-change": "باقي نقدي", salary: "راتب", fixed: "مصروف ثابت", installment: "قسط",
+    "cash-change": "باقي نقدي", "cash-tender": "دفعة نقدية", salary: "راتب", fixed: "مصروف ثابت", installment: "قسط",
     cash: "نقدية", bank: "مصرفية", card: "بطاقة", paidOff: "مسدّد بالكامل", unpaid: "غير مدفوع",
     partial: "مدفوع جزئياً", paid: "مدفوع", borrowed: "مقترض", lent: "مُقرض", disbursement: "صرف",
     repayment: "سداد",

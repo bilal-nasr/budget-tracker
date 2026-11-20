@@ -56,6 +56,11 @@ const labels: CashSettlementLabels = {
   wallet: "Put change in",
   addChange: "Add another change",
   removeChange: "Remove change",
+  extraTenderWallet: "Also paid from",
+  extraTenderCurrency: "Payment currency",
+  extraTender: "Amount paid",
+  addTender: "Add another payment",
+  removeTender: "Remove payment",
   selectWallet: "Choose a wallet",
   errors: {
     amount: "Enter valid amounts.",
@@ -149,4 +154,73 @@ it("parses custom precision-eight cashier amounts and rejects disabled new tende
  expect(parseDraft(value,"TOKEN8","TOKEN8",249999999,[exact],undefined,[{...custom,disabled:true}])).toEqual({ok:false,error:"walletUnavailable"});
  const snapshot={tenderMinor:250000001,tenderCurrency:"TOKEN8",changes:[{balanceId:exact.id,currency:"TOKEN8",amountMinor:2}]};
  expect(fromSnapshot(snapshot,"TOKEN8",exact.id,false,[{...custom,disabled:true}])).toMatchObject({tenderText:"2.50000001",changes:[{amountText:"0.00000002"}]});
+});
+
+describe("several payments for one purchase", () => {
+  const mixedDraft: CashSettlementDraft = {
+    enabled: true,
+    tenderText: "3",
+    extraTenders: [{ key: "lbp-tender", amountText: "1300000", currency: "LBP", balanceId: lbp.id }],
+    changes: [
+      { key: "usd-change", amountText: "5", currency: "USD", balanceId: usd.id },
+      { key: "lbp-change", amountText: "10000", currency: "LBP", balanceId: lbp.id },
+    ],
+  };
+  const mixedSnapshot = {
+    tenderMinor: 300, tenderCurrency: "USD",
+    extraTenders: [{ balanceId: lbp.id, amountMinor: 1300000, currency: "LBP" }],
+    changes: [{ balanceId: usd.id, amountMinor: 500, currency: "USD" }, { balanceId: lbp.id, amountMinor: 10000, currency: "LBP" }],
+  };
+
+  it("parses 3 USD and 1,300,000 LBP paid for 10 USD with 5 USD and 10,000 LBP returned, with no rate", () => {
+    expect(parseSettlementDraft(mixedDraft, "USD", "USD", 1000, [usd, lbp])).toEqual({ ok: true, settlement: {
+      tenderMinor: 300,
+      extraTenders: [{ balanceId: lbp.id, amountMinor: 1300000 }],
+      changes: [{ balanceId: usd.id, amountMinor: 500 }, { balanceId: lbp.id, amountMinor: 10000 }],
+    } });
+  });
+
+  it("rejects an unfinished, unavailable or archived payment line instead of dropping it", () => {
+    const withTender = (patch: Partial<NonNullable<CashSettlementDraft["extraTenders"]>[number]>) =>
+      ({ ...mixedDraft, extraTenders: [{ ...mixedDraft.extraTenders![0], ...patch }] });
+    expect(parseSettlementDraft(withTender({ amountText: "" }), "USD", "USD", 1000, [usd, lbp])).toEqual({ ok: false, error: "amount" });
+    expect(parseSettlementDraft(withTender({ balanceId: "" }), "USD", "USD", 1000, [usd, lbp])).toEqual({ ok: false, error: "walletUnavailable" });
+    expect(parseSettlementDraft(mixedDraft, "USD", "USD", 1000, [usd, { ...lbp, archived: true }])).toEqual({ ok: false, error: "walletUnavailable" });
+  });
+
+  it("hydrates saved payment lines and keeps an exact historical edit possible after a wallet is archived", () => {
+    const hydrated = settlementDraftFromSnapshot(mixedSnapshot, "USD", usd.id);
+    expect(hydrated.extraTenders).toMatchObject([{ amountText: "1300000", currency: "LBP", balanceId: lbp.id }]);
+    const context = { balanceId: usd.id, original: { balanceId: usd.id, currency: "USD", amountMinor: 1000, settlement: mixedSnapshot } };
+    const archived = [usd, { ...lbp, archived: true }];
+    expect(parseSettlementDraft(hydrated, "USD", "USD", 1000, archived, context).ok).toBe(true);
+    expect(parseSettlementDraft({ ...hydrated, extraTenders: [{ ...hydrated.extraTenders![0], amountText: "1200000" }] }, "USD", "USD", 1000, archived, context))
+      .toEqual({ ok: false, error: "walletUnavailable" });
+  });
+
+  it("shows no payment rows until asked, then adds, edits and removes them independently", () => {
+    const onChange = vi.fn();
+    const view = render(<CashSettlementFields containers={containers} definitions={SEED_CURRENCY_DEFINITIONS} draft={draft} payCurrency="USD" costCurrency="USD" costMinor={1250}
+      wallets={[usd, lbp]} payerBalanceId={usd.id} onPayerBalanceChange={vi.fn()} labels={labels} onChange={onChange} />);
+    expect(screen.queryByLabelText(labels.extraTender)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: labels.addTender }));
+    // The new line starts on another live balance, never on the paying one.
+    expect(onChange.mock.calls[0][0].extraTenders).toMatchObject([{ amountText: "", currency: "LBP", balanceId: lbp.id }]);
+    expect(onChange.mock.calls[0][0].changes).toEqual(draft.changes);
+
+    view.rerender(<CashSettlementFields containers={containers} definitions={SEED_CURRENCY_DEFINITIONS} draft={mixedDraft} payCurrency="USD" costCurrency="USD" costMinor={1000}
+      wallets={[usd, lbp]} payerBalanceId={usd.id} onPayerBalanceChange={vi.fn()} labels={labels} onChange={onChange} />);
+    const amount = screen.getByLabelText(labels.extraTender) as HTMLInputElement;
+    expect(amount.value).toBe("1300000");
+    expect(amount.getAttribute("dir")).toBe("ltr");
+    expect(amount.getAttribute("inputmode")).toBe("numeric");
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.change(amount, { target: { value: "1250000" } });
+    expect(onChange.mock.calls[1][0].extraTenders).toEqual([{ ...mixedDraft.extraTenders![0], amountText: "1250000" }]);
+    fireEvent.change(screen.getByLabelText(labels.extraTenderWallet), { target: { value: usd.id } });
+    expect(onChange.mock.calls[2][0].extraTenders).toEqual([{ key: "lbp-tender", amountText: "", currency: "USD", balanceId: usd.id }]);
+    fireEvent.click(screen.getByRole("button", { name: labels.removeTender }));
+    expect(onChange.mock.calls[3][0].extraTenders).toEqual([]);
+    expect(onChange.mock.calls[3][0].changes).toEqual(mixedDraft.changes);
+  });
 });

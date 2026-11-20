@@ -68,7 +68,7 @@ export async function buildSalaryEmail(receiptId: string, displayLocale?: string
     getWallets(),
     readAllByKey(async (after, limit) => {
       let query = supabase.from("transactions")
-        .select("id, balance_id, kind, amount_minor, tender_minor, cashier_changes(balance_id, amount_minor)")
+        .select("id, balance_id, kind, amount_minor, tender_minor, cashier_changes(balance_id, amount_minor, leg)")
         .eq("user_id", userId).is("deleted_at", null).in("kind", ["income", "expense"])
         .gte("occurred_on", from).neq("id", receiptId)
         .order("id").limit(limit);

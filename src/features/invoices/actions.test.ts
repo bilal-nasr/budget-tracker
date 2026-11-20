@@ -9,7 +9,12 @@ const mocks = vi.hoisted(() => ({
   rpcs: {} as Record<string, Result>,
   calls: [] as [string, string, unknown[]][],
   rpcCalls: [] as [string, unknown][],
+  /** When set for a key, successive awaits take successive results (then the last one repeats). */
+  queues: {} as Record<string, Result[]>,
+  create: vi.fn(), remove: vi.fn(),
 }));
+vi.mock("@/features/profile/queries", () => ({ getProfile: async () => ({ timezone: "Asia/Beirut" }) }));
+vi.mock("@/features/transactions/mutations-core", () => ({ createTransactionCore: mocks.create, deleteTransactionCore: mocks.remove }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.invalidate }));
 vi.mock("@/lib/supabase/action", async () => ({
@@ -19,6 +24,7 @@ vi.mock("@/lib/supabase/action", async () => ({
 import {
   addItem, createFolder, createOrRotateLink, deleteFolder, deleteItem, joinFolder, setLinkEnabled,
   leaveFolder, removeMember, renameFolder, restoreItem, setMyName, updateItem,
+  deleteItems, moveItems, payItems, restoreItems,
 } from "./actions";
 
 const uid = (n: number) => `ac000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -33,12 +39,16 @@ function query(table: string): unknown {
   for (const method of ["select", "in", "eq", "update", "delete", "upsert", "insert", "maybeSingle"]) {
     self[method] = (...args: unknown[]) => { first ??= method; mocks.calls.push([table, method, args]); return self; };
   }
-  self.then = (resolve: (value: Result) => unknown) => resolve(mocks.tables[`${table}.${first}`] ?? mocks.tables[table] ?? ok);
+  self.then = (resolve: (value: Result) => unknown) => {
+    const queue = mocks.queues[`${table}.${first}`] ?? mocks.queues[table];
+    return resolve((queue && (queue.length > 1 ? queue.shift() : queue[0])) ?? mocks.tables[`${table}.${first}`] ?? mocks.tables[table] ?? ok);
+  };
   return self;
 }
 const rpc = (name: string, args: unknown) => {
   mocks.rpcCalls.push([name, args]);
-  return Promise.resolve(mocks.rpcs[name] ?? ok);
+  const queue = mocks.queues[name];
+  return Promise.resolve((queue && (queue.length > 1 ? queue.shift() : queue[0])) ?? mocks.rpcs[name] ?? ok);
 };
 const called = (table: string, method: string) => mocks.calls.filter(([t, m]) => t === table && m === method);
 const rpcCalled = (name: string) => mocks.rpcCalls.filter(([n]) => n === name);
@@ -54,6 +64,7 @@ beforeEach(() => {
   mocks.rpcCalls.length = 0;
   mocks.tables = {};
   mocks.rpcs = {};
+  mocks.queues = {};
   mocks.ctx.mockResolvedValue({ supabase: { from: query, rpc }, userId: me });
 });
 
@@ -383,5 +394,208 @@ describe("sharing", () => {
   it("returns failed when the call throws", async () => {
     mocks.ctx.mockRejectedValue(new Error("boom"));
     expect(await leaveFolder(folder)).toEqual({ ok: false, error: "failed" });
+  });
+});
+
+describe("bulk actions", () => {
+  const ids = [item, other];
+
+  it("validate before any database access", async () => {
+    const results = await Promise.all([
+      deleteItems({ folderId: folder, itemIds: [] }),
+      deleteItems({ folderId: "x", itemIds: ids }),
+      deleteItems({ folderId: folder, itemIds: [item, item] }),
+      moveItems({ folderId: folder, itemIds: ids, categoryId: "x" }),
+      restoreItems({ itemIds: [] }),
+    ]);
+    for (const result of results) expect(result).toEqual({ ok: false, error: "invalid" });
+    expect(mocks.ctx).not.toHaveBeenCalled();
+  });
+
+  it("deletes the whole batch in one call and reports the rows it removed", async () => {
+    mocks.rpcs.delete_invoice_items = { data: [item], error: null };
+    // The other row was already gone (someone else deleted it): still a success.
+    expect(await deleteItems({ folderId: folder, itemIds: ids })).toEqual({ ok: true, deleted: [item] });
+    expect(mocks.rpcCalls).toEqual([["delete_invoice_items", { p_folder: folder, p_items: ids }]]);
+    expect(mocks.calls).toEqual([]);
+    expect(mocks.invalidate).toHaveBeenCalledWith("/", "layout");
+  });
+
+  it("moves the whole batch in one call and answers with the rows that still exist", async () => {
+    mocks.rpcs.move_invoice_items = { data: [{ id: item, updated_at: saved.updated_at }], error: null };
+    expect(await moveItems({ folderId: folder, itemIds: ids, categoryId: uid(7) })).toEqual({ ok: true, rows: [{ id: item, updatedAt: saved.updated_at }] });
+    expect(mocks.rpcCalls).toEqual([["move_invoice_items", { p_folder: folder, p_items: ids, p_category: uid(7) }]]);
+    // A category someone deleted meanwhile.
+    mocks.rpcs.move_invoice_items = { data: null, error: { code: "23503", message: "invoices.category" } };
+    expect(await moveItems({ folderId: folder, itemIds: ids, categoryId: uid(7) })).toEqual({ ok: false, error: "conflict" });
+  });
+
+  it("restores a batch all or nothing", async () => {
+    mocks.rpcs.restore_invoice_items = { data: ids.map((id) => ({ ...saved, id })), error: null };
+    expect(await restoreItems({ itemIds: ids })).toEqual({ ok: true, rows: ids.map((id) => ({ id, ...savedTimes })) });
+    expect(mocks.rpcCalls).toEqual([["restore_invoice_items", { p_items: ids }]]);
+    mocks.rpcs.restore_invoice_items = { data: null, error: { message: "invoices.invalid" } };
+    expect(await restoreItems({ itemIds: ids })).toEqual({ ok: false, error: "conflict" });
+    // Fewer rows back than asked for is not a success.
+    mocks.rpcs.restore_invoice_items = { data: [{ ...saved, id: item }], error: null };
+    expect(await restoreItems({ itemIds: ids })).toEqual({ ok: false, error: "failed" });
+  });
+
+  it("editing a paid row reports that it is paid, not that it was removed", async () => {
+    mocks.tables["invoice_items.update"] = { data: null, error: { code: "P0001", message: "invoices.paid" } };
+    expect(await updateItem(item, { name: "Cement", quantity: 1, priceMinor: 1 })).toEqual({ ok: false, error: "paymentChanged" });
+  });
+});
+
+describe("payItems", () => {
+  const [cpu, fans, cables, request, request2, balance, balance2, category] = [uid(11), uid(12), uid(13), uid(21), uid(22), uid(31), uid(32), uid(41)];
+  const line = (id: string, name: string, price: number, quantity = 1, extra: Record<string, unknown> = {}) =>
+    ({ id, name, currency: "USD", decimal_places: 2, price_minor: price, quantity, created_at: `2026-11-0${id === cpu ? 1 : 2}T00:00:00Z`, paid_on: null, paid_transaction_id: null, ...extra });
+  const marked = (id: string) => ({ id, updated_at: saved.updated_at, paid_on: "2026-01-01", paid_at: saved.updated_at });
+  const paidRow = (id: string) => ({ id, updatedAt: saved.updated_at, paidOn: "2026-01-01", paidAt: saved.updated_at });
+  const input = { expectedUnits: { USD: 2 }, folderId: folder, categoryId: category, occurredOn: "2026-01-01", payments: [{ requestId: request, balanceId: balance, itemIds: [cpu, fans] }] };
+
+  beforeEach(() => {
+    mocks.create.mockReset().mockImplementation(async (_input: unknown, id: string) => ({ ok: true, id, revision: 1 }));
+    mocks.remove.mockReset().mockResolvedValue({ ok: true, id: request, revision: 2 });
+    mocks.tables = {
+      "invoice_items.select": { data: [line(fans, "Fans", 1500, 3), line(cpu, "CPU", 25_000)], error: null },
+      wallet_balances: { data: { currency: "USD" }, error: null },
+      transactions: { data: null, error: null },
+    };
+    mocks.rpcs.mark_invoice_items_paid = { data: [marked(cpu), marked(fans)], error: null };
+  });
+
+  it("validates before any database access", async () => {
+    expect(await payItems({ ...input, payments: [] })).toEqual({ ok: false, error: "invalid" });
+    expect(await payItems({ ...input, payments: [{ ...input.payments[0], itemIds: [cpu, cpu] }] })).toEqual({ ok: false, error: "invalid" });
+    expect(await payItems({ ...input, occurredOn: "2099-01-01" })).toEqual({ ok: false, error: "invalid" });
+    expect(mocks.ctx).not.toHaveBeenCalled();
+  });
+
+  it("records one expense for price x quantity, itemised by name, then marks the rows paid", async () => {
+    expect(await payItems(input)).toEqual({ ok: true, payments: [{ id: request, revision: 1 }], rows: [paidRow(cpu), paidRow(fans)] });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "expense", occurredOn: "2026-01-01", amountMinor: 29_500, balanceId: balance, categoryId: category, expectedUnits: { USD: 2 }, note: "CPU, Fans × 3",
+      items: [{ description: "CPU", amountMinor: 25_000 }, { description: "Fans × 3", amountMinor: 4500 }],
+    }), request);
+    expect(rpcCalled("mark_invoice_items_paid")).toEqual([["mark_invoice_items_paid", { p_folder: folder, p_items: [cpu, fans], p_transaction: request }]]);
+    // The rows are read from this folder only.
+    expect(called("invoice_items", "eq")[0][2]).toEqual(["folder_id", folder]);
+    expect(mocks.invalidate).toHaveBeenCalledWith("/", "layout");
+  });
+
+  it("uses the row as the note and no breakdown for a single row", async () => {
+    mocks.tables["invoice_items.select"] = { data: [line(fans, "Fans", 1500, 3)], error: null };
+    mocks.rpcs.mark_invoice_items_paid = { data: [marked(fans)], error: null };
+    expect(await payItems({ ...input, payments: [{ ...input.payments[0], itemIds: [fans] }] })).toMatchObject({ ok: true });
+    const [sent] = mocks.create.mock.calls[0];
+    expect(sent).toMatchObject({ amountMinor: 4500, note: "Fans × 3" });
+    expect(sent).not.toHaveProperty("items");
+  });
+
+  it("shortens a long product name to what an expense line can hold", async () => {
+    mocks.tables["invoice_items.select"] = { data: [line(cpu, "x".repeat(200), 100, 12), line(fans, "Fans", 100)], error: null };
+    await payItems(input);
+    const [sent] = mocks.create.mock.calls[0];
+    expect(Array.from(sent.items[0].description as string)).toHaveLength(140);
+    // The name gives way, never the quantity.
+    expect(sent.items[0].description.endsWith("… × 12")).toBe(true);
+    expect(Array.from(sent.note as string).length).toBeLessThanOrEqual(140);
+  });
+
+  it("pays two currencies as two expenses, each from its own balance, never one combined amount", async () => {
+    mocks.queues["invoice_items.select"] = [
+      { data: [line(cpu, "CPU", 25_000)], error: null },
+      { data: [line(cables, "Cables", 900_000, 1, { currency: "LBP", decimal_places: 0 })], error: null },
+    ];
+    mocks.queues.wallet_balances = [{ data: { currency: "USD" }, error: null }, { data: { currency: "LBP" }, error: null }];
+    mocks.queues.mark_invoice_items_paid = [{ data: [marked(cpu)], error: null }, { data: [marked(cables)], error: null }];
+    const both = { ...input, expectedUnits: { USD: 2, LBP: 0 }, payments: [
+      { requestId: request, balanceId: balance, itemIds: [cpu] }, { requestId: request2, balanceId: balance2, itemIds: [cables] },
+    ] };
+    expect(await payItems(both)).toEqual({ ok: true, payments: [{ id: request, revision: 1 }, { id: request2, revision: 1 }], rows: [paidRow(cpu), paidRow(cables)] });
+    expect(mocks.create.mock.calls.map(([sent, id]) => [id, sent.amountMinor, sent.balanceId])).toEqual([[request, 25_000, balance], [request2, 900_000, balance2]]);
+  });
+
+  it("records nothing at all when any currency's rows do not check out", async () => {
+    mocks.queues["invoice_items.select"] = [
+      { data: [line(cpu, "CPU", 25_000)], error: null },
+      { data: [], error: null },
+    ];
+    const both = { ...input, expectedUnits: { USD: 2, LBP: 0 }, payments: [
+      { requestId: request, balanceId: balance, itemIds: [cpu] }, { requestId: request2, balanceId: balance2, itemIds: [cables] },
+    ] };
+    expect(await payItems(both)).toEqual({ ok: false, error: "conflict" });
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.rpcCalls).toEqual([]);
+  });
+
+  it("refuses rows that changed, mixed currencies, other decimals, a paid row and a wallet in another currency", async () => {
+    mocks.tables["invoice_items.select"] = { data: [line(cpu, "CPU", 25_000)], error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "conflict" });
+    mocks.tables["invoice_items.select"] = { data: [line(cpu, "CPU", 25_000), line(fans, "Fans", 1500, 1, { currency: "LBP", decimal_places: 0 })], error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "invalid" });
+    mocks.tables["invoice_items.select"] = { data: [line(cpu, "CPU", 25_000, 1, { decimal_places: 3 }), line(fans, "Fans", 1500, 1, { decimal_places: 3 })], error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "currencyUnavailable" });
+    mocks.tables["invoice_items.select"] = { data: [line(cpu, "CPU", 25_000, 1, { paid_on: "2026-01-01", paid_transaction_id: uid(99) }), line(fans, "Fans", 1500)], error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "paymentChanged" });
+    mocks.tables["invoice_items.select"] = { data: [line(cpu, "CPU", 25_000), line(fans, "Fans", 1500)], error: null };
+    mocks.tables.wallet_balances = { data: { currency: "LBP" }, error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "walletUnavailable" });
+    mocks.tables.wallet_balances = { data: null, error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "walletUnavailable" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("completes a retry without recording the expense twice", async () => {
+    mocks.tables.transactions = { data: { id: request, revision: 1, kind: "expense", amount_minor: 29_500, deleted_at: null }, error: null };
+    mocks.tables["invoice_items.select"] = { data: [line(cpu, "CPU", 25_000, 1, { paid_on: "2026-01-01", paid_transaction_id: request }), line(fans, "Fans", 1500, 3)], error: null };
+    expect(await payItems(input)).toMatchObject({ ok: true, payments: [{ id: request, revision: 1 }] });
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(rpcCalled("mark_invoice_items_paid")).toHaveLength(1);
+  });
+
+  it("refuses a request id that already belongs to a different or deleted expense", async () => {
+    mocks.tables.transactions = { data: { id: request, revision: 1, kind: "expense", amount_minor: 1, deleted_at: null }, error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "conflict" });
+    mocks.tables.transactions = { data: { id: request, revision: 2, kind: "expense", amount_minor: 29_500, deleted_at: "2026-01-02" }, error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "conflict" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("passes on the transaction core's refusal without marking anything", async () => {
+    mocks.create.mockResolvedValue({ ok: false, error: "categoryUnavailable" });
+    expect(await payItems(input)).toEqual({ ok: false, error: "categoryUnavailable" });
+    expect(mocks.rpcCalls).toEqual([]);
+  });
+
+  it("takes the expense back out when the rows can no longer be linked", async () => {
+    // Someone paid one of the rows between the check and the link.
+    mocks.rpcs.mark_invoice_items_paid = { data: null, error: { code: "P0001", message: "invoices.paid" } };
+    expect(await payItems(input)).toEqual({ ok: false, error: "paymentChanged" });
+    expect(mocks.remove).toHaveBeenCalledWith(request, 1);
+    // A row deleted meanwhile.
+    mocks.remove.mockClear();
+    mocks.rpcs.mark_invoice_items_paid = { data: null, error: { code: "42501", message: "invoices.invalid" } };
+    expect(await payItems(input)).toEqual({ ok: false, error: "conflict" });
+    expect(mocks.remove).toHaveBeenCalledWith(request, 1);
+    // The take-back itself failed: retryable, and the same request tries again.
+    mocks.remove.mockResolvedValue({ ok: false, error: "failed" });
+    expect(await payItems(input)).toEqual({ ok: false, error: "failed" });
+  });
+
+  it("keeps the expense and reports a retryable failure when the link's outcome is unknown", async () => {
+    mocks.rpcs.mark_invoice_items_paid = { data: null, error: { message: "connection reset" } };
+    expect(await payItems(input)).toEqual({ ok: false, error: "failed" });
+    expect(mocks.remove).not.toHaveBeenCalled();
+    mocks.rpcs.mark_invoice_items_paid = { data: [marked(cpu)], error: null };
+    expect(await payItems(input)).toEqual({ ok: false, error: "failed" });
+  });
+
+  it("reports notConfigured without a database", async () => {
+    mocks.ctx.mockResolvedValue({ error: "notConfigured" });
+    expect(await payItems(input)).toEqual({ ok: false, error: "notConfigured" });
   });
 });

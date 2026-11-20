@@ -97,6 +97,23 @@ describe("wallet ledger", () => {
     ]);
   });
 
+  it("writes every tender line as its own outflow in its own currency", () => {
+    const data = exportData();
+    data.transactions = [transaction({
+      id: "t-mixed", kind: "expense", amountMinor: 1_000, currency: "USD", balanceId: "w-usd",
+      settlement: { tenderMinor: 300, tenderCurrency: "USD",
+        extraTenders: [{ balanceId: "w-lbp", amountMinor: 1_300_000, currency: "LBP" }],
+        changes: [{ balanceId: "w-usd", amountMinor: 500, currency: "USD" }, { balanceId: "w-lbp", amountMinor: 10_000, currency: "LBP" }] },
+    })];
+    expect(buildWalletLedger(data)).toMatchObject([
+      { leg: "expense", walletId: "w-usd", currency: "USD", inflowMinor: 0, outflowMinor: 300 },
+      { leg: "cash-tender", walletId: "w-lbp", currency: "LBP", inflowMinor: 0, outflowMinor: 1_300_000 },
+      { leg: "cash-change", walletId: "w-usd", currency: "USD", inflowMinor: 500, outflowMinor: 0 },
+      { leg: "cash-change", walletId: "w-lbp", currency: "LBP", inflowMinor: 10_000, outflowMinor: 0 },
+    ]);
+    expect(new Set(buildWalletLedger(data).map((row) => row.rowId)).size).toBe(4);
+  });
+
   it("reconciles opening balance plus ledger activity to each exported wallet balance", () => {
     expect(buildReconciliations(exportData(), buildWalletLedger(exportData()))).toMatchObject([
       { walletId: "w-usd", calculatedClosingMinor: 9_500, exportedClosingMinor: 9_500, differenceMinor: 0 },

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
-import { readSettlementSnapshot, serializeSettlement, settlementInputFromSnapshot, SettlementSnapshotError, type SettlementRow } from "./settlement-serialization";
+import { readSettlementSnapshot, serializeSettlement, settlementInputFromSnapshot, settlementTenders, SettlementSnapshotError, type SettlementRow } from "./settlement-serialization";
 
 const context = { kind: "expense", costCurrency: "USD" as const, payCurrency: "USD" as const, amountMinor: 1250 };
 const usdWallet = "aaaaaaaa-0000-4000-8000-000000000001";
 const lbpWallet = "aaaaaaaa-0000-4000-8000-000000000002";
 const empty: SettlementRow = { tender_minor: null, cashier_changes: [] };
 const rows = [
-  { balance_id: usdWallet, amount_minor: "500", currency: "USD", position: 0, wallet_name_snapshot: null,
+  { balance_id: usdWallet, amount_minor: "500", currency: "USD", position: 0, leg: "change", wallet_name_snapshot: null,
     rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null },
-  { balance_id: lbpWallet, amount_minor: "223750", currency: "LBP", position: 1, wallet_name_snapshot: null,
+  { balance_id: lbpWallet, amount_minor: "223750", currency: "LBP", position: 1, leg: "change", wallet_name_snapshot: null,
     rate_base: "USD", rate_quote: "LBP", rate_numerator: "89500", rate_denominator: "1" },
 ] as const;
 
@@ -89,4 +89,54 @@ it("retains the original receiver snapshot but excludes it from all mutation pay
   expect(snapshot.changes[0]).toMatchObject({ balanceId: usdWallet, amountMinor: 750, currency: "USD", walletNameSnapshot: "Original receiver" });
   expect(settlementInputFromSnapshot(snapshot).changes[0]).toEqual({ balanceId: usdWallet, amountMinor: 750 });
   expect(() => readSettlementSnapshot({ tender_minor: 2000, cashier_changes: [{ ...rows[0], amount_minor: 750, wallet_name_snapshot: 17 }] }, context)).toThrow(SettlementSnapshotError);
+});
+
+describe("multiple tender lines", () => {
+  const tenderRow = { balance_id: lbpWallet, amount_minor: "1300000", currency: "LBP", position: 2, leg: "tender", wallet_name_snapshot: "Cash",
+    rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null };
+  const changeRows = [
+    { ...rows[0], amount_minor: "500" },
+    { ...rows[1], amount_minor: "10000", rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null },
+  ];
+  const mixed = { ...context, amountMinor: 1000 };
+
+  it("reads 3 USD and 1,300,000 LBP paid for a 10 USD cost with 5 USD and 10,000 LBP returned", () => {
+    const snapshot = readSettlementSnapshot({ tender_minor: 300, cashier_changes: [tenderRow, ...changeRows] }, mixed)!;
+    expect(snapshot).toEqual({
+      tenderMinor: 300, tenderCurrency: "USD",
+      extraTenders: [{ balanceId: lbpWallet, walletNameSnapshot: "Cash", amountMinor: 1300000, currency: "LBP" }],
+      changes: [
+        { balanceId: usdWallet, amountMinor: 500, currency: "USD" },
+        { balanceId: lbpWallet, amountMinor: 10000, currency: "LBP" },
+      ],
+    });
+    expect(settlementTenders(snapshot, { balanceId: usdWallet, walletNameSnapshot: "Wallet" })).toEqual([
+      { balanceId: usdWallet, walletNameSnapshot: "Wallet", amountMinor: 300, currency: "USD" },
+      { balanceId: lbpWallet, walletNameSnapshot: "Cash", amountMinor: 1300000, currency: "LBP" },
+    ]);
+    // The write payload carries exact amounts and balances only: no currency, name or rate.
+    expect(serializeSettlement(settlementInputFromSnapshot(snapshot))).toEqual({
+      tenderMinor: 300,
+      extraTenders: [{ balanceId: lbpWallet, amountMinor: 1300000 }],
+      changes: [{ balanceId: usdWallet, amountMinor: 500 }, { balanceId: lbpWallet, amountMinor: 10000 }],
+    });
+  });
+
+  it("keeps a legacy single tender as one tender line with no extra key", () => {
+    const snapshot = readSettlementSnapshot({ tender_minor: 2000, cashier_changes: [{ ...rows[0], amount_minor: "750" }] }, context)!;
+    expect(snapshot).not.toHaveProperty("extraTenders");
+    expect(settlementTenders(snapshot, { balanceId: usdWallet })).toHaveLength(1);
+    expect(settlementInputFromSnapshot(snapshot)).not.toHaveProperty("extraTenders");
+  });
+
+  it("rejects a row without a known leg, a tender carrying a rate, and an impossible same-currency total", () => {
+    const { leg: _leg, ...withoutLeg } = tenderRow;
+    void _leg;
+    expect(() => readSettlementSnapshot({ tender_minor: 300, cashier_changes: [withoutLeg, ...changeRows] }, mixed)).toThrow(SettlementSnapshotError);
+    expect(() => readSettlementSnapshot({ tender_minor: 300, cashier_changes: [{ ...tenderRow, leg: "refund" }, ...changeRows] }, mixed)).toThrow(SettlementSnapshotError);
+    expect(() => readSettlementSnapshot({ tender_minor: 300, cashier_changes: [{ ...tenderRow, rate_base: "USD", rate_quote: "LBP", rate_numerator: 89500, rate_denominator: 1 }, ...changeRows] }, mixed)).toThrow(SettlementSnapshotError);
+    // Two USD tenders with no other currency must still equal the USD cost.
+    expect(() => readSettlementSnapshot({ tender_minor: 300, cashier_changes: [{ ...tenderRow, balance_id: usdWallet, currency: "USD", amount_minor: 600, position: 0 }] }, mixed)).toThrow(SettlementSnapshotError);
+    expect(readSettlementSnapshot({ tender_minor: 300, cashier_changes: [{ ...tenderRow, balance_id: usdWallet, currency: "USD", amount_minor: 700, position: 0 }] }, mixed)?.extraTenders).toHaveLength(1);
+  });
 });

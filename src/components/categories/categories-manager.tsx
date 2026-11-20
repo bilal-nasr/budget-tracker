@@ -1,22 +1,27 @@
 "use client";
 
-import { useOptimistic, useRef, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
-import { ChevronRight, GripVertical, Plus } from "lucide-react";
+import { ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
+import { SelectionBar, SelectionCheck, SelectToggle } from "@/components/selection/selection-bar";
+import { useSelection } from "@/components/selection/use-selection";
 import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { reorderCategories, restoreCategory } from "@/features/categories/actions";
+import { removeCategories } from "@/features/categories/bulk-actions";
 import { categoryErrorMessageKey } from "@/features/categories/messages";
 import { activeCategories, categoryName, type Category } from "@/features/categories/catalogue";
+import { cn } from "@/lib/utils";
 
 // The editor loads on first open, then stays mounted for its exit animation.
 const CategorySheet = dynamic(() => import("./category-sheet").then((m) => m.CategorySheet));
+const ConfirmSheet = dynamic(() => import("@/components/ui/confirm-sheet").then((m) => m.ConfirmSheet));
 
 function orderedCategories(categories: Category[], ids: string[] | undefined): Category[] {
   if (!ids) return categories;
@@ -94,6 +99,36 @@ export function CategoriesManager({ categories }: { categories: Category[] }) {
   const active = orderedCategories(activeCategories(optimistic, kind), orders[kind]);
   const archived = optimistic.filter((c) => c.kind === kind && c.parentId === null && c.archivedAt !== null);
   const hasArchives = archived.length > 0 || categories.some((c) => c.kind === kind && c.parentId === null && c.archivedAt !== null);
+
+  // Select mode: tick several categories of the shown kind and remove them in one go.
+  const activeKey = active.map((category) => category.id).join();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const activeIds = useMemo(() => active.map((category) => category.id), [activeKey]);
+  const selection = useSelection(activeIds);
+  const [confirmMounted, setConfirmMounted] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  // Frozen when the sheet opens, so its title does not change while it slides away.
+  const [confirmCount, setConfirmCount] = useState(0);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const removeSelected = () => {
+    if (pending || selection.count === 0) return;
+    const ids = [...selection.picked];
+    setRemoveError(null);
+    startTransition(async () => {
+      try {
+        const result = await removeCategories(ids);
+        if (!result.ok) {
+          const blocked = result.blockedId ? active.find((category) => category.id === result.blockedId) : undefined;
+          setRemoveError(blocked ? t("bulkBlocked", { name: categoryName(blocked, locale) })
+            : result.error === "failed" ? t("bulkFailed") : t(categoryErrorMessageKey(result.error)));
+          return;
+        }
+        setConfirming(false);
+        selection.stop();
+        toast(t("bulkRemoved", { count: result.deleted + result.archived }));
+      } catch { setRemoveError(t("bulkFailed")); }
+    });
+  };
 
   const restore = (category: Category) => {
     setError(null);
@@ -179,14 +214,35 @@ export function CategoriesManager({ categories }: { categories: Category[] }) {
       <Segmented label={t("kind")} value={kind} onChange={(next) => {
         if (keyboardDragging && dragStartOrder) setOrders((current) => ({ ...current, [kind]: dragStartOrder }));
         setKind(next);
+        selection.stop();
         setError(null);
         setKeyboardDragging(null);
         setDragStartOrder(null);
       }} options={[{ value: "expense", label: t("expense") }, { value: "income", label: t("income") }]} />
-      <Button ref={addRef} variant="outline" className="w-full gap-2" onClick={() => setEditor({ category: null })}><Plus aria-hidden className="size-4" />{t("add")}</Button>
-      <p id="category-sort-help" className="text-sm text-muted-foreground">{t("sortHelp")}</p>
+      <div className="flex gap-2">
+        <Button ref={addRef} variant="outline" className="min-w-0 flex-1 gap-2" disabled={selection.selecting} onClick={() => setEditor({ category: null })}><Plus aria-hidden className="size-4" />{t("add")}</Button>
+        {active.length > 1 ? <SelectToggle selecting={selection.selecting} label={t("select")} disabled={pending || keyboardDragging !== null}
+          onToggle={() => { setError(null); if (selection.selecting) selection.stop(); else selection.start(); }} /> : null}
+      </div>
+      <p id="category-sort-help" className="text-sm text-muted-foreground">{selection.selecting ? t("selectHelp") : t("sortHelp")}</p>
       <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
-      {active.length ? (
+      {selection.selecting ? (
+        <ul aria-label={t("active")} className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          {active.map((category) => {
+            const selected = selection.isPicked(category.id);
+            return (
+              <li key={category.id}>
+                <button type="button" role="checkbox" aria-checked={selected} disabled={pending} onClick={() => selection.toggle(category.id)}
+                  className={cn("flex min-h-16 w-full items-center gap-3 px-3.5 py-2 text-start hover:bg-secondary/50 active:bg-secondary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring", selected && "bg-accent/60")}>
+                  <SelectionCheck selected={selected} />
+                  <CategoryGlyph tile={category.tile} color={category.color} />
+                  <span className="min-w-0 flex-1 truncate font-medium"><bdi>{categoryName(category, locale)}</bdi></span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : active.length ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragCancel={() => setDragStartOrder(null)} onDragEnd={onDragEnd}>
           <SortableContext items={active.map((category) => category.id)} strategy={verticalListSortingStrategy}>
             <ul aria-label={t("active")} className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
@@ -201,6 +257,20 @@ export function CategoriesManager({ categories }: { categories: Category[] }) {
         </ul>
       </details> : null}
       {error ? <p role="alert" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm">{error}</p> : null}
+      {selection.selecting ? (
+        <SelectionBar label={t("selectionLabel")} count={selection.count} allPicked={selection.allPicked} onToggleAll={selection.toggleAll} onDone={selection.stop}>
+          <Button variant="destructive" disabled={selection.count === 0 || pending} onClick={() => { setConfirmMounted(true); setConfirmCount(selection.count); setRemoveError(null); setConfirming(true); }}>
+            <Trash2 aria-hidden />
+            {t("bulkRemove")}
+          </Button>
+        </SelectionBar>
+      ) : null}
+      {confirmMounted ? <ConfirmSheet open={confirming} onOpenChange={(open) => { if (!open && !pending) setConfirming(false); }}
+        title={t("bulkRemoveTitle", { count: confirmCount })} confirmLabel={t("bulkRemove")} cancelLabel={t("cancel")} pending={pending} tone="danger" onConfirm={removeSelected}>
+        <p>{t("removeCopy")}</p>
+        <p className="text-muted-foreground">{t("removeDependencies")}</p>
+        {removeError ? <p role="alert" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm">{removeError}</p> : null}
+      </ConfirmSheet> : null}
       {editorMounted ? <CategorySheet open={editor !== null} category={editor?.category ?? null} kind={kind} onOpenChange={(open) => { if (!open) setEditor(null); }} onOptimisticUpdate={updateOptimistic} /> : null}
     </div>
   );

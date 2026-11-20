@@ -14,16 +14,17 @@ import { categoryName } from "@/features/categories/catalogue";
 import { buyItems } from "@/features/items/actions";
 import { itemBuySchema, MAX_BUY_ITEMS, type ItemBuyInput, type ShoppingItem } from "@/features/items/schema";
 import { itemErrorKey } from "@/features/items/errors";
+import { lineMinor, totalOf } from "@/features/items/totals";
 import { deleteTransaction } from "@/features/transactions/actions";
 import type { TransactionMutation } from "@/features/transactions/mutations-core";
 import { todayIn } from "@/features/transactions/group";
 import { currencyIntent } from "@/lib/currency-intent";
-import { sumMinor } from "@/lib/money";
 import { Link, useRouter } from "@/i18n/navigation";
 
 /**
  * "I bought this": confirms wallet, category and date, then records one expense in
- * Activity. Several items become one expense whose breakdown lists each of them.
+ * Activity. Several items become one expense whose breakdown lists each of them; every line
+ * is the item's price times its quantity.
  */
 export function BuySheet({ items, onClose, onDone }: { items: ShoppingItem[]; onClose: () => void; onDone: () => void }) {
   const t = useTranslations("Items");
@@ -40,7 +41,7 @@ export function BuySheet({ items, onClose, onDone }: { items: ShoppingItem[]; on
   const [balanceId, setBalanceId] = useState((usable.find((balance) => balance.id === defaultBalanceId) ?? usable[0])?.id ?? "");
   const [categoryId, setCategoryId] = useState(expense[0]?.id ?? "");
   const [date, setDate] = useState(todayIn(timezone));
-  const total = sumMinor(items.map((item) => item.priceMinor));
+  const total = totalOf(items);
 
   const undo = async (purchase: TransactionMutation) => {
     const undone = await deleteTransaction(purchase.id, purchase.revision).catch(() => null);
@@ -51,7 +52,7 @@ export function BuySheet({ items, onClose, onDone }: { items: ShoppingItem[]; on
     toast(t("recorded"), { action: { label: t("undo"), onClick: () => undo(purchase) } });
   });
   const parsed = itemBuySchema.safeParse({ expectedUnits: currencyIntent(unit), requestId, itemIds: items.map((item) => item.id), balanceId, categoryId, occurredOn: date });
-  const valid = parsed.success && !unit.disabled && date <= todayIn(timezone)
+  const valid = parsed.success && total !== null && !unit.disabled && date <= todayIn(timezone)
     && usable.some((balance) => balance.id === balanceId) && expense.some((category) => category.id === categoryId);
   const selectClass = "h-12 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-base focus-visible:outline-2 focus-visible:outline-ring";
   return <SheetShell open title={t("buyTitle")} description={t("buyHelp")} dismissible={submission.dismissible} onOpenChange={(open) => !open && onClose()}
@@ -61,11 +62,14 @@ export function BuySheet({ items, onClose, onDone }: { items: ShoppingItem[]; on
       <fieldset disabled={submission.frozen} className="flex min-w-0 flex-col gap-4 border-0 p-0">
         <ul className="overflow-hidden rounded-xl border border-border">
           {items.map((item) => <li key={item.id} className="flex items-baseline justify-between gap-3 border-b border-border px-3.5 py-2.5 last:border-b-0">
-            <span className="min-w-0 break-words"><bdi>{item.name}</bdi></span>
-            <Amount minor={item.priceMinor} currency={currency} className="shrink-0 text-[15px]" />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="break-words"><bdi>{item.name}</bdi></span>
+              {item.quantity > 1 ? <bdi dir="ltr" className="self-start text-[13px] text-muted-foreground">{item.quantity} × <Amount minor={item.priceMinor} currency={currency} /></bdi> : null}
+            </span>
+            <Amount minor={lineMinor(item)} currency={currency} className="shrink-0 text-[15px]" />
           </li>)}
           <li className="flex items-baseline justify-between gap-3 bg-secondary px-3.5 py-3 font-semibold">
-            <span>{t("total")}</span><Amount minor={total} currency={currency} className="text-[17px]" />
+            <span>{t("total")}</span>{total === null ? <span role="status" className="text-[15px] font-normal">{t("totalsUnavailable")}</span> : <Amount minor={total} currency={currency} className="text-[17px]" />}
           </li>
         </ul>
         {usable.length ? <BalancePicker currencyLabel={tAdd("walletCurrency")} label={t("wallet")} wallets={walletContainers} currencies={enabledCurrencies.filter((entry) => entry.code === currency)} value={balanceId} onChange={setBalanceId} />

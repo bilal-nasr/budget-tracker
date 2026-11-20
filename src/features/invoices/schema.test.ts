@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
 import {
   categoryCreateSchema, categoryRenameSchema, folderCreateSchema, folderRenameSchema, itemCreateSchema, itemEditSchema, personNameSchema, tokenSchema,
+  itemsDeleteSchema, itemsMoveSchema, itemsPaySchema, itemsRestoreSchema, MAX_ITEMS, MAX_PAY_CURRENCIES, MAX_PAY_ITEMS,
 } from "./schema";
 
 const id = "11111111-1111-4111-8111-111111111111";
@@ -102,5 +103,53 @@ describe("tokenSchema", () => {
     expect(tokenSchema.safeParse("a".repeat(65)).success).toBe(false);
     expect(tokenSchema.safeParse("A".repeat(64)).success).toBe(false);
     expect(tokenSchema.safeParse("g".repeat(64)).success).toBe(false);
+  });
+});
+
+const uuid = (n: number) => `44444444-4444-4444-8444-${String(n).padStart(12, "0")}`;
+
+describe("bulk schemas", () => {
+  it("accept one to 500 distinct rows of a folder", () => {
+    expect(itemsDeleteSchema.safeParse({ folderId, itemIds: [id] }).success).toBe(true);
+    expect(itemsDeleteSchema.safeParse({ folderId, itemIds: Array.from({ length: MAX_ITEMS }, (_, n) => uuid(n)) }).success).toBe(true);
+    expect(itemsMoveSchema.safeParse({ folderId, itemIds: [id, uuid(1)], categoryId }).success).toBe(true);
+    expect(itemsRestoreSchema.safeParse({ itemIds: [id] }).success).toBe(true);
+  });
+  it("reject an empty batch, a repeated row, too many rows and missing ids", () => {
+    expect(itemsDeleteSchema.safeParse({ folderId, itemIds: [] }).success).toBe(false);
+    expect(itemsDeleteSchema.safeParse({ folderId, itemIds: [id, id] }).success).toBe(false);
+    expect(itemsDeleteSchema.safeParse({ folderId, itemIds: Array.from({ length: MAX_ITEMS + 1 }, (_, n) => uuid(n)) }).success).toBe(false);
+    expect(itemsDeleteSchema.safeParse({ folderId: "x", itemIds: [id] }).success).toBe(false);
+    expect(itemsMoveSchema.safeParse({ folderId, itemIds: [id] }).success).toBe(false);
+    expect(itemsMoveSchema.safeParse({ folderId, itemIds: ["x"], categoryId }).success).toBe(false);
+    expect(itemsRestoreSchema.safeParse({ itemIds: [] }).success).toBe(false);
+  });
+});
+
+describe("itemsPaySchema", () => {
+  const pay = { expectedUnits: { USD: 2 }, folderId, categoryId, occurredOn: "2026-11-06", payments: [{ requestId: uuid(90), balanceId: uuid(91), itemIds: [id] }] };
+  it("accepts one payment per currency, each with its own request and balance", () => {
+    expect(itemsPaySchema.safeParse(pay).success).toBe(true);
+    expect(itemsPaySchema.safeParse({ ...pay, expectedUnits: { USD: 2, LBP: 0 }, payments: [...pay.payments, { requestId: uuid(92), balanceId: uuid(93), itemIds: [uuid(1)] }] }).success).toBe(true);
+  });
+  it("needs the currencies' decimals, a real date and at least one payment", () => {
+    expect(itemsPaySchema.safeParse({ ...pay, expectedUnits: undefined }).success).toBe(false);
+    expect(itemsPaySchema.safeParse({ ...pay, occurredOn: "1999-12-31" }).success).toBe(false);
+    expect(itemsPaySchema.safeParse({ ...pay, occurredOn: "soon" }).success).toBe(false);
+    expect(itemsPaySchema.safeParse({ ...pay, payments: [] }).success).toBe(false);
+    expect(itemsPaySchema.safeParse({ ...pay, payments: [{ ...pay.payments[0], itemIds: [] }] }).success).toBe(false);
+  });
+  it("refuses a row or a request that appears twice, across payments too", () => {
+    expect(itemsPaySchema.safeParse({ ...pay, payments: [{ ...pay.payments[0], itemIds: [id, id] }] }).success).toBe(false);
+    expect(itemsPaySchema.safeParse({ ...pay, payments: [...pay.payments, { requestId: uuid(92), balanceId: uuid(93), itemIds: [id] }] }).success).toBe(false);
+    expect(itemsPaySchema.safeParse({ ...pay, payments: [...pay.payments, { requestId: uuid(90), balanceId: uuid(93), itemIds: [uuid(1)] }] }).success).toBe(false);
+  });
+  it("caps the rows of one expense and the number of currencies", () => {
+    const rows = (count: number, from = 0) => Array.from({ length: count }, (_, n) => uuid(from + n));
+    expect(itemsPaySchema.safeParse({ ...pay, payments: [{ ...pay.payments[0], itemIds: rows(MAX_PAY_ITEMS) }] }).success).toBe(true);
+    expect(itemsPaySchema.safeParse({ ...pay, payments: [{ ...pay.payments[0], itemIds: rows(MAX_PAY_ITEMS + 1) }] }).success).toBe(false);
+    const payments = Array.from({ length: MAX_PAY_CURRENCIES + 1 }, (_, n) => ({ requestId: uuid(1000 + n), balanceId: uuid(2000 + n), itemIds: [uuid(3000 + n)] }));
+    expect(itemsPaySchema.safeParse({ ...pay, payments }).success).toBe(false);
+    expect(itemsPaySchema.safeParse({ ...pay, payments: payments.slice(1) }).success).toBe(true);
   });
 });

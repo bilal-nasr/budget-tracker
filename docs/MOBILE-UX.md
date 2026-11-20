@@ -72,6 +72,7 @@ Each screen leads with **one answer**, then detail on request (principle 2 in `P
 - List grouped by day with **sticky day headers** showing the day total per currency.
 - Row (min 56px): category icon · name/note (truncate 1 line) · wallet (secondary line) · amount on the end side (expense neutral/negative style, income positive style, both with sign text).
 - Tap row → detail sheet (Edit, Duplicate, Delete). No swipe-to-delete in v1 (hidden, conflicts with iOS back-swipe and RTL); may be added later as a shortcut, never the only path.
+- **Select mode** (the Select button beside search; press-and-hold a row is a shortcut, never the only path): rows become checkboxes and a bar above the tab bar shows the net per currency, the count, Select all / Clear, Done, and the bulk actions **Category** and **Delete**. Delete confirms with the count and offers Undo; every batch is all-or-nothing. Rows a batch cannot touch (loan movements, history from a deleted wallet) are named in the confirmation, never skipped silently. The same bar (`src/components/selection/`) serves Categories (remove several) and Pending payments (delete several unpaid jobs). Lists that stay short (wallets, currencies, fixed expenses, installments, loans) have no select mode.
 - Cursor pagination, 30 per page, auto-load near bottom + a visible "Load more" button fallback. Never silently truncate.
 - Empty state: one sentence + "Add your first expense" button.
 

@@ -69,7 +69,7 @@ export function DetailSheet({
   const destinationBalance = transaction?.toBalanceId ? balanceById(transaction.toBalanceId) : undefined;
   const toWallet = destinationBalance ? { ...destinationBalance, name: walletById(destinationBalance.walletId)?.name ?? transaction?.toWalletNameSnapshot } : undefined;
   const exchange = transfer && sourceBalance && destinationBalance && sourceBalance.id !== destinationBalance.id && classifyBalanceTransfer(sourceBalance, destinationBalance) === "exchange";
-  const historyIds = transaction ? [transaction.balanceId, transaction.toBalanceId, ...(transaction.settlement?.changes.map((change) => change.balanceId) ?? [])].filter((id): id is string => !!id) : [];
+  const historyIds = transaction ? [transaction.balanceId, transaction.toBalanceId, ...(transaction.settlement?.extraTenders?.map((tender) => tender.balanceId) ?? []), ...(transaction.settlement?.changes.map((change) => change.balanceId) ?? [])].filter((id): id is string => !!id) : [];
   const historyLocked = !!transaction && (currencyByCode(transaction.currency)?.disabled || historyIds.some((id) => {
     const balance = balanceById(id);
     const owner = balance ? walletById(balance.walletId) : undefined;
@@ -196,7 +196,12 @@ export function DetailSheet({
           {transaction.kind === "expense" ? <ExpenseBreakdown items={transaction.items}
             parentMinor={transaction.amountMinor} currency={transaction.currency} labels={breakdownLabels} /> : null}
           {transaction.settlement ? <CashSettlementSummary settlement={transaction.settlement} costMinor={transaction.amountMinor}
-            currency={transaction.currency} changeWalletNames={transaction.settlement.changes.map((change) => {
+            currency={transaction.currency}
+            tenderWalletNames={[wallet?.name ?? transaction.walletNameSnapshot ?? undefined, ...(transaction.settlement.extraTenders ?? []).map((tender) => {
+              const balance = balanceById(tender.balanceId);
+              return balance ? walletById(balance.walletId)?.name : undefined;
+            })]}
+            changeWalletNames={transaction.settlement.changes.map((change) => {
               const balance = balanceById(change.balanceId);
               return balance ? walletById(balance.walletId)?.name : undefined;
             })} /> : null}

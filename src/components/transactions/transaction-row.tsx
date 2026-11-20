@@ -8,6 +8,7 @@ import { CategoryGlyph } from "@/components/tiles/tile-glyph";
 import { categoryName } from "@/features/categories/catalogue";
 import { signedMinor } from "@/features/transactions/amounts";
 import { classifyBalanceTransfer, type Transaction } from "@/features/transactions/schema";
+import { settlementTenders } from "@/features/transactions/settlement-serialization";
 import { cn } from "@/lib/utils";
 
 /**
@@ -92,6 +93,11 @@ export function TransactionRow({
               </>
             )}
           </span>
+          {transaction.settlement?.extraTenders?.length ? <span className="block truncate text-[13px] text-muted-foreground">
+            {ts("paid")} · {settlementTenders(transaction.settlement, transaction).map((tender, index) => <span key={index}>
+              {index > 0 ? " + " : null}<Amount minor={tender.amountMinor} currency={tender.currency} />
+            </span>)}
+          </span> : null}
           {transaction.settlement && transaction.settlement.changes.length > 0 ? <span className="block truncate text-[13px] text-muted-foreground">
             {ts("changeTo")} · {transaction.settlement.changes.map((change, index) => <span key={`${change.balanceId}-${index}`}>
               {index > 0 ? " / " : null}<bdi>{(() => { const balance = balanceById(change.balanceId); return (balance ? walletById(balance.walletId)?.name : undefined) ?? change.currency; })()}</bdi>

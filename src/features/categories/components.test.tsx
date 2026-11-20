@@ -8,6 +8,7 @@ import type { Category } from "./schema";
 
 const mock = vi.hoisted(() => ({ createCategory: vi.fn(), updateCategory: vi.fn(), removeCategory: vi.fn(), restoreCategory: vi.fn(), toast: vi.fn() }));
 vi.mock("./actions", () => mock);
+vi.mock("./bulk-actions", () => ({ removeCategories: vi.fn() }));
 vi.mock("sonner", () => ({ toast: mock.toast }));
 vi.mock("@/components/ui/sheet-shell", () => ({ SheetShell: ({ open, title, children, footer }: { open: boolean; title: string; children: React.ReactNode; footer?: React.ReactNode }) => open ? <div role="dialog" aria-label={title}>{children}{footer}</div> : null }));
 import { CategoriesManager } from "@/components/categories/categories-manager";

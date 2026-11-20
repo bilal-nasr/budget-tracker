@@ -89,7 +89,7 @@ export type ExportData = {
   pendingReceipts: readonly PendingReceiptExport[];
 };
 
-export type WalletLedgerLeg = "income" | "expense" | "loan-in" | "loan-out" | "transfer-in" | "transfer-out" | "cash-change";
+export type WalletLedgerLeg = "income" | "expense" | "loan-in" | "loan-out" | "transfer-in" | "transfer-out" | "cash-change" | "cash-tender";
 
 export type WalletLedgerRow = {
   rowId: string;
@@ -179,6 +179,7 @@ export function validateExportData(data: ExportData): void {
       if (row.kind === "transfer" && (row.toBalanceId === null || row.toAmountMinor === null)) throw new Error();
       if (row.settlement) {
         definition(row.settlement.tenderCurrency ?? row.currency);
+        for (const tender of row.settlement.extraTenders ?? []) balance(tender.balanceId, tender.currency);
         for (const change of row.settlement.changes) balance(change.balanceId, change.currency);
       }
     }

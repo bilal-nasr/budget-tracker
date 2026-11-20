@@ -56,7 +56,7 @@ describe("complete transaction reads", () => {
   it("reads settlement cost and exact change without multiplying its parent", async () => {
     query.then.mockImplementation((resolve) => Promise.resolve({ data: [{ ...row(1), amount_minor: "340000", cost_currency: "LBP",
       tender_minor: "500", cashier_changes: [
-        { balance_id: "aaaaaaaa-0000-4000-8000-000000000002", amount_minor: "110000", currency: "LBP", position: 0,
+        { balance_id: "aaaaaaaa-0000-4000-8000-000000000002", amount_minor: "110000", currency: "LBP", position: 0, leg: "change",
           wallet_name_snapshot: "Original receiver", rate_base: null, rate_quote: null, rate_numerator: null, rate_denominator: null },
       ],
     }], error: null }).then(resolve));

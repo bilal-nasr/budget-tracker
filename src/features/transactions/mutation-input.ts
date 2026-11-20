@@ -46,7 +46,12 @@ export type TransactionSaveArgs = {
     note: string | null;
   };
   p_items: NonNullable<TransactionWriteInput["items"]> | null;
-  p_settlement: { tenderMinor: number; changes: { balanceId: string; amountMinor: number; rate?: unknown }[] } | Record<string, never> | null;
+  p_settlement: {
+    tenderMinor: number;
+    /** Sent only when the purchase has more than one tender line. */
+    extraTenders?: { balanceId: string; amountMinor: number }[];
+    changes: { balanceId: string; amountMinor: number; rate?: unknown }[];
+  } | Record<string, never> | null;
 };
 
 /** One payload mapping; call only after the schema above has validated input. */
@@ -64,7 +69,11 @@ export function transactionSaveArgs(
     p_settlement: (() => {
       const serialized = serializeSettlement(settlement);
       if (!serialized || !("tenderMinor" in serialized) || !("changes" in serialized)) return serialized;
-      return { tenderMinor: serialized.tenderMinor, changes: serialized.changes };
+      return {
+        tenderMinor: serialized.tenderMinor,
+        ...(serialized.extraTenders?.length ? { extraTenders: serialized.extraTenders } : {}),
+        changes: serialized.changes,
+      };
     })(),
   };
 }

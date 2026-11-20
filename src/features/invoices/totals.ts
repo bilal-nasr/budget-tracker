@@ -28,3 +28,25 @@ export function totalsByCurrency(
     }
   });
 }
+
+/** A row counts as paid only while the expense that paid it is live. */
+export const isPaid = (item: Pick<InvoiceItem, "paidOn">) => item.paidOn !== null;
+
+/** "Still to pay": the per-currency totals of the rows nobody has paid yet. */
+export function unpaidTotals(
+  items: readonly Pick<InvoiceItem, "currency" | "decimalPlaces" | "priceMinor" | "quantity" | "paidOn">[],
+): CurrencyTotal[] {
+  return totalsByCurrency(items.filter((item) => !isPaid(item)));
+}
+
+/** Rows grouped for paying: one group per currency (and its decimals), in order of first appearance. */
+export function groupByCurrency<T extends Pick<InvoiceItem, "currency" | "decimalPlaces">>(items: readonly T[]): { currency: string; decimalPlaces: number; rows: T[] }[] {
+  const groups = new Map<string, { currency: string; decimalPlaces: number; rows: T[] }>();
+  for (const item of items) {
+    const key = `${item.currency}:${item.decimalPlaces}`;
+    const group = groups.get(key) ?? { currency: item.currency, decimalPlaces: item.decimalPlaces, rows: [] };
+    group.rows.push(item);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}

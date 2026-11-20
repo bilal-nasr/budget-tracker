@@ -8,9 +8,10 @@ import { createTransactionCore, type TransactionMutation } from "@/features/tran
 import { sumMinor } from "@/lib/money";
 import { actionClient, databaseActionError, type ActionError, type ActionResult } from "@/lib/supabase/action";
 import {
-  itemBuySchema, itemCreateSchema, itemEditSchema, itemMoveSchema,
-  type ItemBuyInput, type ItemCreateInput, type ItemEditInput, type ItemMoveInput,
+  itemBuySchema, itemCreateSchema, itemDeleteSchema, itemEditSchema, itemMoveSchema,
+  type ItemBuyInput, type ItemCreateInput, type ItemDeleteInput, type ItemEditInput, type ItemMoveInput,
 } from "./schema";
+import { lineMinor, purchaseLabel } from "./totals";
 
 const idSchema = z.uuid();
 const NOTE_MAX = 140;
@@ -29,7 +30,7 @@ export async function createItem(input: ItemCreateInput): Promise<ActionResult<{
     if (ctx.error) return { ok: false, error: ctx.error };
     // The id is chosen by the form, so a retry after a lost response is a no-op.
     const { error } = await ctx.supabase.from("shopping_items")
-      .upsert({ id: parsed.data.id, name: parsed.data.name, currency: parsed.data.currency, price_minor: parsed.data.priceMinor }, { onConflict: "id", ignoreDuplicates: true });
+      .upsert({ id: parsed.data.id, name: parsed.data.name, currency: parsed.data.currency, price_minor: parsed.data.priceMinor, quantity: parsed.data.quantity }, { onConflict: "id", ignoreDuplicates: true });
     if (error) return { ok: false, error: databaseError(error) };
     revalidatePath("/", "layout");
     return { ok: true, id: parsed.data.id };
@@ -43,7 +44,7 @@ export async function updateItem(id: string, input: ItemEditInput): Promise<Acti
     const ctx = await actionClient(parsed.data.expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
     const { data, error } = await ctx.supabase.from("shopping_items")
-      .update({ name: parsed.data.name, price_minor: parsed.data.priceMinor }).eq("id", id).eq("user_id", ctx.userId).select("id");
+      .update({ name: parsed.data.name, price_minor: parsed.data.priceMinor, quantity: parsed.data.quantity }).eq("id", id).eq("user_id", ctx.userId).select("id");
     if (error) return { ok: false, error: databaseError(error) };
     if (!data?.length) return { ok: false, error: "conflict" };
     revalidatePath("/", "layout");
@@ -61,6 +62,24 @@ export async function deleteItem(id: string): Promise<ActionResult> {
     if (error) return { ok: false, error: databaseError(error) };
     revalidatePath("/", "layout");
     return { ok: true };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+/**
+ * "Delete selected": the ticked items go in one statement (`delete_shopping_items`), so either
+ * all of them are deleted or none is. Items already gone are not an error, which makes a retry
+ * after a lost response safe. Like a single delete, this never touches Activity.
+ */
+export async function deleteItems(input: ItemDeleteInput): Promise<ActionResult<{ deleted: number }>> {
+  const parsed = itemDeleteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const { data, error } = await ctx.supabase.rpc("delete_shopping_items", { p_ids: parsed.data.itemIds });
+    if (error) return { ok: false, error: databaseError(error) };
+    revalidatePath("/", "layout");
+    return { ok: true, deleted: Number(data ?? 0) };
   } catch { return { ok: false, error: "failed" }; }
 }
 
@@ -83,7 +102,7 @@ export async function moveItemsToFolder(input: ItemMoveInput): Promise<ActionRes
     const ctx = await actionClient(expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
 
-    const found = await ctx.supabase.from("shopping_item_status").select("id,name,currency,price_minor,bought_on").in("id", itemIds);
+    const found = await ctx.supabase.from("shopping_item_status").select("id,name,currency,price_minor,quantity,bought_on").in("id", itemIds);
     if (found.error) return { ok: false, error: "failed" };
     const rows = found.data ?? [];
     if (rows.some((row) => row.bought_on !== null)) return { ok: false, error: "conflict" };
@@ -102,7 +121,7 @@ export async function moveItemsToFolder(input: ItemMoveInput): Promise<ActionRes
       for (const row of rows) {
         const decimalPlaces = expectedUnits[row.currency as string];
         if (decimalPlaces === undefined) return { ok: false, error: "invalid" };
-        inserts.push({ id: row.id as string, folder_id: folderId, name: row.name as string, currency: row.currency as string, decimal_places: decimalPlaces, price_minor: Number(row.price_minor) });
+        inserts.push({ id: row.id as string, folder_id: folderId, name: row.name as string, currency: row.currency as string, decimal_places: decimalPlaces, price_minor: Number(row.price_minor), quantity: Number(row.quantity) });
       }
       const { error } = await ctx.supabase.from("invoice_items").upsert(inserts, { onConflict: "id", ignoreDuplicates: true });
       if (error) return { ok: false, error: moveError(error) };
@@ -135,7 +154,7 @@ export async function buyItems(input: ItemBuyInput): Promise<ActionResult<Transa
     const ctx = await actionClient(expectedUnits);
     if (ctx.error) return { ok: false, error: ctx.error };
 
-    const found = await ctx.supabase.from("shopping_item_status").select("id,name,currency,price_minor,created_at,bought_on,transaction_id").in("id", itemIds);
+    const found = await ctx.supabase.from("shopping_item_status").select("id,name,currency,price_minor,quantity,created_at,bought_on,transaction_id").in("id", itemIds);
     if (found.error) return { ok: false, error: "failed" };
     const rows = (found.data ?? []).sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id.localeCompare(b.id)));
     if (rows.length !== itemIds.length) return { ok: false, error: "conflict" };
@@ -149,8 +168,17 @@ export async function buyItems(input: ItemBuyInput): Promise<ActionResult<Transa
     if (balance.error) return { ok: false, error: "failed" };
     if (!balance.data || balance.data.currency !== currency) return { ok: false, error: "walletUnavailable" };
 
+    // Each line is price x quantity, and reads "Milk × 3" when there is more than one.
+    let lines: { description: string; amountMinor: number }[];
     let total: number;
-    try { total = sumMinor(rows.map((row) => Number(row.price_minor))); } catch { return { ok: false, error: "invalid" }; }
+    try {
+      lines = rows.map((row) => {
+        const quantity = Number(row.quantity);
+        if (!Number.isSafeInteger(quantity) || quantity < 1) throw new Error("quantity");
+        return { description: purchaseLabel({ name: row.name as string, quantity }), amountMinor: lineMinor({ priceMinor: Number(row.price_minor), quantity }) };
+      });
+      total = sumMinor(lines.map((line) => line.amountMinor));
+    } catch { return { ok: false, error: "invalid" }; }
 
     const prior = await ctx.supabase.from("transactions").select("id,revision,kind,amount_minor,deleted_at").eq("id", requestId).maybeSingle();
     if (prior.error) return { ok: false, error: "failed" };
@@ -159,10 +187,9 @@ export async function buyItems(input: ItemBuyInput): Promise<ActionResult<Transa
       if (prior.data.kind !== "expense" || prior.data.deleted_at !== null || Number(prior.data.amount_minor) !== total) return { ok: false, error: "conflict" };
       purchase = { id: prior.data.id, revision: prior.data.revision };
     } else {
-      const names = rows.map((row) => row.name as string);
       const created = await createTransactionCore({
-        expectedUnits, kind: "expense", occurredOn, balanceId, amountMinor: total, categoryId, note: purchaseNote(names),
-        ...(rows.length > 1 ? { items: rows.map((row) => ({ description: row.name as string, amountMinor: Number(row.price_minor) })) } : {}),
+        expectedUnits, kind: "expense", occurredOn, balanceId, amountMinor: total, categoryId, note: purchaseNote(lines.map((line) => line.description)),
+        ...(lines.length > 1 ? { items: lines } : {}),
       }, requestId);
       if (!created.ok) return created;
       purchase = { id: created.id, revision: created.revision };

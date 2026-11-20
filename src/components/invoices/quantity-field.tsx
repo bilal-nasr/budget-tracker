@@ -8,9 +8,9 @@ import type { CurrencyDefinition } from "@/lib/currency";
 import { MAX_MINOR } from "@/lib/money";
 
 /** How many units; whole numbers only, shown with a native numeric keypad. */
-export function QuantityField({ text, onChange, valid }: { text: string; onChange: (text: string) => void; valid: boolean }) {
+export function QuantityField({ text, onChange, valid, disabled }: { text: string; onChange: (text: string) => void; valid: boolean; disabled?: boolean }) {
   const t = useTranslations("Invoices");
-  return <TextField label={t("quantity")} value={text} onChange={(event) => onChange(event.target.value)} inputMode="numeric"
+  return <TextField label={t("quantity")} value={text} onChange={(event) => onChange(event.target.value)} inputMode="numeric" disabled={disabled}
     maxLength={String(MAX_QUANTITY).length + 1} enterKeyHint="done" error={text.trim() && !valid ? t("errorQuantity", { max: MAX_QUANTITY }) : null} />;
 }
 

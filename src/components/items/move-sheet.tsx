@@ -15,9 +15,9 @@ import { folderCreateSchema, MAX_NAME } from "@/features/invoices/schema";
 import { moveItemsToFolder } from "@/features/items/actions";
 import { itemErrorKey } from "@/features/items/errors";
 import { itemMoveSchema, MAX_MOVE_ITEMS, type ShoppingItem } from "@/features/items/schema";
+import { totalOf } from "@/features/items/totals";
 import type { ActionResult } from "@/lib/supabase/action";
 import { currencyIntent } from "@/lib/currency-intent";
-import { sumMinor } from "@/lib/money";
 import { useRouter } from "@/i18n/navigation";
 
 const NEW = "new";
@@ -41,7 +41,7 @@ async function run(payload: MovePayload): Promise<ActionResult<{ moved: number }
 
 /**
  * "Move to folder": the ticked items leave the list and become rows of an invoice folder, either
- * one that exists or a new one named here. Nothing is recorded in Activity.
+ * one that exists or a new one named here, each with its quantity. Nothing is recorded in Activity.
  */
 export function MoveSheet({ items, folders, onClose, onDone }: {
   items: ShoppingItem[];
@@ -57,7 +57,7 @@ export function MoveSheet({ items, folders, onClose, onDone }: {
   const nameRef = useRef<HTMLInputElement>(null);
   const currency = items[0].currency;
   const unit = definition(currency);
-  const total = sumMinor(items.map((item) => item.priceMinor));
+  const total = totalOf(items);
 
   const [choice, setChoice] = useState<string>(folders[0]?.id ?? NEW);
   const [name, setName] = useState("");
@@ -96,7 +96,7 @@ export function MoveSheet({ items, folders, onClose, onDone }: {
       <fieldset disabled={submission.frozen} className="flex min-w-0 flex-col gap-4 border-0 p-0">
         <p className="flex items-baseline justify-between gap-3 rounded-xl bg-secondary px-3.5 py-3 font-semibold">
           <span>{t("selectedLabel", { count: items.length })}</span>
-          <Amount minor={total} currency={currency} className="shrink-0 text-[17px]" />
+          {total === null ? null : <Amount minor={total} currency={currency} className="shrink-0 text-[17px]" />}
         </p>
         <fieldset className="flex min-w-0 flex-col gap-2 border-0 p-0">
           <legend className="mb-2 text-sm font-medium">{t("folderLabel")}</legend>

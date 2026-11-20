@@ -206,3 +206,24 @@ it("transports exactly the caller's cost, tender and return units with its trans
  const draft={...input,expectedUnits:{USD:2,LBP:0,TOKEN8:8}};
  await createTransactionCore(draft,id);expect(mock.actionClient).toHaveBeenCalledWith(draft.expectedUnits);expect(mock.rpc.mock.calls[0][1].p_input).not.toHaveProperty("expectedUnits");
 });
+
+it("sends extra tender lines only when a purchase has them", async () => {
+  const { transactionSaveArgs, transactionWriteInputSchema } = await import("./mutation-input");
+  const base = {
+    kind: "expense" as const, occurredOn: "2026-11-05", balanceId: "aaaaaaaa-0000-4000-8000-000000000001",
+    amountMinor: 1000, categoryId: "cccccccc-0000-4000-8000-000000000001",
+  };
+  const lbp = "aaaaaaaa-0000-4000-8000-000000000002";
+  const mixed = transactionWriteInputSchema.parse({ ...base, settlement: {
+    tenderMinor: 300, extraTenders: [{ balanceId: lbp, amountMinor: 1300000 }],
+    changes: [{ balanceId: base.balanceId, amountMinor: 500 }, { balanceId: lbp, amountMinor: 10000 }],
+  } });
+  expect(transactionSaveArgs("dddddddd-0000-4000-8000-000000000001", null, mixed).p_settlement).toEqual({
+    tenderMinor: 300, extraTenders: [{ balanceId: lbp, amountMinor: 1300000 }],
+    changes: [{ balanceId: base.balanceId, amountMinor: 500 }, { balanceId: lbp, amountMinor: 10000 }],
+  });
+  const single = transactionWriteInputSchema.parse({ ...base, settlement: { tenderMinor: 1000, extraTenders: [], changes: [] } });
+  expect(transactionSaveArgs("dddddddd-0000-4000-8000-000000000001", null, single).p_settlement).toEqual({ tenderMinor: 1000, changes: [] });
+  expect(transactionWriteInputSchema.safeParse({ ...base, settlement: {
+    tenderMinor: 300, extraTenders: [{ balanceId: lbp, amountMinor: 1300000, currency: "LBP" }], changes: [] } }).success).toBe(false);
+});

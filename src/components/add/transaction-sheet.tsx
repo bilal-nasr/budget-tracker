@@ -179,14 +179,19 @@ function Form({ state, onClose, onReload, onStash, onStartOver }: {
     setReceivedEdited(false);
   }
   const cashUnit = (code: string, balanceId: string) => `${code}:${app.currencyByCode(code)?.decimalPlaces}:${app.currencyByCode(code)?.disabled}:${balanceOptionById(balanceId)?.currency === code}`;
-  const cashUnits = { tender: cashUnit(currency, balanceId), changes: Object.fromEntries(cashDraft.changes.map((change) => [change.key, cashUnit(change.currency, change.balanceId)])) };
+  const cashTenders = cashDraft.extraTenders ?? [];
+  const cashUnits = { tender: cashUnit(currency, balanceId),
+    tenders: Object.fromEntries(cashTenders.map((tender) => [tender.key, cashUnit(tender.currency, tender.balanceId)])),
+    changes: Object.fromEntries(cashDraft.changes.map((change) => [change.key, cashUnit(change.currency, change.balanceId)])) };
   const [cashDraftUnits, setCashDraftUnits] = useState(cashUnits);
   if (JSON.stringify(cashDraftUnits) !== JSON.stringify(cashUnits)) {
     setCashDraftUnits(cashUnits);
     const invalidTender = cashDraftUnits.tender !== cashUnits.tender;
     const invalidChanges = new Set(cashDraft.changes.filter((change) => cashDraftUnits.changes[change.key] !== undefined && cashDraftUnits.changes[change.key] !== cashUnits.changes[change.key]).map((change) => change.key));
-    if (invalidTender || invalidChanges.size) setCashDraft((draft) => ({ ...draft,
+    const invalidTenders = new Set(cashTenders.filter((tender) => cashDraftUnits.tenders[tender.key] !== undefined && cashDraftUnits.tenders[tender.key] !== cashUnits.tenders[tender.key]).map((tender) => tender.key));
+    if (invalidTender || invalidChanges.size || invalidTenders.size) setCashDraft((draft) => ({ ...draft,
       tenderText: invalidTender ? "" : draft.tenderText,
+      extraTenders: (draft.extraTenders ?? []).map((tender) => invalidTenders.has(tender.key) ? { ...tender, amountText: "" } : tender),
       changes: draft.changes.map((change) => invalidChanges.has(change.key) ? { ...change, amountText: "", rate: undefined } : change),
     }));
   }
@@ -380,7 +385,7 @@ function Form({ state, onClose, onReload, onStash, onStartOver }: {
     const amountMinor = minor ?? attemptSnapshot.current?.amountMinor;
     if (amountMinor === undefined) return;
     const input: TransactionInput = attemptSnapshot.current ?? {
-      expectedUnits: currencyIntent(amountDefinition, payerDefinition, ...(cashDraft.enabled ? cashDraft.changes.map((change) => app.currencyByCode(change.currency)) : [])),
+      expectedUnits: currencyIntent(amountDefinition, payerDefinition, ...(cashDraft.enabled ? [...cashTenders, ...cashDraft.changes].map((leg) => app.currencyByCode(leg.currency)) : [])),
       kind: mode as "expense" | "income",
       occurredOn: date,
       balanceId: balanceId,
@@ -636,6 +641,8 @@ function Form({ state, onClose, onReload, onStash, onStartOver }: {
               payerBalance={state.mode === "add" && balance ? <WalletBalance label={t("balance")} wallet={balance} /> : null}
               editContext={cashEditContext}
               labels={settlementLabels} onChange={setCashDraft} disabled={pending || unresolved} />
+            {cashTenders.some((tender) => tender.currency !== currency)
+              ? <p className="text-[13px] text-muted-foreground">{ts("crossTenderHelp")}</p> : null}
             {cashDraft.enabled && cashDraft.changes.some((change) => change.currency !== currency)
               ? <p className="text-[13px] text-muted-foreground">{ts("crossChangeHelp")}</p> : null}
           </> : null}

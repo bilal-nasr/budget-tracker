@@ -279,6 +279,12 @@ function build(): Transaction[] {
           { balanceId: id(1), amountMinor: 500, currency: "USD" as const },
           { balanceId: id(3), amountMinor: 223750, currency: "LBP" as const },
         ],
+      } : note === "Lunch" ? {
+        // Synthetic: one $18 purchase paid with $10 and 720,000 lira, no change, no rate.
+        tenderMinor: 1000,
+        tenderCurrency: wallets.get(balanceId)!.currency,
+        extraTenders: [{ balanceId: id(3), amountMinor: 720000, currency: "LBP" as const }],
+        changes: [],
       } : note === "Synthetic SYP groceries" ? {
         tenderMinor: 2500,
         tenderCurrency: wallets.get(balanceId)!.currency,
@@ -315,6 +321,7 @@ export function demoPage(filters: Filters, cursor: Cursor | null, limit: number)
       (!q || (t.note ?? "").toLowerCase().includes(q)) &&
       matchesActivityKind(t, filters.kind) &&
       (!filters.balanceId || filters.balanceId.split(",").some((id) => t.balanceId === id || t.toBalanceId === id ||
+        t.settlement?.extraTenders?.some((tender) => tender.balanceId === id) ||
         t.settlement?.changes.some((change) => change.balanceId === id))) &&
       (!filters.categoryId || (t.categoryId === filters.categoryId && (t.kind !== "loan" || (t.loanFeeMinor ?? 0) > 0))) &&
       (!filters.from || t.occurredOn >= filters.from) &&

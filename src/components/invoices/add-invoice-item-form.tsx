@@ -77,6 +77,7 @@ export function AddInvoiceItemForm({ folderId, viewerId, categories, categoryId,
     const item: InvoiceItem = {
       id: input.id, folderId, categoryId: input.categoryId, name: input.name, currency: input.currency, decimalPlaces: input.decimalPlaces,
       priceMinor: input.priceMinor, quantity: input.quantity, createdBy: viewerId, createdAt: now, updatedAt: now,
+      paidOn: null, paidAt: null, paidBy: null,
     };
     void onAdd(item, input).then((result) => {
       if (result.ok) return;

@@ -53,6 +53,15 @@ describe.each(["en", "ar"] as const)("%s", (locale) => {
     expect(links.indexOf("/invoices")).toBe(links.indexOf("/items") + 1);
   });
 
+  it("groups Loans and Pending payments apart from the Item calculator and Invoices", async () => {
+    await renderRow(locale);
+    const owed = screen.getByRole("region", { name: w.groupOwed });
+    const tools = screen.getByRole("region", { name: w.groupTools });
+    const hrefs = (el: HTMLElement) => [...el.querySelectorAll("a")].map((link) => link.getAttribute("href"));
+    expect(hrefs(owed)).toEqual(["/loans", "/pending-payments"]);
+    expect(hrefs(tools)).toEqual(["/items", "/invoices"]);
+  });
+
   it("says there are no folders yet when there are none", async () => {
     const row = await renderRow(locale);
     expect(row.textContent).toContain(w.noFolders);

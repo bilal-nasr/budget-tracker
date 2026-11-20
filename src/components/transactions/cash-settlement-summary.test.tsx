@@ -53,4 +53,18 @@ describe("cash settlement summary", () => {
   });
 });
 
+it("lists every payment with its own currency and wallet, never a combined total", () => {
+  render(<NextIntlClientProvider locale="en" messages={en}>
+    <CashSettlementSummary settlement={{ tenderMinor: 300, tenderCurrency: "USD",
+      extraTenders: [{ balanceId: lbpWallet, amountMinor: 1300000, currency: "LBP", walletNameSnapshot: "Lira at payment" }],
+      changes: [{ balanceId: usdWallet, amountMinor: 500, currency: "USD" }, { balanceId: lbpWallet, amountMinor: 10000, currency: "LBP" }] }}
+      costMinor={1000} currency="USD" tenderWalletNames={["Cash", undefined]} changeWalletNames={["Cash", "Lebanese cash"]} />
+  </NextIntlClientProvider>);
+  for (const amount of ["$10.00", "$3.00", "LBP 1,300,000", "$5.00", "LBP 10,000"]) expect(screen.getByText(amount, { exact: true })).toBeTruthy();
+  expect(screen.getAllByText(en.Cashier.tender, { exact: true })).toHaveLength(2);
+  expect(screen.getAllByText(en.Cashier.tenderFrom, { exact: true })).toHaveLength(2);
+  expect(screen.getByText("Lira at payment", { exact: true })).toBeTruthy();
+  expect(screen.queryByText(en.Cashier.rate, { exact: true })).toBeNull();
+});
+
 function render(node: React.ReactNode) { return renderBase(<AppDataProvider walletContainers={[]} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={[]} timezone="Asia/Beirut" salary={null} usdLbpRate={null}>{node}</AppDataProvider>); }

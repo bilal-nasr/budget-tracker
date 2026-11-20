@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_MINOR } from "@/lib/money";
-import { lineMinor, totalsByCurrency } from "./totals";
+import { groupByCurrency, isPaid, lineMinor, totalsByCurrency, unpaidTotals } from "./totals";
 
 const row = (currency: string, decimalPlaces: number, priceMinor: number, quantity = 1) => ({ currency, decimalPlaces, priceMinor, quantity });
 
@@ -45,5 +45,36 @@ describe("totalsByCurrency", () => {
 
   it("returns nothing for no rows", () => {
     expect(totalsByCurrency([])).toEqual([]);
+  });
+});
+
+describe("paid rows", () => {
+  const paid = (currency: string, decimalPlaces: number, priceMinor: number, quantity: number, paidOn: string | null) => ({ ...row(currency, decimalPlaces, priceMinor, quantity), paidOn });
+
+  it("a row is paid exactly while it has a paid date", () => {
+    expect(isPaid({ paidOn: "2026-11-06" })).toBe(true);
+    expect(isPaid({ paidOn: null })).toBe(false);
+  });
+
+  it("still to pay leaves paid rows out, per currency and never mixed", () => {
+    expect(unpaidTotals([paid("USD", 2, 25_000, 1, "2026-11-06"), paid("USD", 2, 1500, 3, null), paid("LBP", 0, 900_000, 1, null)])).toEqual([
+      { currency: "USD", decimalPlaces: 2, minor: 4500 },
+      { currency: "LBP", decimalPlaces: 0, minor: 900_000 },
+    ]);
+    // A currency whose rows are all paid has no line at all.
+    expect(unpaidTotals([paid("USD", 2, 100, 1, "2026-11-06"), paid("LBP", 0, 5, 1, null)])).toEqual([{ currency: "LBP", decimalPlaces: 0, minor: 5 }]);
+    expect(unpaidTotals([paid("USD", 2, 100, 1, "2026-11-06")])).toEqual([]);
+  });
+});
+
+describe("groupByCurrency", () => {
+  it("makes one group per currency and decimals, in order of first appearance", () => {
+    const [a, b, c, d] = [row("USD", 2, 1), row("LBP", 0, 2), row("USD", 2, 3), row("USD", 3, 4)];
+    expect(groupByCurrency([a, b, c, d])).toEqual([
+      { currency: "USD", decimalPlaces: 2, rows: [a, c] },
+      { currency: "LBP", decimalPlaces: 0, rows: [b] },
+      { currency: "USD", decimalPlaces: 3, rows: [d] },
+    ]);
+    expect(groupByCurrency([])).toEqual([]);
   });
 });

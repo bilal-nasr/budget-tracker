@@ -12,6 +12,7 @@ export function matchesActivityKind(row: Transaction, kind: Filters["kind"]): bo
 export function activityOrClause(filters: Filters, cursor: Cursor | null): string | null {
   const groups: string[] = [];
   if (filters.balanceId) {
+    // change_balance_ids lists every cashier leg balance: returned change and additional tenders.
     groups.push(filters.balanceId.split(",")
       .map((id) => `balance_id.eq.${id},to_balance_id.eq.${id},change_balance_ids.cs.{${id}}`).join(","));
   }

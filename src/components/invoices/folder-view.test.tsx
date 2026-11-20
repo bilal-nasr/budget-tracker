@@ -13,6 +13,7 @@ import { fakeRealtime } from "@/test/fake-realtime";
 
 const mocks = vi.hoisted(() => ({
   addItem: vi.fn(), updateItem: vi.fn(), deleteItem: vi.fn(), restoreItem: vi.fn(),
+  deleteItems: vi.fn(), moveItems: vi.fn(), restoreItems: vi.fn(), payItems: vi.fn(), deleteTransaction: vi.fn(),
   renameFolder: vi.fn(), deleteFolder: vi.fn(), push: vi.fn(), replace: vi.fn(), refresh: vi.fn(),
   toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
   realtime: null as ReturnType<typeof fakeRealtime> | null,
@@ -21,7 +22,9 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => mocks.realtime!.cl
 vi.mock("@/features/invoices/actions", () => ({
   addItem: mocks.addItem, updateItem: mocks.updateItem, deleteItem: mocks.deleteItem, restoreItem: mocks.restoreItem,
   renameFolder: mocks.renameFolder, deleteFolder: mocks.deleteFolder,
+  deleteItems: mocks.deleteItems, moveItems: mocks.moveItems, restoreItems: mocks.restoreItems, payItems: mocks.payItems,
 }));
+vi.mock("@/features/transactions/actions", () => ({ deleteTransaction: mocks.deleteTransaction }));
 vi.mock("@/features/invoices/queries", () => ({}));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
 vi.mock("@/i18n/navigation", () => ({
@@ -59,6 +62,7 @@ const otherCategory: InvoiceCategory = { id: OTHER, folderId: FOLDER, name: "Oth
 const item = (n: number, name: string, currency: string, decimalPlaces: number, priceMinor: number, createdBy: string | null = VIEWER, quantity = 1): InvoiceItem => ({
   id: `1d000000-0000-4000-8000-${String(n).padStart(12, "0")}`, folderId: FOLDER, categoryId: OTHER, name, currency, decimalPlaces, priceMinor, quantity, createdBy,
   createdAt: `2026-11-0${Math.min(9, n)}T00:00:00Z`, updatedAt: `2026-11-0${Math.min(9, n)}T00:00:00Z`,
+  paidOn: null, paidAt: null, paidBy: null,
 });
 const person = (userId: string, displayName: string | null, isOwner = false, removed = false): InvoiceMember =>
   ({ userId, displayName, isOwner, joinedAt: "2026-11-01T00:00:00Z", removed });
@@ -1243,5 +1247,329 @@ describe("useFolderItems compares server times to the microsecond", () => {
     act(() => result.current.applyRemote({ type: "upsert", item: { ...r, name: "Server again", updatedAt: "2026-11-09T10:00:01.000999+00:00" } }));
     act(() => result.current.applyRemote({ type: "upsert", item: { ...r, name: "Garbled", updatedAt: "2026-11-09T10:00:01.5 nonsense" } }));
     expect(names(result.current.items)).toEqual(["Device"]);
+  });
+});
+
+describe.each(["en", "ar"] as const)("%s: bulk actions and paying", (locale) => {
+  const t = catalogs[locale].Invoices;
+  beforeEach(() => {
+    current = locale;
+    mocks.deleteItems.mockReset().mockImplementation(async ({ itemIds }: { itemIds: string[] }) => ({ ok: true, deleted: itemIds }));
+    mocks.moveItems.mockReset().mockImplementation(async ({ itemIds }: { itemIds: string[] }) => ({ ok: true, rows: itemIds.map((id) => ({ id, updatedAt: serverNow() })) }));
+    mocks.restoreItems.mockReset().mockImplementation(async ({ itemIds }: { itemIds: string[] }) => ({ ok: true, rows: itemIds.map((id) => ({ id, createdAt: createdAtOf(id), updatedAt: serverNow() })) }));
+    mocks.payItems.mockReset();
+    mocks.deleteTransaction.mockReset().mockResolvedValue({ ok: true, id: "x", revision: 2 });
+  });
+
+  const plural = (key: keyof typeof t, count: number) => {
+    const forms = Object.fromEntries([...(t[key] as string).matchAll(/(=\d+|zero|one|two|few|many|other) \{([^}]*)\}/g)].map((m) => [m[1], m[2]]));
+    const rule = new Intl.PluralRules(locale).select(count);
+    return (forms[`=${count}`] ?? forms[rule] ?? forms.other).replace("#", String(count));
+  };
+  const idOf = (n: number) => item(n, "", "USD", 2, 0).id;
+  const tick = (name: string) => fireEvent.click(screen.getByRole("checkbox", { name: t.selectRow.replace("{name}", name) }));
+  const bar = () => screen.queryByRole("region", { name: t.selectionBarLabel });
+  const barButton = (key: "deleteSelected" | "moveSelected" | "paySelected", count: number) => within(bar()!).getByRole("button", { name: plural(key, count) }) as HTMLButtonElement;
+  const names = () => screen.getAllByRole("checkbox").map((box) => box.closest("li")!.querySelector("bdi")!.textContent);
+  const parts: InvoiceCategory = { id: "1c000000-0000-4000-8000-000000000002", folderId: FOLDER, name: "Parts", isDefault: false, createdAt: "2026-11-01T00:00:01Z" };
+  const paid = (row: InvoiceItem, by = VIEWER, on = "2026-11-06"): InvoiceItem => ({ ...row, paidOn: on, paidAt: `${on}T12:00:00Z`, paidBy: by });
+  const channel = () => mocks.realtime!.active()[0];
+
+  const [USD_BALANCE, LBP_BALANCE] = ["1b000000-0000-4000-8000-000000000001", "1b000000-0000-4000-8000-000000000002"];
+  const balance = (id: string, walletId: string, currency: string) => ({ id, walletId, currency, position: 0, balanceMinor: 0, openingBalanceMinor: 0, detached: false });
+  const cash = { id: "w1", name: "Cash", kind: "cash" as const, position: 0, deleted: false, needsAttention: false, defaultBalanceId: USD_BALANCE, balances: [balance(USD_BALANCE, "w1", "USD"), balance(LBP_BALANCE, "w1", "LBP")] };
+  const groceries = { id: "1e000000-0000-4000-8000-000000000001", kind: "expense" as const, nameEn: "Shopping", nameAr: "تسوق", tile: 1 as const, color: "teal" as const, position: 0, parentId: null, archivedAt: null };
+  const withWallet = (folder: InvoiceFolderDetail) => (
+    <NextIntlClientProvider locale={locale} messages={catalogs[locale]}>
+      <AppDataProvider walletContainers={[cash]} currencies={currencies} categories={[groceries]} timezone="UTC" salary={null} usdLbpRate={null} defaultCurrency="USD">
+        <FolderView folder={folder} />
+      </AppDataProvider>
+    </NextIntlClientProvider>
+  );
+
+  it("the bar offers delete, move and pay for the ticked rows, plus select all for the whole folder", () => {
+    render(view(locale, folderOf()));
+    tick("GPU"); tick("Fans");
+    expect(barButton("deleteSelected", 2).textContent).toBe(t.bulkDelete);
+    expect(barButton("moveSelected", 2).textContent).toBe(t.bulkMove);
+    expect(barButton("paySelected", 2).textContent).toBe(t.bulkPay);
+    // Every action is a full-size touch target.
+    for (const button of within(bar()!).getAllByRole("button")) expect(button.className).toMatch(/h-11|size-11/);
+    fireEvent.click(within(bar()!).getByRole("button", { name: t.selectAllItems }));
+    expect(screen.getAllByRole("checkbox").every((box) => (box as HTMLInputElement).checked)).toBe(true);
+    // Nothing left to select: the bar's own "select all" steps aside, Clear stays.
+    expect(within(bar()!).queryByRole("button", { name: t.selectAllItems })).toBeNull();
+    expect(within(bar()!).getByRole("button", { name: t.clearSelection })).toBeTruthy();
+  });
+
+  it("deletes the ticked rows only after confirming, in one request, and they leave at once", async () => {
+    let answer: (value: unknown) => void = () => {};
+    mocks.deleteItems.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    render(view(locale, folderOf()));
+    tick("GPU"); tick("Fans");
+    fireEvent.click(barButton("deleteSelected", 2));
+    const dialog = await screen.findByRole("dialog", { name: plural("confirmDeleteItems", 2) });
+    expect(mocks.deleteItems).not.toHaveBeenCalled();
+    expect(within(dialog).queryByText(t.deleteItemsPaidHelp)).toBeNull();
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: plural("deleteItemsConfirm", 2) })); });
+    // One call for the batch, and the rows are already gone while it is in flight.
+    expect(mocks.deleteItems).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteItems).toHaveBeenCalledWith({ folderId: FOLDER, itemIds: [idOf(5), idOf(2)] });
+    expect(mocks.deleteItem).not.toHaveBeenCalled();
+    expect(names()).toEqual(["Cables", "Case", "CPU"]);
+    expect(bar()).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await act(async () => { answer({ ok: true, deleted: [idOf(5), idOf(2)] }); });
+    expect(names()).toEqual(["Cables", "Case", "CPU"]);
+    expect(mocks.toast).toHaveBeenCalledWith(plural("itemsDeleted", 2), expect.objectContaining({ action: expect.objectContaining({ label: t.undo }) }));
+  });
+
+  it("cancelling the confirmation deletes nothing and keeps the ticks", async () => {
+    render(view(locale, folderOf()));
+    tick("GPU");
+    fireEvent.click(barButton("deleteSelected", 1));
+    const dialog = await screen.findByRole("dialog", { name: plural("confirmDeleteItems", 1) });
+    fireEvent.click(within(dialog).getByRole("button", { name: t.cancel }));
+    expect(mocks.deleteItems).not.toHaveBeenCalled();
+    expect(names()).toHaveLength(5);
+    expect(barButton("deleteSelected", 1)).toBeTruthy();
+  });
+
+  it("Undo of a bulk delete brings the batch back in one request", async () => {
+    render(view(locale, folderOf()));
+    tick("GPU"); tick("Fans");
+    fireEvent.click(barButton("deleteSelected", 2));
+    const dialog = await screen.findByRole("dialog");
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: plural("deleteItemsConfirm", 2) })); });
+    expect(names()).toEqual(["Cables", "Case", "CPU"]);
+    const undo = mocks.toast.mock.calls.at(-1)![1].action.onClick as () => void;
+    await act(async () => { undo(); });
+    expect(mocks.restoreItems).toHaveBeenCalledWith({ itemIds: [idOf(5), idOf(2)] });
+    expect(names()).toEqual(["Fans", "Cables", "Case", "GPU", "CPU"]);
+    // Rows that come back are not ticked again.
+    expect(bar()).toBeNull();
+  });
+
+  it("a failed bulk delete puts every row back and says why", async () => {
+    mocks.deleteItems.mockResolvedValue({ ok: false, error: "failed" });
+    render(view(locale, folderOf()));
+    tick("GPU"); tick("Fans");
+    fireEvent.click(barButton("deleteSelected", 2));
+    const dialog = await screen.findByRole("dialog");
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: plural("deleteItemsConfirm", 2) })); });
+    expect(names()).toEqual(["Fans", "Cables", "Case", "GPU", "CPU"]);
+    expect(mocks.toast.error).toHaveBeenCalledWith(t.errorFailed);
+  });
+
+  it("a row someone else deletes mid-selection drops out of the batch instead of breaking it", async () => {
+    render(view(locale, folderOf()));
+    await act(async () => {}); // the channel joins once the session token is set
+    tick("GPU"); tick("Fans"); tick("CPU");
+    act(() => channel().emit("invoice_items", { eventType: "DELETE", new: {}, old: { id: idOf(2) } }));
+    expect(barButton("deleteSelected", 2)).toBeTruthy();
+    fireEvent.click(barButton("deleteSelected", 2));
+    const dialog = await screen.findByRole("dialog", { name: plural("confirmDeleteItems", 2) });
+    // Another one goes while the confirmation is open: the count follows.
+    act(() => channel().emit("invoice_items", { eventType: "DELETE", new: {}, old: { id: idOf(5) } }));
+    expect(await screen.findByRole("dialog", { name: plural("confirmDeleteItems", 1) })).toBeTruthy();
+    await act(async () => { fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: plural("deleteItemsConfirm", 1) })); });
+    expect(mocks.deleteItems).toHaveBeenCalledWith({ folderId: FOLDER, itemIds: [idOf(1)] });
+    expect(dialog.isConnected).toBe(false);
+    expect(names()).toEqual(["Cables", "Case"]);
+  });
+
+  it("the confirmation closes by itself when every ticked row is deleted by someone else", async () => {
+    render(view(locale, folderOf()));
+    await act(async () => {}); // the channel joins once the session token is set
+    tick("GPU");
+    fireEvent.click(barButton("deleteSelected", 1));
+    await screen.findByRole("dialog");
+    act(() => channel().emit("invoice_items", { eventType: "DELETE", new: {}, old: { id: idOf(2) } }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(bar()).toBeNull();
+    expect(mocks.deleteItems).not.toHaveBeenCalled();
+  });
+
+  it("moves the ticked rows to a chosen category in one request, at once, keeping the ticks", async () => {
+    let answer: (value: unknown) => void = () => {};
+    mocks.moveItems.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    render(view(locale, folderOf({ categories: [parts, otherCategory] })));
+    tick("GPU"); tick("Fans");
+    fireEvent.click(barButton("moveSelected", 2));
+    const dialog = await screen.findByRole("dialog", { name: t.moveTitle });
+    const confirm = within(dialog).getByRole("button", { name: plural("moveConfirm", 2) }) as HTMLButtonElement;
+    // Nothing is chosen for the person.
+    expect(confirm.disabled).toBe(true);
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
+    expect(within(dialog).getByRole("radio", { name: t.categoryOther })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Parts" }));
+    await act(async () => { fireEvent.click(confirm); });
+    expect(mocks.moveItems).toHaveBeenCalledTimes(1);
+    expect(mocks.moveItems).toHaveBeenCalledWith({ folderId: FOLDER, itemIds: [idOf(5), idOf(2)], categoryId: parts.id });
+    expect(mocks.updateItem).not.toHaveBeenCalled();
+    // Shown under "Parts" before the server answers.
+    const group = () => within(screen.getByRole("list", { name: "Parts" })).getAllByRole("checkbox").map((box) => box.closest("li")!.querySelector("bdi")!.textContent);
+    expect(group()).toEqual(["Fans", "GPU"]);
+    await act(async () => { answer({ ok: true, rows: [{ id: idOf(5), updatedAt: serverNow() }, { id: idOf(2), updatedAt: serverNow() }] }); });
+    expect(group()).toEqual(["Fans", "GPU"]);
+    expect(barButton("moveSelected", 2)).toBeTruthy();
+    expect(mocks.toast).toHaveBeenCalledWith(plural("itemsMoved", 2));
+  });
+
+  it("a row deleted by someone else during a move leaves the list; a failed move puts the rows back", async () => {
+    mocks.moveItems.mockImplementationOnce(async () => ({ ok: true, rows: [{ id: idOf(5), updatedAt: serverNow() }] }));
+    render(view(locale, folderOf({ categories: [parts, otherCategory] })));
+    tick("GPU"); tick("Fans");
+    fireEvent.click(barButton("moveSelected", 2));
+    let dialog = await screen.findByRole("dialog", { name: t.moveTitle });
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Parts" }));
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: plural("moveConfirm", 2) })); });
+    expect(names()).not.toContain("GPU");
+    expect(within(screen.getByRole("list", { name: "Parts" })).getAllByRole("checkbox")).toHaveLength(1);
+
+    mocks.moveItems.mockResolvedValue({ ok: false, error: "conflict" });
+    tick("CPU");
+    fireEvent.click(barButton("moveSelected", 2));
+    dialog = await screen.findByRole("dialog", { name: t.moveTitle });
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Parts" }));
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: plural("moveConfirm", 2) })); });
+    expect(within(screen.getByRole("list", { name: "Parts" })).getAllByRole("checkbox")).toHaveLength(1);
+    expect(mocks.toast.error).toHaveBeenCalledWith(t.errorConflict);
+  });
+
+  it("a paid row says so in words with its date, and the payer's name in a shared folder", () => {
+    const members = [person(VIEWER, "Dana", true), person(KARIM, "Karim")];
+    render(view(locale, folderOf({ members, items: [paid(item(2, "GPU", "USD", 2, 45_000), KARIM), paid(item(3, "Case", "USD", 2, 10_000), GONE), item(1, "CPU", "USD", 2, 25_000)] })));
+    const date = new Intl.DateTimeFormat(locale === "ar" ? "ar-LB-u-nu-latn" : "en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date("2026-11-06T00:00:00Z"));
+    const note = t.paidOn.replace("{date}", date);
+    expect(rowOf("GPU").textContent).toContain(`${note} · Karim`);
+    expect(rowOf("Case").textContent).toContain(`${note} · ${t.formerMember}`);
+    expect(rowOf("CPU").textContent).not.toContain(note);
+    // Words and an icon, not colour alone.
+    expect(rowOf("GPU").querySelector("svg")).not.toBeNull();
+    // Nothing about the payer's wallet or expense is on the row.
+    expect(rowOf("GPU").textContent).not.toMatch(/Cash|1b000000/);
+  });
+
+  it("totals stay per currency; \"still to pay\" appears once something is paid and leaves paid rows out", () => {
+    const { rerender } = render(view(locale, folderOf()));
+    const header = () => screen.getByRole("banner");
+    expect(within(header()).queryByText(t.stillToPay)).toBeNull();
+    rerender(view(locale, folderOf({ items: [pcItems[0], pcItems[1], pcItems[2], paid(pcItems[3]), pcItems[4]] })));
+    const lines = (name: string) => within(within(header()).getByRole("list", { name })).getAllByRole("listitem").map((line) => line.textContent);
+    expect(lines(t.totalsLabel)).toEqual(["$800.00", "LBP 2,500,000"]);
+    expect(lines(t.stillToPayLabel)).toEqual(["$350.00", "LBP 2,500,000"]);
+    rerender(view(locale, folderOf({ items: pcItems.map((row) => paid(row)) })));
+    expect(within(header()).queryByRole("list", { name: t.stillToPayLabel })).toBeNull();
+    expect(within(header()).getByText(t.allPaid)).toBeTruthy();
+    expect(lines(t.totalsLabel)).toEqual(["$800.00", "LBP 2,500,000"]);
+  });
+
+  it("Pay counts only the ticked rows nobody has paid, and is off when all of them are paid", () => {
+    render(view(locale, folderOf({ items: [paid(pcItems[3]), pcItems[4]] })));
+    tick("GPU");
+    expect(barButton("paySelected", 0).disabled).toBe(true);
+    tick("CPU");
+    expect(barButton("paySelected", 1).disabled).toBe(false);
+    // Paid rows can still be deleted or moved.
+    expect(barButton("deleteSelected", 2).disabled).toBe(false);
+  });
+
+  it("deleting a paid row warns that its expense stays in Activity", async () => {
+    render(view(locale, folderOf({ items: [paid(pcItems[3]), pcItems[4]] })));
+    tick("GPU");
+    fireEvent.click(barButton("deleteSelected", 1));
+    expect(within(await screen.findByRole("dialog")).getByText(t.deleteItemsPaidHelp)).toBeTruthy();
+  });
+
+  it("pays ticked rows of two currencies as one payment per currency and marks them paid", async () => {
+    mocks.payItems.mockImplementation(async (input: { payments: { requestId: string; itemIds: string[] }[] }) => ({
+      ok: true, payments: input.payments.map((payment) => ({ id: payment.requestId, revision: 1 })),
+      rows: input.payments.flatMap((payment) => payment.itemIds).map((id) => ({ id, updatedAt: serverNow(), paidOn: "2026-11-09", paidAt: serverNow() })),
+    }));
+    render(withWallet(folderOf({ items: [pcItems[0], paid(pcItems[2]), pcItems[3], item(1, "CPU", "USD", 2, 25_000, VIEWER, 2)] })));
+    tick("Fans"); tick("GPU"); tick("CPU"); tick("Case");
+    fireEvent.click(barButton("paySelected", 3));
+    const dialog = await screen.findByRole("dialog", { name: t.payTitle });
+    // One group per currency, each with its own total; the paid row is not offered again.
+    const usd = within(dialog).getByRole("region", { name: t.payGroupLabel.replace("{currency}", "USD") });
+    const lbp = within(dialog).getByRole("region", { name: t.payGroupLabel.replace("{currency}", "LBP") });
+    expect(usd.textContent).toContain("$950.00");
+    expect(usd.textContent).toContain("2 × $250.00");
+    expect(lbp.textContent).toContain("LBP 1,000,000");
+    expect(dialog.textContent).not.toContain("Case");
+    expect(dialog.textContent).not.toMatch(/1,000,950|1,950/);
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t.payConfirm })); });
+    expect(mocks.payItems).toHaveBeenCalledTimes(1);
+    const sent = mocks.payItems.mock.calls[0][0];
+    expect(sent).toMatchObject({ expectedUnits: { USD: 2, LBP: 0 }, folderId: FOLDER, categoryId: groceries.id });
+    // Each currency is paid from a balance of that same currency.
+    expect(sent.payments.map((payment: { balanceId: string; itemIds: string[] }) => [payment.balanceId, payment.itemIds])).toEqual([
+      [LBP_BALANCE, [idOf(5)]], [USD_BALANCE, [idOf(2), idOf(1)]],
+    ]);
+    expect(sent.payments.every((payment: { requestId: string }) => UUID.test(payment.requestId))).toBe(true);
+    // The rows now read as paid, and the selection is cleared.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(rowOf("Fans").textContent).toContain(t.paidOn.split("{date}")[0].trim());
+    expect(rowOf("CPU").textContent).toContain(t.paidOn.split("{date}")[0].trim());
+    expect(bar()).toBeNull();
+    expect(within(screen.getByRole("banner")).getByText(t.allPaid)).toBeTruthy();
+    // Undo deletes each expense; the database then returns the rows to unpaid.
+    const toast = mocks.toast.mock.calls.at(-1)!;
+    expect(toast[0]).toBe(plural("paidToast", 3));
+    await act(async () => { toast[1].action.onClick(); });
+    expect(mocks.deleteTransaction.mock.calls).toEqual(sent.payments.map((payment: { requestId: string }) => [payment.requestId, 1]));
+  });
+
+  it("a row can be paid from its own sheet; a paid row is locked there and says who paid", async () => {
+    mocks.payItems.mockResolvedValue({ ok: false, error: "paymentChanged" });
+    render(withWallet(folderOf({ items: [paid(pcItems[3]), pcItems[4]] })));
+    openRow("CPU");
+    let dialog = await screen.findByRole("dialog", { name: t.editTitle });
+    fireEvent.click(within(dialog).getByRole("button", { name: t.payItem }));
+    dialog = await screen.findByRole("dialog", { name: t.payTitle });
+    expect(dialog.textContent).toContain("$250.00");
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: t.payConfirm })); });
+    // Someone paid it first: the sheet stays and explains.
+    expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe(t.errorPaid);
+  });
+
+  it("a paid row's sheet locks name, price and quantity and offers no second payment", async () => {
+    render(withWallet(folderOf({ items: [paid(pcItems[3]), pcItems[4]] })));
+    openRow("GPU");
+    const dialog = await screen.findByRole("dialog", { name: t.editTitle });
+    expect(within(dialog).getByRole("status").textContent).toContain(t.paidLocked);
+    expect((within(dialog).getByLabelText(t.itemName) as HTMLTextAreaElement).disabled).toBe(true);
+    expect((within(dialog).getByLabelText(t.quantity) as HTMLInputElement).disabled).toBe(true);
+    expect((within(dialog).getByLabelText(t.category) as HTMLSelectElement).disabled).toBe(false);
+    expect(within(dialog).queryByRole("button", { name: t.payItem })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: t.deleteItem })).toBeTruthy();
+  });
+
+  it("without a wallet or a category of their own, the pay sheet says what is missing and cannot be sent", async () => {
+    render(view(locale, folderOf()));
+    tick("GPU");
+    fireEvent.click(barButton("paySelected", 1));
+    const dialog = await screen.findByRole("dialog", { name: t.payTitle });
+    expect(dialog.textContent).toContain(t.payNoWallet);
+    expect(dialog.textContent).toContain(t.payNoCategory);
+    expect((within(dialog).getByRole("button", { name: t.payConfirm }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("the paid marker arriving live from someone else shows on the row, and its removal clears it", async () => {
+    const members = [person(VIEWER, "Dana", true), person(KARIM, "Karim")];
+    render(view(locale, folderOf({ members })));
+    await act(async () => {}); // the channel joins once the session token is set
+    const live = (over: Record<string, unknown>) => ({
+      id: idOf(2), folder_id: FOLDER, category_id: OTHER, name: "GPU", currency: "USD", decimal_places: 2, price_minor: 45_000, quantity: 1,
+      created_by: VIEWER, created_at: createdAtOf(idOf(2)), ...over,
+    });
+    act(() => channel().emit("invoice_items", { eventType: "UPDATE", new: live({ updated_at: serverNow(), paid_on: "2026-11-06", paid_at: "2026-11-09T12:00:00Z", paid_by: KARIM }), old: { id: idOf(2) } }));
+    expect(rowOf("GPU").textContent).toContain("Karim");
+    expect(within(screen.getByRole("banner")).getByText(t.stillToPay)).toBeTruthy();
+    // Karim deletes the expense in his Activity.
+    act(() => channel().emit("invoice_items", { eventType: "UPDATE", new: live({ updated_at: serverNow(), paid_on: null, paid_at: null, paid_by: KARIM }), old: { id: idOf(2) } }));
+    expect(rowOf("GPU").textContent).not.toContain(t.paidOn.split("{date}")[0].trim());
+    expect(within(screen.getByRole("banner")).queryByText(t.stillToPay)).toBeNull();
   });
 });

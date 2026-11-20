@@ -7,6 +7,8 @@ import type { Category } from "@/features/categories/catalogue";
 
 const mocks = vi.hoisted(() => ({ reorderCategories: vi.fn(), restoreCategory: vi.fn() }));
 vi.mock("@/features/categories/actions", () => mocks);
+const bulk = vi.hoisted(() => ({ removeCategories: vi.fn() }));
+vi.mock("@/features/categories/bulk-actions", () => bulk);
 vi.mock("sonner", () => ({ toast: vi.fn() }));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 import { CategoriesManager } from "./categories-manager";

@@ -27,6 +27,17 @@ describe("summarizeActivity", () => {
     expect(result.get("lbp")).toEqual({ incomeMinor: 90000, spentMinor: 0 });
   });
 
+  it("charges an additional tender to its own balance", () => {
+    const result = summarizeActivity([
+      { balance_id: "usd", kind: "expense", amount_minor: 1000, tender_minor: 300, cashier_changes: [
+        { balance_id: "usd", amount_minor: 500, leg: "change" }, { balance_id: "lbp", amount_minor: 10000, leg: "change" },
+        { balance_id: "lbp", amount_minor: 1300000, leg: "tender" },
+      ] },
+    ]);
+    expect(result.get("usd")).toEqual({ incomeMinor: 200, spentMinor: 0 });
+    expect(result.get("lbp")).toEqual({ incomeMinor: 0, spentMinor: 1290000 });
+  });
+
   it("ignores transfers and loans", () => {
     expect(summarizeActivity([{ balance_id: "a", kind: "transfer", amount_minor: 100, tender_minor: null, cashier_changes: [] }]).size).toBe(0);
   });

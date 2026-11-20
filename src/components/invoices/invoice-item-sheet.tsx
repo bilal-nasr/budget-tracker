@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, useTransition } from "react";
-import { Trash2 } from "lucide-react";
+import { Check, CircleCheck, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMoneyDraftUnit } from "@/components/add/runtime-balances";
 import { useAppData } from "@/components/providers/app-data";
@@ -23,13 +23,20 @@ import { LineTotal, QuantityField } from "./quantity-field";
  * stored decimals, even one the editor never enabled; moving the row to another currency is
  * offered only among the editor's enabled ones. Saving a row someone else removed is handled
  * by the parent (it says so and closes); other failures stay here with the reason.
+ *
+ * An unpaid row can be paid from here. A paid row is a record of what was paid: it says so
+ * (`paidNote`), its name, price, quantity and currency are locked, and only its category can
+ * still change (or the row be deleted, which leaves the expense in Activity).
  */
-export function InvoiceItemSheet({ item, categories, onClose, onSave, onDelete }: {
+export function InvoiceItemSheet({ item, categories, paidNote, onClose, onSave, onDelete, onPay }: {
   item: InvoiceItem;
   categories: readonly InvoiceCategory[];
+  /** Who paid and when, in words, for a paid row. */
+  paidNote?: React.ReactNode;
   onClose: () => void;
   onSave: (input: ItemEditInput) => Promise<ActionResult>;
   onDelete: () => void;
+  onPay: () => void;
 }) {
   const t = useTranslations("Invoices");
   const { currencies, enabledCurrencies, defaultCurrency } = useAppData();
@@ -39,6 +46,7 @@ export function InvoiceItemSheet({ item, categories, onClose, onSave, onDelete }
     .filter((currency) => currency.code !== item.currency), [enabledCurrencies, defaultCurrency, item.currency]);
   const formId = useId();
   const currencyId = useId();
+  const paid = item.paidOn !== null;
   const [code, setCode] = useState(item.currency);
   const moving = code !== item.currency;
   const unit = moving ? others.find((currency) => currency.code === code) : own;
@@ -73,13 +81,17 @@ export function InvoiceItemSheet({ item, categories, onClose, onSave, onDelete }
     footer={<Button variant="action" size="lg" className="w-full" form={formId} type="submit" loading={pending} disabled={!valid}>{t("saveItem")}</Button>}>
     <form id={formId} noValidate onSubmit={(event) => { event.preventDefault(); submit(); }} className="flex flex-col gap-4">
       <fieldset disabled={pending} className="flex min-w-0 flex-col gap-4 border-0 p-0">
-        <TextAreaField label={t("itemName")} value={name} onChange={(event) => setName(event.target.value)} maxLength={MAX_ITEM_NAME} autoComplete="off" required />
+        {paid ? <p role="status" className="flex items-start gap-2 rounded-xl bg-secondary px-3.5 py-3 text-[15px]">
+          <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-primary" />
+          <span className="min-w-0"><span className="block font-medium">{paidNote}</span><span className="block text-[13px] text-muted-foreground">{t("paidLocked")}</span></span>
+        </p> : null}
+        <TextAreaField label={t("itemName")} value={name} onChange={(event) => setName(event.target.value)} maxLength={MAX_ITEM_NAME} autoComplete="off" required disabled={paid} />
         <div className={others.length ? "grid grid-cols-[minmax(0,1fr)_6.5rem] items-start gap-2.5" : "flex flex-col"}>
           <TextField label={others.length ? t("price") : t("priceIn", { currency: item.currency })} value={text} onChange={(event) => setText(event.target.value)}
-            inputMode={unit?.decimalPlaces ? "decimal" : "numeric"} error={text.trim() && minor === null ? t("errorInvalid") : null} required />
+            inputMode={unit?.decimalPlaces ? "decimal" : "numeric"} error={text.trim() && minor === null ? t("errorInvalid") : null} required disabled={paid} />
           {others.length ? <div className="flex min-w-0 flex-col gap-1.5">
             <label htmlFor={currencyId} className="text-sm font-medium">{t("currency")}</label>
-            <select id={currencyId} dir="ltr" value={code} className={fieldSelectClass}
+            <select id={currencyId} dir="ltr" value={code} disabled={paid} className={`${fieldSelectClass} disabled:opacity-60`}
               onChange={(event) => { if (event.target.value === item.currency || canAddIn(event.target.value, others)) setCode(event.target.value); }}>
               <option value={item.currency}>{item.currency}</option>
               {others.map((currency) => <option key={currency.code} value={currency.code}>{currency.code}</option>)}
@@ -87,11 +99,14 @@ export function InvoiceItemSheet({ item, categories, onClose, onSave, onDelete }
           </div> : null}
         </div>
         <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-2.5">
-          <QuantityField text={quantityText} onChange={setQuantityText} valid={quantity !== null} />
+          <QuantityField text={quantityText} onChange={setQuantityText} valid={quantity !== null} disabled={paid} />
           <CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} />
         </div>
         <LineTotal unit={unit} priceMinor={minor} quantity={quantity} />
-        <Button type="button" variant="destructive" className="self-start" onClick={onDelete}><Trash2 aria-hidden />{t("deleteItem")}</Button>
+        <div className="flex flex-wrap gap-2">
+          {paid ? null : <Button type="button" variant="outline" onClick={onPay}><Check aria-hidden />{t("payItem")}</Button>}
+          <Button type="button" variant="destructive" onClick={onDelete}><Trash2 aria-hidden />{t("deleteItem")}</Button>
+        </div>
       </fieldset>
       {error ? <p role="alert" className="text-sm text-over">{error}</p> : null}
     </form>

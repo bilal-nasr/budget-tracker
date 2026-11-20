@@ -2,11 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { getProfile } from "@/features/profile/queries";
+import { MAX_ITEM_DESCRIPTION_LENGTH } from "@/features/transactions/breakdown-summary";
+import { todayIn } from "@/features/transactions/group";
+import { createTransactionCore, deleteTransactionCore, type TransactionMutation } from "@/features/transactions/mutations-core";
+import { sumMinor } from "@/lib/money";
 import { actionClient, databaseActionError, type ActionError, type ActionResult } from "@/lib/supabase/action";
 import {
-  categoryCreateSchema, categoryRenameSchema, folderCreateSchema, folderRenameSchema, itemCreateSchema, itemEditSchema, personNameSchema, tokenSchema,
-  type CategoryCreateInput, type FolderCreateInput, type ItemCreateInput, type ItemEditInput, type SavedTimes,
+  categoryCreateSchema, categoryRenameSchema, folderCreateSchema, folderRenameSchema, itemCreateSchema, itemEditSchema,
+  itemsDeleteSchema, itemsMoveSchema, itemsPaySchema, itemsRestoreSchema, personNameSchema, tokenSchema,
+  type CategoryCreateInput, type FolderCreateInput, type ItemCreateInput, type ItemEditInput,
+  type ItemsDeleteInput, type ItemsMoveInput, type ItemsPayInput, type ItemsRestoreInput,
+  type PaidRow, type RestoredRow, type SavedRow, type SavedTimes,
 } from "./schema";
+import { lineMinor } from "./totals";
 
 const idSchema = z.uuid();
 type DatabaseError = { code?: string; message?: string };
@@ -16,6 +25,8 @@ type DatabaseError = { code?: string; message?: string };
  * key means a category someone deleted meanwhile. Both are "changed meanwhile".
  */
 function databaseError(error: DatabaseError): ActionError {
+  // A paid row is frozen (or was paid by someone else meanwhile).
+  if (error.message === "invoices.paid") return "paymentChanged";
   return error.code === "23505" || error.code === "23503" ? "conflict" : databaseActionError(error);
 }
 
@@ -230,6 +241,173 @@ export async function restoreItem(id: string): Promise<ActionResult<SavedTimes>>
     const back = await ctx.supabase.from("invoice_items").select(SAVED_COLUMNS).eq("id", id).maybeSingle();
     const times = back.error ? null : savedTimes(back.data);
     return times ? { ok: true, ...times } : { ok: false, error: "failed" };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+const savedRows = z.array(z.object({ id: z.uuid(), updated_at: z.string().min(1) }));
+const restoredRows = z.array(z.object({ id: z.uuid(), created_at: z.string().min(1), updated_at: z.string().min(1) }));
+const paidRows = z.array(z.object({ id: z.uuid(), updated_at: z.string().min(1), paid_on: z.iso.date(), paid_at: z.string().min(1) }));
+
+/**
+ * Bulk delete: the ticked rows go in one statement (all of them or none). Rows someone else
+ * deleted meanwhile are simply already gone, so this still succeeds; `deleted` lists the rows
+ * this call removed, which are the ones `restoreItems` can bring back.
+ */
+export async function deleteItems(input: ItemsDeleteInput): Promise<ActionResult<{ deleted: string[] }>> {
+  const parsed = itemsDeleteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const { data, error } = await ctx.supabase.rpc("delete_invoice_items", { p_folder: parsed.data.folderId, p_items: parsed.data.itemIds });
+    if (error) return { ok: false, error: databaseError(error) };
+    const deleted = z.array(z.uuid()).safeParse(data ?? []);
+    if (!deleted.success) return { ok: false, error: "failed" };
+    revalidatePath("/", "layout");
+    return { ok: true, deleted: deleted.data };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+/**
+ * Bulk move to one of the folder's categories, in one statement. `rows` are the chosen rows
+ * that still exist, with their server timestamps; one missing from it was deleted by someone
+ * else meanwhile. A category deleted meanwhile is a `conflict`.
+ */
+export async function moveItems(input: ItemsMoveInput): Promise<ActionResult<{ rows: SavedRow[] }>> {
+  const parsed = itemsMoveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const { data, error } = await ctx.supabase.rpc("move_invoice_items", { p_folder: parsed.data.folderId, p_items: parsed.data.itemIds, p_category: parsed.data.categoryId });
+    if (error) return { ok: false, error: databaseError(error) };
+    const rows = savedRows.safeParse(data ?? []);
+    if (!rows.success) return { ok: false, error: "failed" };
+    revalidatePath("/", "layout");
+    return { ok: true, rows: rows.data.map((row) => ({ id: row.id, updatedAt: row.updated_at })) };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+/** Undo of a bulk delete: every row comes back or none does (10 minutes, like `restoreItem`). */
+export async function restoreItems(input: ItemsRestoreInput): Promise<ActionResult<{ rows: RestoredRow[] }>> {
+  const parsed = itemsRestoreSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  try {
+    const ctx = await actionClient();
+    if (ctx.error) return { ok: false, error: ctx.error };
+    const { data, error } = await ctx.supabase.rpc("restore_invoice_items", { p_items: parsed.data.itemIds });
+    if (error) return { ok: false, error: databaseError(error) };
+    const rows = restoredRows.safeParse(data ?? []);
+    if (!rows.success || rows.data.length !== parsed.data.itemIds.length) return { ok: false, error: "failed" };
+    revalidatePath("/", "layout");
+    return { ok: true, rows: rows.data.map((row) => ({ id: row.id, createdAt: row.created_at, updatedAt: row.updated_at })) };
+  } catch { return { ok: false, error: "failed" }; }
+}
+
+const NOTE_MAX = 140;
+const clip = (text: string, max: number) => Array.from(text).length <= max ? text : `${Array.from(text).slice(0, max - 1).join("")}…`;
+/**
+ * How a row reads inside the expense: its name, then the quantity when there is more than one
+ * ("Fans × 3", as the Item calculator writes it). A long name is shortened, never the quantity.
+ */
+function paidLine(row: { name: string; quantity: number }, max: number): string {
+  const suffix = row.quantity > 1 ? ` × ${row.quantity}` : "";
+  return `${clip(row.name, max - suffix.length)}${suffix}`;
+}
+
+type PayRow = { id: string; name: string; currency: string; decimal_places: number | string; price_minor: number | string; quantity: number | string; created_at: string; paid_on: string | null; paid_transaction_id: string | null };
+
+/** The definite reasons a payment cannot be linked to its rows; anything else may still succeed on a retry. */
+function linkError(error: DatabaseError): ActionError | null {
+  if (error.message === "invoices.paid") return "paymentChanged";
+  if (error.message === "invoices.mismatch" || error.message === "invoices.invalid") return "conflict";
+  return null;
+}
+
+/**
+ * "Pay": records one ordinary expense in the payer's own Activity for each currency among the
+ * rows (through the same transaction core as every other expense), then marks those rows paid.
+ * Several rows become one expense whose breakdown lists each of them; currencies are never
+ * mixed or converted. Nothing is recorded unless every group checks out first.
+ *
+ * Safe to retry with the same request ids: an expense already recorded under an id is reused,
+ * so a lost response can never pay twice. If the rows changed between the expense and the
+ * link (deleted, or paid by someone else), that expense is taken back out of Activity.
+ */
+export async function payItems(input: ItemsPayInput): Promise<ActionResult<{ payments: TransactionMutation[]; rows: PaidRow[] }>> {
+  const parsed = itemsPaySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { folderId, categoryId, occurredOn, payments, expectedUnits } = parsed.data;
+  try {
+    if (occurredOn > todayIn((await getProfile()).timezone)) return { ok: false, error: "invalid" };
+    const ctx = await actionClient(expectedUnits);
+    if (ctx.error) return { ok: false, error: ctx.error };
+
+    // First check every group, so a problem in one currency records nothing in another.
+    const groups: { requestId: string; balanceId: string; itemIds: string[]; rows: (PayRow & { minor: number })[]; total: number }[] = [];
+    for (const { requestId, balanceId, itemIds } of payments) {
+      const found = await ctx.supabase.from("invoice_items")
+        .select("id,name,currency,decimal_places,price_minor,quantity,created_at,paid_on,paid_transaction_id").eq("folder_id", folderId).in("id", itemIds);
+      if (found.error) return { ok: false, error: "failed" };
+      const read = (found.data ?? []) as PayRow[];
+      if (read.length !== itemIds.length) return { ok: false, error: "conflict" };
+      const { currency } = read[0];
+      const decimalPlaces = Number(read[0].decimal_places);
+      if (read.some((row) => row.currency !== currency || Number(row.decimal_places) !== decimalPlaces)) return { ok: false, error: "invalid" };
+      // The payer's own catalog must price this currency the way the rows do.
+      if (expectedUnits[currency] !== decimalPlaces) return { ok: false, error: "currencyUnavailable" };
+      // A retry finds its own earlier payment; any other paid row means someone got there first.
+      if (read.some((row) => row.paid_on !== null && row.paid_transaction_id !== requestId)) return { ok: false, error: "paymentChanged" };
+
+      // Amounts are denominated by the paying balance, so it must be in the rows' currency.
+      const balance = await ctx.supabase.from("wallet_balances").select("currency").eq("id", balanceId).maybeSingle();
+      if (balance.error) return { ok: false, error: "failed" };
+      if (!balance.data || balance.data.currency !== currency) return { ok: false, error: "walletUnavailable" };
+
+      const rows = read
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id.localeCompare(b.id)))
+        .map((row) => ({ ...row, minor: lineMinor({ priceMinor: Number(row.price_minor), quantity: Number(row.quantity) }) }));
+      let total: number;
+      try { total = sumMinor(rows.map((row) => row.minor)); } catch { return { ok: false, error: "invalid" }; }
+      groups.push({ requestId, balanceId, itemIds, rows, total });
+    }
+
+    const recorded: TransactionMutation[] = [];
+    const marked: PaidRow[] = [];
+    for (const { requestId, balanceId, itemIds, rows, total } of groups) {
+      const prior = await ctx.supabase.from("transactions").select("id,revision,kind,amount_minor,deleted_at").eq("id", requestId).maybeSingle();
+      if (prior.error) return { ok: false, error: "failed" };
+      let payment: TransactionMutation;
+      if (prior.data) {
+        if (prior.data.kind !== "expense" || prior.data.deleted_at !== null || Number(prior.data.amount_minor) !== total) return { ok: false, error: "conflict" };
+        payment = { id: prior.data.id, revision: prior.data.revision };
+      } else {
+        const lines = rows.map((row) => ({ description: paidLine({ name: row.name, quantity: Number(row.quantity) }, MAX_ITEM_DESCRIPTION_LENGTH), amountMinor: row.minor }));
+        const created = await createTransactionCore({
+          expectedUnits, kind: "expense", occurredOn, balanceId, amountMinor: total, categoryId,
+          note: clip(lines.map((line) => line.description).join(", "), NOTE_MAX),
+          ...(lines.length > 1 ? { items: lines } : {}),
+        }, requestId);
+        if (!created.ok) return created;
+        payment = { id: created.id, revision: created.revision };
+      }
+
+      const linked = await ctx.supabase.rpc("mark_invoice_items_paid", { p_folder: folderId, p_items: itemIds, p_transaction: payment.id });
+      if (linked.error) {
+        const reason = linkError(linked.error);
+        // Unknown outcome: the expense exists, and the same request completes the link.
+        if (!reason) return { ok: false, error: "failed" };
+        // The rows can never be linked: take the expense back out. If that fails, a retry does it again.
+        const undone = await deleteTransactionCore(payment.id, payment.revision);
+        return { ok: false, error: undone.ok ? reason : "failed" };
+      }
+      const paid = paidRows.safeParse(linked.data ?? []);
+      if (!paid.success || paid.data.length !== itemIds.length) return { ok: false, error: "failed" };
+      recorded.push(payment);
+      marked.push(...paid.data.map((row) => ({ id: row.id, updatedAt: row.updated_at, paidOn: row.paid_on, paidAt: row.paid_at })));
+    }
+    revalidatePath("/", "layout");
+    return { ok: true, payments: recorded, rows: marked };
   } catch { return { ok: false, error: "failed" }; }
 }
 

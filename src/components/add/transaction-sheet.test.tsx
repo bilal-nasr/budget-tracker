@@ -442,3 +442,37 @@ describe("unsaved entry survives an accidental dismiss", () => {
     expect(onStash).not.toHaveBeenCalled();
   });
 });
+
+it("saves one purchase paid with two currencies as exact amounts, asking for no exchange rate", async () => {
+  mocks.createTransaction.mockResolvedValue({ ok: true, id: "00000000-0000-4000-8000-000000000099", revision: 1 });
+  mount("en", 89500, { mode: "add", draftId: "00000000-0000-4000-8000-000000000099", preset: { kind: "expense", walletId: wallets[0].id, categoryId: expenseCategory.id } });
+  const cashLbp = completeFixtureWallets(wallets)[0].balances.find((balance) => balance.currency === "LBP")!.id;
+  fireEvent.click(screen.getByRole("radio", { name: en.Cashier.cashPurchase }));
+  // The ordinary one-payment purchase shows no extra payment rows.
+  expect(screen.queryByLabelText(en.Cashier.extraTender)).toBeNull();
+  for (const key of ["1", "0"]) fireEvent.click(screen.getByRole("button", { name: key }));
+  fireEvent.change(input(en.Cashier.tender), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: en.Cashier.addTender }));
+  // The second payment defaults to the same wallet's next currency.
+  expect((screen.getByRole("combobox", { name: en.Cashier.extraTenderCurrency }) as HTMLSelectElement).value).toBe(cashLbp);
+  fireEvent.change(input(en.Cashier.extraTender), { target: { value: "1300000" } });
+  expect(screen.getByText(en.Cashier.crossTenderHelp)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: en.Cashier.addChange }));
+  fireEvent.change(input(en.Cashier.change), { target: { value: "5" } });
+  fireEvent.click(screen.getByRole("button", { name: en.Cashier.addChange }));
+  fireEvent.change(screen.getAllByRole("combobox", { name: en.Cashier.currency })[1], { target: { value: cashLbp } });
+  fireEvent.change(screen.getAllByLabelText(en.Cashier.change)[1], { target: { value: "10000" } });
+  expect(screen.queryByLabelText(en.Cashier.rate)).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: en.Add.save }));
+  await waitFor(() => expect(mocks.createTransaction).toHaveBeenCalledTimes(1));
+  expect(mocks.createTransaction.mock.calls[0]).toEqual([expect.objectContaining({
+    kind: "expense", balanceId: wallets[0].id, amountMinor: 1000, costCurrency: "USD",
+    expectedUnits: { USD: 2, LBP: 0 },
+    settlement: {
+      tenderMinor: 300,
+      extraTenders: [{ balanceId: cashLbp, amountMinor: 1300000 }],
+      changes: [{ balanceId: wallets[0].id, amountMinor: 500 }, { balanceId: cashLbp, amountMinor: 10000 }],
+    },
+  }), "00000000-0000-4000-8000-000000000099"]);
+});

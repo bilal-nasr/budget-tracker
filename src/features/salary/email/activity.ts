@@ -6,7 +6,8 @@ export type ActivityRow = {
   kind: "income" | "expense" | string;
   amount_minor: number | string;
   tender_minor: number | string | null;
-  cashier_changes: { balance_id: string; amount_minor: number | string }[] | null;
+  /** Cashier legs: returned change (money in) or, with leg "tender", a further payment (money out). */
+  cashier_changes: { balance_id: string; amount_minor: number | string; leg?: string | null }[] | null;
 };
 
 export type BalanceActivity = { incomeMinor: number; spentMinor: number };
@@ -30,7 +31,10 @@ export function summarizeActivity(rows: readonly ActivityRow[]): Map<string, Bal
     } else if (row.kind === "expense") {
       const net = new Map<string, bigint>();
       add(net, row.balance_id, BigInt(readMinor(row.tender_minor ?? row.amount_minor)));
-      for (const change of row.cashier_changes ?? []) add(net, change.balance_id, -BigInt(readMinor(change.amount_minor)));
+      for (const leg of row.cashier_changes ?? []) {
+        const amount = BigInt(readMinor(leg.amount_minor));
+        add(net, leg.balance_id, leg.leg === "tender" ? amount : -amount);
+      }
       for (const [id, value] of net) {
         if (value > BigInt(0)) add(spent, id, value);
         else if (value < BigInt(0)) add(income, id, -value);

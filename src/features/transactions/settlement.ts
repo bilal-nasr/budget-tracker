@@ -36,8 +36,18 @@ export const cashChangeInputSchema = z.object({
   rate: settlementRateSchema.optional(),
 }).strict();
 export type CashChangeInput = z.infer<typeof cashChangeInputSchema>;
+/** Additional tender lines beyond the paying balance; one purchase stays one entry. */
+export const MAX_EXTRA_TENDERS = 8;
+export const cashTenderInputSchema = z.object({
+  balanceId: z.uuid(),
+  amountMinor: minorSchema,
+}).strict();
+export type CashTenderInput = z.infer<typeof cashTenderInputSchema>;
 export const cashSettlementInputSchema = z.object({
+  /** Exact amount handed over from the transaction's own paying balance. */
   tenderMinor: minorSchema,
+  /** Exact amounts handed over from other balances, in any currency. Omitted means none. */
+  extraTenders: z.array(cashTenderInputSchema).max(MAX_EXTRA_TENDERS).optional(),
   changes: z.array(cashChangeInputSchema),
 }).strict();
 export type CashSettlementInput = z.infer<typeof cashSettlementInputSchema>;
@@ -88,38 +98,59 @@ export function convertSettlementMinor(minor: number, from: string, to: string, 
 }
 
 export type SettlementError = "amount" | "rate" | "unsupportedPair" | "mismatch";
+/**
+ * Amounts in different currencies are never added, compared or converted.
+ * Only the lines denominated in the purchase cost currency reconcile, and only
+ * as far as the recorded facts allow:
+ * - every line in the cost currency: paid − returned = cost;
+ * - some change in another currency: paid − returned > cost;
+ * - some tender in another currency: paid − returned < cost;
+ * - other currencies on both sides: nothing can be checked.
+ * `payCurrency` is the first tender line (the transaction's paying balance).
+ */
 export function validateSettlement(input: {
-  costMinor: number; costCurrency: string; payCurrency: string; changeCurrencies: string[]; settlement: CashSettlementInput;
+  costMinor: number; costCurrency: string; payCurrency: string; changeCurrencies: string[];
+  extraTenderCurrencies?: string[]; settlement: CashSettlementInput;
 }): { ok: true } | { ok: false; reason: SettlementError } {
   const { costMinor, costCurrency, payCurrency, changeCurrencies } = input;
+  const extraTenderCurrencies = input.extraTenderCurrencies ?? [];
   const parsed = cashSettlementInputSchema.safeParse(input.settlement);
   if (!parsed.success || !Number.isSafeInteger(costMinor) || costMinor < 1 || costMinor > MAX_MINOR ||
       !isCurrency(costCurrency) || !isCurrency(payCurrency) ||
-      changeCurrencies.length !== (parsed.success ? parsed.data.changes.length : 0) || changeCurrencies.some((currency) => !isCurrency(currency))) {
+      changeCurrencies.length !== parsed.data.changes.length || changeCurrencies.some((currency) => !isCurrency(currency)) ||
+      extraTenderCurrencies.length !== (parsed.data.extraTenders?.length ?? 0) || extraTenderCurrencies.some((currency) => !isCurrency(currency))) {
     return { ok: false, reason: "amount" };
   }
   const { tenderMinor, changes } = parsed.data;
-  if (costCurrency === payCurrency && tenderMinor < costMinor) return { ok: false, reason: "mismatch" };
-  let sameCurrencyReturned = 0n;
-  let hasCrossCurrency = false;
+  const extraTenders = parsed.data.extraTenders ?? [];
+  let paidInCost = payCurrency === costCurrency ? BigInt(tenderMinor) : 0n;
+  let tenderInOtherCurrency = payCurrency !== costCurrency;
+  extraTenders.forEach((tender, index) => {
+    if (extraTenderCurrencies[index] === costCurrency) paidInCost += BigInt(tender.amountMinor);
+    else tenderInOtherCurrency = true;
+  });
+  let returnedInCost = 0n;
+  let changeInOtherCurrency = false;
   for (let index = 0; index < changes.length; index++) {
     const change = changes[index];
     const changeCurrency = changeCurrencies[index];
+    if (changeCurrency === costCurrency) returnedInCost += BigInt(change.amountMinor);
+    else changeInOtherCurrency = true;
+    // Historical rate metadata always quoted the paying currency against the change currency.
     if (changeCurrency === payCurrency) {
       if (change.rate) return { ok: false, reason: "rate" };
-      sameCurrencyReturned += BigInt(change.amountMinor);
       continue;
     }
-    hasCrossCurrency = true;
     const pair = settlementRatePair(payCurrency, changeCurrency);
     if (!pair) return { ok: false, reason: "unsupportedPair" };
     if (change.rate && (change.rate.base !== pair.base || change.rate.quote !== pair.quote)) {
       return { ok: false, reason: "rate" };
     }
   }
-  if (costCurrency !== payCurrency) return { ok: true };
-  const netSameCurrency = BigInt(tenderMinor) - sameCurrencyReturned;
-  return (hasCrossCurrency ? netSameCurrency > BigInt(costMinor) : netSameCurrency === BigInt(costMinor))
-    ? { ok: true }
-    : { ok: false, reason: "mismatch" };
+  const net = paidInCost - returnedInCost;
+  const cost = BigInt(costMinor);
+  const reconciles = tenderInOtherCurrency
+    ? changeInOtherCurrency || net < cost
+    : changeInOtherCurrency ? net > cost : net === cost;
+  return reconciles ? { ok: true } : { ok: false, reason: "mismatch" };
 }

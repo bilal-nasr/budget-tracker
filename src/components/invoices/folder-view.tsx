@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
-import { useTranslations } from "next-intl";
-import { ChevronDown, ChevronLeft, Pencil, Tags, Trash2 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { ChevronDown, ChevronLeft, CircleCheck, Pencil, Tags, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Amount } from "@/components/money/amount";
 import { useAppData } from "@/components/providers/app-data";
@@ -13,12 +13,12 @@ import { ScreenHeader } from "@/components/shell/screen-header";
 import { Button } from "@/components/ui/button";
 import { SheetShell } from "@/components/ui/sheet-shell";
 import { TextField } from "@/components/ui/text-field";
-import { addItem, deleteFolder, deleteItem, renameFolder, restoreItem, updateItem } from "@/features/invoices/actions";
+import { addItem, deleteFolder, deleteItem, deleteItems, moveItems, renameFolder, restoreItem, restoreItems, updateItem } from "@/features/invoices/actions";
 import { categoryLabel, categoryOf, rowDefinition, sortCategories } from "@/features/invoices/display";
 import { invoiceErrorKey } from "@/features/invoices/errors";
 import type { InvoiceFolderDetail } from "@/features/invoices/queries";
-import { folderRenameSchema, MAX_NAME, type CurrencyTotal, type InvoiceCategory, type InvoiceItem, type ItemEditInput, type SavedTimes } from "@/features/invoices/schema";
-import { lineMinor, totalsByCurrency } from "@/features/invoices/totals";
+import { folderRenameSchema, MAX_NAME, type CurrencyTotal, type InvoiceCategory, type InvoiceItem, type ItemEditInput, type PaidRow, type RestoredRow, type SavedRow, type SavedTimes } from "@/features/invoices/schema";
+import { isPaid, lineMinor, totalsByCurrency, unpaidTotals } from "@/features/invoices/totals";
 import { indexCurrencies, type CurrencyDefinition } from "@/lib/currency";
 import type { ActionResult } from "@/lib/supabase/action";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -30,6 +30,8 @@ import { useLiveFolder } from "./use-live-folder";
 // Sheets load on first open; the folder renders without their code.
 const InvoiceItemSheet = dynamic(() => import("./invoice-item-sheet").then((m) => m.InvoiceItemSheet));
 const CategoriesSheet = dynamic(() => import("./categories-sheet").then((m) => m.CategoriesSheet));
+const PaySheet = dynamic(() => import("./pay-sheet").then((m) => m.PaySheet));
+const MoveCategorySheet = dynamic(() => import("./move-category-sheet").then((m) => m.MoveCategorySheet));
 const ConfirmSheet = dynamic(() => import("@/components/ui/confirm-sheet").then((m) => m.ConfirmSheet));
 
 /** A finished change from someone else (arriving live), or a local one once it is saved. */
@@ -161,17 +163,19 @@ export function useFolderItems(initial: InvoiceItem[]) {
    * React keeps optimistic state until every pending save is answered, so the outcome is laid
    * over it at once: a failed row does not linger while another save is still running.
    */
-  const run = <T extends object>(optimistic: FolderItemChange, save: () => Promise<ActionResult<T>>, settle: (result: ActionResult<T>) => FolderItemChange | null) =>
+  const runMany = <T extends object>(optimistic: FolderItemChange[], save: () => Promise<ActionResult<T>>, settle: (result: ActionResult<T>) => FolderItemChange[] | null) =>
     new Promise<ActionResult<T>>((resolve) => {
       startTransition(async () => {
-        applyOptimistic(optimistic);
+        for (const change of optimistic) applyOptimistic(change);
         const result: ActionResult<T> = await save().catch(failed);
-        const change = settle(result);
-        const outcome = change ?? revert(optimistic);
-        startTransition(() => { if (change) confirm(change); applyOptimistic(outcome); });
+        const changes = settle(result);
+        const outcome = changes ?? optimistic.map(revert);
+        startTransition(() => { for (const change of changes ?? []) confirm(change); for (const change of outcome) applyOptimistic(change); });
         resolve(result);
       });
     });
+  const run = <T extends object>(optimistic: FolderItemChange, save: () => Promise<ActionResult<T>>, settle: (result: ActionResult<T>) => FolderItemChange | null) =>
+    runMany([optimistic], save, (result) => { const change = settle(result); return change ? [change] : null; });
 
   return {
     items,
@@ -189,6 +193,31 @@ export function useFolderItems(initial: InvoiceItem[]) {
     /** Undo of a delete. The row may still carry the device's clock (an add not yet answered), so it is logged with the server's times. */
     restore: (item: InvoiceItem, save: () => Promise<ActionResult<SavedTimes>>) =>
       run({ type: "upsert", item }, save, (result) => result.ok ? { type: "upsert", item: withSavedTimes(item, result) } : null),
+    /**
+     * Batches: one request for many rows, shown at once and settled together. A failed batch
+     * leaves every row as it was.
+     */
+    removeMany: (ids: string[], save: () => Promise<ActionResult<{ deleted: string[] }>>) =>
+      runMany(ids.map((id) => ({ type: "delete", id })), save, (result) => result.ok ? ids.map((id) => ({ type: "delete", id })) : null),
+    /** A row the answer does not list was deleted by someone else meanwhile, so it leaves the list. */
+    updateMany: (rows: InvoiceItem[], save: () => Promise<ActionResult<{ rows: SavedRow[] }>>) =>
+      runMany(rows.map((item) => ({ type: "upsert", item })), save, (result) => {
+        if (!result.ok) return null;
+        const saved = new Map(result.rows.map((row) => [row.id, row.updatedAt]));
+        return rows.map((item): FolderItemChange => {
+          const updatedAt = saved.get(item.id);
+          return updatedAt === undefined ? { type: "delete", id: item.id } : { type: "upsert", item: { ...item, updatedAt } };
+        });
+      }),
+    restoreMany: (rows: InvoiceItem[], save: () => Promise<ActionResult<{ rows: RestoredRow[] }>>) =>
+      runMany(rows.map((item) => ({ type: "upsert", item })), save, (result) => {
+        if (!result.ok) return null;
+        const saved = new Map(result.rows.map((row) => [row.id, row]));
+        return rows.flatMap((item): FolderItemChange[] => {
+          const times = saved.get(item.id);
+          return times ? [{ type: "upsert", item: withSavedTimes(item, times) }] : [];
+        });
+      }),
     applyRemote: confirm,
   };
 }
@@ -200,7 +229,8 @@ function orderTotals(totals: CurrencyTotal[], enabled: readonly CurrencyDefiniti
   return totals.map((total, at) => ({ total, at })).sort((a, b) => rank(a.total.currency) - rank(b.total.currency) || a.at - b.at).map(({ total }) => total);
 }
 
-type Sheet = { mode: "edit"; id: string } | { mode: "rename" } | { mode: "deleteFolder" } | { mode: "categories" } | null;
+type Sheet = { mode: "edit"; id: string } | { mode: "rename" } | { mode: "deleteFolder" } | { mode: "categories" }
+  | { mode: "pay"; ids: string[] } | { mode: "move" } | { mode: "deleteItems" } | null;
 
 const rowClass = "flex min-h-[60px] min-w-0 flex-1 items-center gap-3 py-3 pe-3.5 text-start";
 const totalKey = (total: Pick<CurrencyTotal, "currency" | "decimalPlaces">) => `${total.currency}:${total.decimalPlaces}`;
@@ -213,10 +243,11 @@ const shellButton = "bg-shell-foreground/12 text-shell-foreground hover:bg-shell
  */
 export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   const t = useTranslations("Invoices");
+  const locale = useLocale();
   const router = useRouter();
   const { currencies, enabledCurrencies, defaultCurrency } = useAppData();
   const catalog = useMemo(() => indexCurrencies(currencies), [currencies]);
-  const { items, isSaving, add, update, remove, restore, applyRemote } = useFolderItems(folder.items);
+  const { items, isSaving, add, update, remove, restore, removeMany, updateMany, restoreMany, applyRemote } = useFolderItems(folder.items);
   const [sheet, setSheet] = useState<Sheet>(null);
   const close = () => setSheet(null);
   const nameField = useRef<HTMLTextAreaElement>(null);
@@ -272,6 +303,9 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   const headed = categories.length > 1;
 
   const totals = orderTotals(totalsByCurrency(items), enabledCurrencies, defaultCurrency);
+  // "Still to pay" only appears once something is paid; until then it would repeat the total.
+  const anyPaid = items.some(isPaid);
+  const toPay = orderTotals(unpaidTotals(items), enabledCurrencies, defaultCurrency);
 
   // Ticked rows live on this screen only. A row that leaves the list (deleted here, by someone
   // else, or gone from a refreshed page) leaves the selection too, so it is not ticked again if it returns.
@@ -279,6 +313,7 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   const present = new Set(items.map((row) => row.id));
   if ([...selected].some((id) => !present.has(id))) setSelected(new Set([...selected].filter((id) => present.has(id))));
   const picked = items.filter((row) => selected.has(row.id));
+  const payable = picked.filter((row) => !isPaid(row));
   // A row still being saved is not a button yet, so it cannot be ticked either.
   const tickable = items.filter((row) => !isSaving(row.id));
   const allPicked = tickable.length > 0 && tickable.every((row) => selected.has(row.id));
@@ -299,13 +334,22 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
   const target = sheet?.mode === "edit" ? items.find((row) => row.id === sheet.id) : undefined;
   // The row being edited is gone: forget the sheet, so the row coming back (someone's Undo) does not reopen it.
   if (sheet?.mode === "edit" && !target) setSheet(null);
+  // The ticked rows all went (someone else deleted them) while a sheet about them was open.
+  if ((sheet?.mode === "move" || sheet?.mode === "deleteItems") && !picked.length) setSheet(null);
+  // The pay sheet keeps the rows it opened with (and stays up while a payment is in flight), whatever changes meanwhile.
+  const payTargets = sheet?.mode === "pay" ? items.filter((row) => sheet.ids.includes(row.id) && !isPaid(row)) : [];
 
-  const addedBy = (row: InvoiceItem): React.ReactNode => {
-    if (row.createdBy === folder.viewerId) return t("addedByYou");
-    const person = row.createdBy ? people.get(row.createdBy) : undefined;
+  const personName = (userId: string | null): React.ReactNode => {
+    if (userId === folder.viewerId) return t("addedByYou");
+    const person = userId ? people.get(userId) : undefined;
     if (!person) return t("formerMember");
     return person.displayName ? <bdi>{person.displayName}</bdi> : t("unnamedMember");
   };
+  const addedBy = (row: InvoiceItem) => personName(row.createdBy);
+  const formatDate = (date: string) => new Intl.DateTimeFormat(locale === "ar" ? "ar-LB-u-nu-latn" : "en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
+  /** "Paid 6 Nov 2026", and by whom when the folder is shared: words and an icon, never colour alone. */
+  const paidNote = (row: InvoiceItem): React.ReactNode => row.paidOn === null ? null
+    : <>{t("paidOn", { date: formatDate(row.paidOn) })}{shared ? <> · {personName(row.paidBy)}</> : null}</>;
 
   const save = async (row: InvoiceItem, input: ItemEditInput) => {
     const next: InvoiceItem = { ...row, name: input.name, priceMinor: input.priceMinor, quantity: input.quantity, categoryId: input.categoryId ?? row.categoryId,
@@ -343,6 +387,49 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
     });
   };
 
+  // Bulk delete: the rows go at once, in one request; Undo brings back the ones this request removed.
+  const removePicked = () => {
+    const rows = picked;
+    close();
+    if (!rows.length) return;
+    const ids = rows.map((row) => row.id);
+    void removeMany(ids, () => deleteItems({ folderId: folder.id, itemIds: ids })).then((result) => {
+      if (!result.ok) { toast.error(t(invoiceErrorKey(result.error))); return; }
+      const gone = rows.filter((row) => result.deleted.includes(row.id));
+      toast(t("itemsDeleted", { count: rows.length }), gone.length ? { duration: UNDO_MS, action: { label: t("undo"), onClick: () => undoMany(gone) } } : undefined);
+      const active = document.activeElement;
+      if (!active || active === document.body) nameField.current?.focus();
+    });
+  };
+  const undoMany = (rows: InvoiceItem[]) => {
+    const ids = rows.map((row) => row.id);
+    void restoreMany(rows, () => restoreItems({ itemIds: ids })).then((result) => {
+      if (!result.ok) toast.error(t("undoManyExpired"));
+    });
+  };
+
+  // Bulk move: every ticked row takes the category at once, in one request. The ticks stay.
+  const movePicked = (categoryId: string) => {
+    const rows = picked;
+    close();
+    if (!rows.length) return;
+    const ids = rows.map((row) => row.id);
+    void updateMany(rows.map((row) => ({ ...row, categoryId })), () => moveItems({ folderId: folder.id, itemIds: ids, categoryId })).then((result) => {
+      if (result.ok) toast(t("itemsMoved", { count: result.rows.length }));
+      else toast.error(t(invoiceErrorKey(result.error)));
+    });
+  };
+
+  // The payment is recorded: the rows show as paid by the viewer, with the server's own marker.
+  const markPaid = (rows: PaidRow[]) => {
+    const byId = new Map(items.map((row) => [row.id, row]));
+    for (const paid of rows) {
+      const row = byId.get(paid.id);
+      if (row) applyRemote({ type: "upsert", item: { ...row, updatedAt: paid.updatedAt, paidOn: paid.paidOn, paidAt: paid.paidAt, paidBy: folder.viewerId } });
+    }
+    clearSelection();
+  };
+
   if (lost) return null;
 
   return <>
@@ -359,6 +446,12 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
                 className={`block max-w-full whitespace-normal! [overflow-wrap:anywhere] font-bold tracking-[-0.025em] text-shell-foreground ${index === 0 ? "text-[40px] leading-[1.1]" : "text-[28px] leading-tight"}`} />}
           </li>)}
         </ul>
+        {anyPaid ? <div className="mt-2 text-shell-foreground">
+          <p className="text-[13px] text-shell-muted">{t("stillToPay")}</p>
+          {toPay.length
+            ? <SelectedTotals totals={toPay} catalog={catalog} label={t("stillToPayLabel")} className="flex flex-wrap gap-x-4" lineClassName="text-[17px] leading-6 font-semibold" />
+            : <p className="flex items-center gap-1.5 text-[17px] leading-6 font-semibold"><CircleCheck aria-hidden className="size-4 shrink-0" />{t("allPaid")}</p>}
+        </div> : null}
         {/* One line is kept for every currency, so ticking never makes the header jump. */}
         <div className="mt-2 text-[15px] text-shell-foreground" style={{ minHeight: `${22 + totals.length * 24}px` }}>
           <p className="text-[13px] text-shell-muted">{t("selectedLabel", { count: picked.length })}</p>
@@ -414,6 +507,7 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
                 {rows.map((row) => {
                   const saving = isSaving(row.id);
                   const on = selected.has(row.id);
+                  const paid = isPaid(row);
                   const body = <>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="min-w-0 font-medium [overflow-wrap:anywhere]"><bdi>{row.name}</bdi></span>
@@ -421,6 +515,9 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
                         {row.quantity > 1 ? <bdi dir="ltr">{row.quantity} × <Amount minor={row.priceMinor} currency={rowDefinition(row, catalog)} /></bdi> : null}
                         {row.quantity > 1 && shared ? " · " : null}
                         {shared ? addedBy(row) : null}
+                      </span> : null}
+                      {paid ? <span className="flex min-w-0 items-center gap-1 text-[13px] font-medium [overflow-wrap:anywhere]">
+                        <CircleCheck aria-hidden className="size-3.5 shrink-0 text-primary" /><span className="min-w-0">{paidNote(row)}</span>
                       </span> : null}
                     </span>
                     <Amount minor={lineMinor(row)} currency={rowDefinition(row, catalog)} className="shrink-0 text-[15px] font-semibold" />
@@ -441,10 +538,21 @@ export function FolderView({ folder }: { folder: InvoiceFolderDetail }) {
           </div>
         </section>
       ) : <EmptyState title={t("emptyItemsTitle")} body={t("emptyItemsBody")} />}
-      {picked.length ? <SelectionBar count={picked.length} totals={pickedTotals} catalog={catalog} onClear={clearSelection} /> : null}
+      {picked.length ? <SelectionBar count={picked.length} totals={pickedTotals} catalog={catalog} allPicked={allPicked} payable={payable.length}
+        onSelectAll={() => setSelected(new Set(tickable.map((row) => row.id)))} onClear={clearSelection}
+        onDelete={() => setSheet({ mode: "deleteItems" })} onMove={() => setSheet({ mode: "move" })}
+        onPay={() => setSheet({ mode: "pay", ids: payable.map((row) => row.id) })} /> : null}
       {folder.isOwner ? <Button variant="destructive" className="self-start" onClick={() => setSheet({ mode: "deleteFolder" })}><Trash2 aria-hidden />{t("deleteFolder")}</Button> : null}
     </PageBody>
-    {target ? <InvoiceItemSheet key={target.id} item={target} categories={categories} onClose={close} onSave={(input) => save(target, input)} onDelete={() => removeRow(target)} /> : null}
+    {target ? <InvoiceItemSheet key={target.id} item={target} categories={categories} paidNote={paidNote(target)} onClose={close}
+      onSave={(input) => save(target, input)} onDelete={() => removeRow(target)} onPay={() => setSheet({ mode: "pay", ids: [target.id] })} /> : null}
+    {sheet?.mode === "pay" ? <PaySheet key={sheet.ids.join()} folderId={folder.id} items={payTargets} onClose={close} onPaid={markPaid} /> : null}
+    {sheet?.mode === "move" && picked.length ? <MoveCategorySheet count={picked.length} categories={categories} onClose={close} onMove={movePicked} /> : null}
+    {sheet?.mode === "deleteItems" && picked.length ? <ConfirmSheet open tone="danger" title={t("confirmDeleteItems", { count: picked.length })} onOpenChange={(open) => !open && close()}
+      confirmLabel={t("deleteItemsConfirm", { count: picked.length })} cancelLabel={t("cancel")} onConfirm={removePicked}>
+      <p>{t("deleteItemsHelp")}</p>
+      {picked.some(isPaid) ? <p>{t("deleteItemsPaidHelp")}</p> : null}
+    </ConfirmSheet> : null}
     {sheet?.mode === "categories" ? <CategoriesSheet folderId={folder.id} categories={categories}
       counts={new Map(groups.map((group) => [group.category.id, group.rows.length]))} onClose={close}
       onAdded={(category) => { changeCategories((list) => [...list, category]); setAddCategory(category.id); }}

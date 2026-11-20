@@ -10,6 +10,9 @@ describe("invoiceErrorKey", () => {
     expect(invoiceErrorKey("limitReached")).toBe("errorLimit");
     expect(invoiceErrorKey("currencyUnavailable")).toBe("errorCurrency");
     expect(invoiceErrorKey("currencyDisabled")).toBe("errorCurrency");
+    expect(invoiceErrorKey("paymentChanged")).toBe("errorPaid");
+    expect(invoiceErrorKey("walletUnavailable")).toBe("errorWallet");
+    expect(invoiceErrorKey("categoryUnavailable")).toBe("errorExpenseCategory");
     expect(invoiceErrorKey("failed")).toBe("errorFailed");
     expect(invoiceErrorKey("walletDeleted")).toBe("errorFailed");
   });

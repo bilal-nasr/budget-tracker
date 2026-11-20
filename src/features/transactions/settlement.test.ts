@@ -112,3 +112,54 @@ describe("cash settlement", () => {
     expect(parseSettlementRate("1000000000.000001", "LBP", syp)).toBeNull();
   });
 });
+
+describe("several tender lines", () => {
+  const other = "aaaaaaaa-0000-4000-8000-000000000002";
+  const check = (costMinor: number, tenderMinor: number, extra: [string, number][], changes: [string, number][], payCurrency = "USD", costCurrency = "USD") =>
+    validateSettlement({
+      costMinor, costCurrency, payCurrency,
+      extraTenderCurrencies: extra.map(([currency]) => currency),
+      changeCurrencies: changes.map(([currency]) => currency),
+      settlement: {
+        tenderMinor,
+        extraTenders: extra.map(([, amountMinor]) => ({ balanceId: other, amountMinor })),
+        changes: changes.map(([, amountMinor]) => ({ balanceId, amountMinor })),
+      },
+    });
+
+  it("accepts 3 USD and 1,300,000 LBP for a 10 USD cost with 5 USD and 10,000 LBP returned, converting nothing", () => {
+    expect(check(1000, 300, [["LBP", 1300000]], [["USD", 500], ["LBP", 10000]])).toEqual({ ok: true });
+    // The same facts are accepted whichever payment was entered first.
+    expect(check(1000, 1300000, [["USD", 300]], [["USD", 500], ["LBP", 10000]], "LBP")).toEqual({ ok: true });
+    // No amount of the other currency changes the verdict: it is never compared with the cost.
+    expect(check(1000, 300, [["LBP", 1]], [["USD", 500], ["LBP", 999999999]])).toEqual({ ok: true });
+  });
+
+  it("adds tenders of the cost currency exactly", () => {
+    expect(check(1000, 600, [["USD", 400]], [])).toEqual({ ok: true });
+    expect(check(1000, 600, [["USD", 900]], [["USD", 500]])).toEqual({ ok: true });
+    expect(check(1000, 600, [["USD", 300]], [])).toEqual({ ok: false, reason: "mismatch" });
+    expect(check(1000, 600, [["USD", 500]], [])).toEqual({ ok: false, reason: "mismatch" });
+  });
+
+  it("requires the cost currency part to stay below the cost when another currency is also paid", () => {
+    expect(check(1000, 300, [["LBP", 630000]], [])).toEqual({ ok: true });
+    expect(check(1000, 1200, [["LBP", 630000]], [["USD", 300]])).toEqual({ ok: true });
+    expect(check(1000, 1000, [["LBP", 630000]], [])).toEqual({ ok: false, reason: "mismatch" });
+    expect(check(1000, 1500, [["LBP", 630000]], [["USD", 200]])).toEqual({ ok: false, reason: "mismatch" });
+  });
+
+  it("keeps the foreign-change rule when every tender is in the cost currency", () => {
+    expect(check(1000, 600, [["USD", 600]], [["LBP", 10000]])).toEqual({ ok: true });
+    expect(check(1000, 600, [["USD", 400]], [["LBP", 10000]])).toEqual({ ok: false, reason: "mismatch" });
+  });
+
+  it("rejects malformed tender lines and mismatched currency lists", () => {
+    expect(validateSettlement({ costMinor: 1000, costCurrency: "USD", payCurrency: "USD", changeCurrencies: [],
+      settlement: { tenderMinor: 300, extraTenders: [{ balanceId: other, amountMinor: 1300000 }], changes: [] } })).toEqual({ ok: false, reason: "amount" });
+    expect(check(1000, 300, [["invalid-code", 5]], [])).toEqual({ ok: false, reason: "amount" });
+    expect(cashSettlementInputSchema.safeParse({ tenderMinor: 300, extraTenders: [{ balanceId: other, amountMinor: 0 }], changes: [] }).success).toBe(false);
+    expect(cashSettlementInputSchema.safeParse({ tenderMinor: 300, extraTenders: [{ balanceId: other, amountMinor: 5, rate }], changes: [] }).success).toBe(false);
+    expect(cashSettlementInputSchema.safeParse({ tenderMinor: 300, extraTenders: Array.from({ length: 9 }, () => ({ balanceId: other, amountMinor: 5 })), changes: [] }).success).toBe(false);
+  });
+});

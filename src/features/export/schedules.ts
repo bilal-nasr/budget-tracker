@@ -67,8 +67,13 @@ export function buildWalletLedger(data: ExportData): WalletLedgerRow[] {
       addLeg(transaction.balanceId, transaction.currency, "income", transaction.amountMinor, 0, 0);
     } else if (transaction.kind === "expense") {
       addLeg(transaction.balanceId, transaction.settlement?.tenderCurrency ?? transaction.currency, "expense", 0, transaction.settlement?.tenderMinor ?? transaction.amountMinor, 0);
+      // Each additional tender is its own outflow from its own balance; currencies are never combined.
+      const extraTenders = transaction.settlement?.extraTenders ?? [];
+      extraTenders.forEach((tender, index) => {
+        addLeg(tender.balanceId, tender.currency, "cash-tender", 0, tender.amountMinor, index + 1);
+      });
       transaction.settlement?.changes.forEach((change, index) => {
-        addLeg(change.balanceId, change.currency, "cash-change", change.amountMinor, 0, index + 1);
+        addLeg(change.balanceId, change.currency, "cash-change", change.amountMinor, 0, extraTenders.length + index + 1);
       });
     } else if (transaction.kind === "transfer") {
       if (!transaction.toBalanceId || transaction.toAmountMinor === null) throw new Error("export_data_unavailable");

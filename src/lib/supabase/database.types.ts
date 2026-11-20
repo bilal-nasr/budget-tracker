@@ -91,6 +91,7 @@ export type Database = {
                     "balance_id": string;
                     "currency": string;
                     "id": string;
+                    "leg": string;
                     "position": number;
                     "rate_base": string | null;
                     "rate_denominator": number | null;
@@ -106,6 +107,7 @@ export type Database = {
                     "balance_id": string;
                     "currency": string;
                     "id"?: string;
+                    "leg"?: string;
                     "position": number;
                     "rate_base"?: string | null;
                     "rate_denominator"?: number | null;
@@ -120,6 +122,7 @@ export type Database = {
                     "balance_id"?: string;
                     "currency"?: string;
                     "id"?: string;
+                    "leg"?: string;
                     "position"?: number;
                     "rate_base"?: string | null;
                     "rate_denominator"?: number | null;
@@ -643,6 +646,10 @@ export type Database = {
                     "folder_id": string;
                     "id": string;
                     "name": string;
+                    "paid_at": string | null;
+                    "paid_by": string | null;
+                    "paid_on": string | null;
+                    "paid_transaction_id": string | null;
                     "price_minor": number;
                     "quantity": number;
                     "updated_at": string;
@@ -658,6 +665,10 @@ export type Database = {
                     "folder_id": string;
                     "id": string;
                     "name": string;
+                    "paid_at"?: string | null;
+                    "paid_by"?: string | null;
+                    "paid_on"?: string | null;
+                    "paid_transaction_id"?: string | null;
                     "price_minor": number;
                     "quantity"?: number;
                     "updated_at"?: string;
@@ -672,6 +683,10 @@ export type Database = {
                     "folder_id"?: string;
                     "id"?: string;
                     "name"?: string;
+                    "paid_at"?: string | null;
+                    "paid_by"?: string | null;
+                    "paid_on"?: string | null;
+                    "paid_transaction_id"?: string | null;
                     "price_minor"?: number;
                     "quantity"?: number;
                     "updated_at"?: string;
@@ -2000,6 +2015,12 @@ export type Database = {
                 };
                 Returns: undefined;
             };
+            "delete_pending_payments": {
+                Args: {
+                    "p_items": Json;
+                };
+                Returns: undefined;
+            };
             "delete_wallet": {
                 Args: {
                     "p_id": string;
@@ -2017,6 +2038,47 @@ export type Database = {
                     "p_category": string;
                 };
                 Returns: undefined;
+            };
+            "delete_invoice_items": {
+                Args: {
+                    "p_folder": string;
+                    "p_items": (string)[];
+                };
+                Returns: string[];
+            };
+            "mark_invoice_items_paid": {
+                Args: {
+                    "p_folder": string;
+                    "p_items": (string)[];
+                    "p_transaction": string;
+                };
+                Returns: {
+                    "id": string;
+                    "updated_at": string;
+                    "paid_on": string;
+                    "paid_at": string;
+                }[];
+            };
+            "move_invoice_items": {
+                Args: {
+                    "p_folder": string;
+                    "p_items": (string)[];
+                    "p_category": string;
+                };
+                Returns: {
+                    "id": string;
+                    "updated_at": string;
+                }[];
+            };
+            "restore_invoice_items": {
+                Args: {
+                    "p_items": (string)[];
+                };
+                Returns: {
+                    "id": string;
+                    "created_at": string;
+                    "updated_at": string;
+                }[];
             };
             "installment_cycle_snapshot": {
                 Args: Record<PropertyKey, never>;
@@ -2212,6 +2274,15 @@ export type Database = {
                     "revision": number;
                 }[];
             };
+            "remove_categories": {
+                Args: {
+                    "p_ids": string[];
+                };
+                Returns: {
+                    "id": string;
+                    "outcome": string;
+                }[];
+            };
             "remove_category": {
                 Args: {
                     "p_id": string;
@@ -2301,6 +2372,26 @@ export type Database = {
                     "p_deleted": boolean;
                     "p_expected_revision": number;
                     "p_id": string;
+                };
+                Returns: {
+                    "id": string;
+                    "revision": number;
+                }[];
+            };
+            "set_transactions_category": {
+                Args: {
+                    "p_category_id": string;
+                    "p_items": Json;
+                };
+                Returns: {
+                    "id": string;
+                    "revision": number;
+                }[];
+            };
+            "set_transactions_deleted": {
+                Args: {
+                    "p_deleted": boolean;
+                    "p_items": Json;
                 };
                 Returns: {
                     "id": string;

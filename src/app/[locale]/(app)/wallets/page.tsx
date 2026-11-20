@@ -6,5 +6,5 @@ import { WalletsView } from "@/components/wallets/wallets-view";
 export default function WalletsPage({ params }: PageProps<"/[locale]/wallets">) {
   const { locale } = use(params);
   setRequestLocale(locale);
-  return <WalletsView commitments={<Suspense fallback={<div className="h-36 animate-pulse rounded-xl bg-accent" />}><Commitments /></Suspense>} />;
+  return <WalletsView commitments={<Suspense fallback={<div className="h-96 animate-pulse rounded-xl bg-accent" />}><Commitments /></Suspense>} />;
 }

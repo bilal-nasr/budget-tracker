@@ -65,3 +65,14 @@ it("locks the entire expense when only a cashier-change receiver is tombstoned a
  await waitFor(() => expect(done).toHaveBeenCalledOnce());
  expect(correctTransactionNote).toHaveBeenCalledWith("tx", 1, { note: "Corrected note" });
 });
+
+it("locks an expense when only an additional tender balance is tombstoned, and still shows every payment", () => {
+ const historical = wallets.map((wallet) => ({ ...wallet, deleted: wallet.id === "one" }));
+ const expense: Transaction = { ...transaction, kind: "expense", balanceId: "two-USD", currency: "USD", amountMinor: 1000, toBalanceId: null, toAmountMinor: null,
+  settlement: { tenderMinor: 300, tenderCurrency: "USD", extraTenders: [{ balanceId: "one-LBP", currency: "LBP", amountMinor: 1300000, walletNameSnapshot: "Lira at payment" }], changes: [] } };
+ render(<NextIntlClientProvider locale="en" messages={en}><AppDataProvider walletContainers={historical} currencies={[...SEED_CURRENCY_DEFINITIONS]} categories={[]} timezone="UTC" salary={null} usdLbpRate={null}><DetailSheet transaction={expense} onClose={vi.fn()} onEdit={vi.fn()} onDuplicate={vi.fn()}/></AppDataProvider></NextIntlClientProvider>);
+ for (const name of [en.Detail.edit, en.Detail.delete, en.Detail.duplicate]) expect(screen.queryByRole("button", { name })).toBeNull();
+ expect(screen.getByText("$3.00", { exact: true })).toBeTruthy();
+ expect(screen.getByText("LBP 1,300,000", { exact: true })).toBeTruthy();
+ expect(screen.getAllByText(en.Cashier.tenderFrom, { exact: true })).toHaveLength(2);
+});

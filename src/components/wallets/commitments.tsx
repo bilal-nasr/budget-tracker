@@ -37,7 +37,16 @@ function Row({ href, icon: Icon, title, hint, children }: { href: "/loans" | "/p
   );
 }
 
-/** Loans, client payments, the item calculator and invoice folders at a glance; each opens its own screen. Totals stay per currency, never mixed. Invoice folders show only how many there are: their money is never counted here. */
+function Group({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return (
+    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-2">
+      <h2 id={id} className="text-[17px] font-semibold">{title}</h2>
+      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">{children}</ul>
+    </section>
+  );
+}
+
+/** Two groups under Wallets: money owed (loans, client payments) and tools (the item calculator, invoice folders). Each row opens its own screen. Totals stay per currency, never mixed. Invoice folders show only how many there are: their money is never counted here. */
 export async function Commitments() {
   const [t, loans, jobs, items, folderCount] = await Promise.all([getTranslations("Wallets"), getLoans().catch(() => []), getPendingPayments().catch(() => []), getShoppingItems().catch(() => []), getInvoiceFolderCount().catch(() => 0)]);
   const l = await getTranslations("Loans");
@@ -50,28 +59,32 @@ export async function Commitments() {
   const waiting = jobs.filter((job) => job.remainingMinor > 0);
   const clientOwes = sum(waiting.map((job) => ({ currency: job.currency, minor: job.remainingMinor })));
   const listed = items.filter((item) => !item.boughtOn);
-  const toBuy = sum(listed.map((item) => ({ currency: item.currency, minor: item.priceMinor })));
+  const toBuy = sum(listed.map((item) => ({ currency: item.currency, minor: item.priceMinor * item.quantity })));
   return (
-    <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-      <li>
-        <Row href="/loans" icon={HandCoins} title={l("title")} hint={active.length > 0 ? t("activeCount", { count: active.length }) : t("noneActive")}>
-          {owe.length > 0 ? <span><span className="text-muted-foreground">{t("youOwe")} </span><Amounts totals={owe} /></span> : null}
-          {owed.length > 0 ? <span><span className="text-muted-foreground">{t("owedToYou")} </span><Amounts totals={owed} /></span> : null}
-        </Row>
-      </li>
-      <li>
-        <Row href="/pending-payments" icon={Hourglass} title={p("title")} hint={waiting.length > 0 ? t("waitingCount", { count: waiting.length }) : t("nothingPending")}>
-          {clientOwes.length > 0 ? <span><Amounts totals={clientOwes} /></span> : null}
-        </Row>
-      </li>
-      <li>
-        <Row href="/items" icon={Calculator} title={i("title")} hint={listed.length > 0 ? t("itemsCount", { count: listed.length }) : t("nothingListed")}>
-          {toBuy.length > 0 ? <span><Amounts totals={toBuy} /></span> : null}
-        </Row>
-      </li>
-      <li>
-        <Row href="/invoices" icon={FileText} title={v("title")} hint={folderCount > 0 ? t("foldersCount", { count: folderCount }) : t("noFolders")} />
-      </li>
-    </ul>
+    <div className="flex min-w-0 flex-col gap-6">
+      <Group id="w-owed" title={t("groupOwed")}>
+        <li>
+          <Row href="/loans" icon={HandCoins} title={l("title")} hint={active.length > 0 ? t("activeCount", { count: active.length }) : t("noneActive")}>
+            {owe.length > 0 ? <span><span className="text-muted-foreground">{t("youOwe")} </span><Amounts totals={owe} /></span> : null}
+            {owed.length > 0 ? <span><span className="text-muted-foreground">{t("owedToYou")} </span><Amounts totals={owed} /></span> : null}
+          </Row>
+        </li>
+        <li>
+          <Row href="/pending-payments" icon={Hourglass} title={p("title")} hint={waiting.length > 0 ? t("waitingCount", { count: waiting.length }) : t("nothingPending")}>
+            {clientOwes.length > 0 ? <span><Amounts totals={clientOwes} /></span> : null}
+          </Row>
+        </li>
+      </Group>
+      <Group id="w-tools" title={t("groupTools")}>
+        <li>
+          <Row href="/items" icon={Calculator} title={i("title")} hint={listed.length > 0 ? t("itemsCount", { count: listed.length }) : t("nothingListed")}>
+            {toBuy.length > 0 ? <span><Amounts totals={toBuy} /></span> : null}
+          </Row>
+        </li>
+        <li>
+          <Row href="/invoices" icon={FileText} title={v("title")} hint={folderCount > 0 ? t("foldersCount", { count: folderCount }) : t("noFolders")} />
+        </li>
+      </Group>
+    </div>
   );
 }

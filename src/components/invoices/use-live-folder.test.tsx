@@ -22,6 +22,7 @@ const row = (over: Record<string, unknown> = {}) => ({
 const mapped = {
   id: ITEM, folderId: FOLDER, categoryId: "1c000000-0000-4000-8000-000000000001", name: "GPU", currency: "USD", decimalPlaces: 2, priceMinor: 45000, quantity: 2,
   createdBy: USER, createdAt: "2026-11-09T10:00:00.123456+00:00", updatedAt: "2026-11-09T10:00:00.123456+00:00",
+  paidOn: null, paidAt: null, paidBy: null,
 };
 
 let visibility: DocumentVisibilityState = "visible";
@@ -82,6 +83,19 @@ describe("useLiveFolder", () => {
       { type: "upsert", item: { ...mapped, name: "GPU 2", priceMinor: MAX_MINOR, updatedAt: "2026-11-09T11:00:00+00:00" } },
       { type: "delete", id: ITEM },
     ]);
+  });
+
+  it("carries the paid marker of a row, and its removal, to onItem (never the payer's expense)", async () => {
+    const { h } = await mount();
+    const channel = realtime.current!.active()[0];
+    const paid = { paid_on: "2026-11-08", paid_at: "2026-11-09T12:00:00+00:00", paid_by: USER, paid_transaction_id: "1e000000-0000-4000-8000-000000000001" };
+    act(() => channel.emit("invoice_items", { eventType: "UPDATE", new: row(paid), old: { id: ITEM } }));
+    act(() => channel.emit("invoice_items", { eventType: "UPDATE", new: row({ ...paid, paid_on: null, paid_at: null }), old: { id: ITEM } }));
+    expect(h.onItem.mock.calls.map((call) => call[0])).toEqual([
+      { type: "upsert", item: { ...mapped, paidOn: "2026-11-08", paidAt: "2026-11-09T12:00:00+00:00", paidBy: USER } },
+      { type: "upsert", item: mapped },
+    ]);
+    expect(JSON.stringify(h.onItem.mock.calls)).not.toContain("1e000000");
   });
 
   it("ignores malformed rows and events for another folder instead of throwing", async () => {
