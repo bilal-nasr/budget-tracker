@@ -18,4 +18,11 @@ describe("message catalogs", () => {
   it("keeps the English and Arabic Settings message trees in sync", () => {
     expect(keys(ar.Settings).sort()).toEqual(keys(en.Settings).sort());
   });
+
+  it("the consent screen points to Settings, and promises no changes, now that Connected apps exists", () => {
+    for (const catalog of [en, ar]) {
+      expect(Object.keys(catalog.connect)).toContain("removeLater");
+      expect(Object.keys(catalog.connect)).not.toContain("canChange");
+    }
+  });
 });

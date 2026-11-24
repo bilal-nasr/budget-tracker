@@ -7,6 +7,7 @@ import { attachedBalances } from "@/features/wallets/schema";
 import { getWallets } from "@/features/wallets/queries";
 import { readMinor, sumMinor, type Digits } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
+import { getUserEmail, getUserId } from "@/lib/supabase/user";
 import { readAllByKey } from "@/lib/supabase/read-all";
 import { summarizeActivity, type ActivityRow } from "./activity";
 import { renderSalaryEmail, type EmailBlock, type EmailRow, type SalaryEmailModel } from "./render";
@@ -31,9 +32,7 @@ function monthStart(date: string): string {
  */
 export async function buildSalaryEmail(receiptId: string, displayLocale?: string): Promise<{ to: string; subject: string; html: string; text: string } | null> {
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  const to = auth.user?.email;
-  const userId = auth.user?.id;
+  const [to, userId] = await Promise.all([getUserEmail(), getUserId()]);
   if (!to || !userId) return null;
 
   // The preference column comes from a later migration; until it is applied the email stays on.

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { safeNext, siteBase } from "@/features/auth/redirect";
+import { pendingAuthorizationAfterSignIn } from "@/features/connect/pending-authorization";
 import { pendingJoinAfterSignIn } from "@/features/invoices/pending-join";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,11 +31,13 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) {
-      // A share link opened before signing up. A new account still goes through onboarding,
-      // which opens the link when it finishes; a reset link always asks for the new password first.
+      // A share link (first) or an app authorization opened before signing up. A new account still
+      // goes through onboarding, which opens it when it finishes; a reset link always asks for the
+      // new password first.
       const userId = type === "email" ? data?.user?.id : undefined;
       const join = userId ? await pendingJoinAfterSignIn(supabase, userId).catch(() => null) : null;
-      return privateRedirect(new URL(join ? `/${locale}${join}` : next, origin));
+      const pending = join ?? (userId ? await pendingAuthorizationAfterSignIn(supabase, userId).catch(() => null) : null);
+      return privateRedirect(new URL(pending ? `/${locale}${pending}` : next, origin));
     }
   }
   // Expired, reused or malformed link. A reset link goes back to ask for a new one.

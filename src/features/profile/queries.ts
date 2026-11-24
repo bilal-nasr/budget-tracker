@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getUserId } from "@/lib/supabase/user";
+import { throwInConnector } from "@/lib/supabase/request-context";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { DEMO_RATE, DEMO_SALARY } from "@/lib/demo-data";
 import { DEFAULT_PROFILE, profileSchema, type Profile } from "./schema";
@@ -37,13 +38,17 @@ export const getProfile = cache(async (): Promise<Profile> => {
     "locale, digits, theme, timezone, onboarded_at",
   ];
   let data: ProfileRow | null = null;
+  let read = false;
   for (const columns of columnSets) {
     const result = await supabase.from("profiles").select(columns).eq("user_id", userId).maybeSingle();
     if (!result.error) {
       data = result.data as ProfileRow | null;
+      read = true;
       break;
     }
   }
+  // Every column set failed: a database error, not a missing profile.
+  if (!read) throwInConnector("Profile unavailable");
   if (!data) return { ...DEFAULT_PROFILE, onboarded: false };
 
   const parsed = profileSchema.safeParse({

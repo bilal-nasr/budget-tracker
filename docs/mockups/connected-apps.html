@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connected apps mockup · 390px · EN + AR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  Static mockup for owner approval: a new "Connected apps" block in Settings,
+  placed right after "Sign-in keys". Not app code. Tokens copied from
+  src/app/globals.css (light). Structure follows passkeys-section.tsx (titled
+  section, white list inlay, outline affordance below) and ConfirmSheet.
+  Each frame is Settings scrolled so the block sits above the phone bottom bar.
+  Single-frame views for screenshots:
+    #empty-en #empty-ar #listed-en #listed-ar #remove-en #remove-ar #failed-en #failed-ar
+  All data is synthetic.
+-->
+<style>
+  :root {
+    --background:#eceeea; --foreground:#14211f; --card:#ffffff;
+    --primary:#0f4c4a; --primary-foreground:#f4f7f3;
+    --secondary:#e1e7e1; --muted:#e1e7e1; --muted-foreground:#4f625f; --accent:#dce5df;
+    --destructive:#a3302a; --over:#a3302a;
+    --border:#d3dad4; --input:#7e918c; --ring:#0f4c4a;
+    --shell:#0f4c4a; --shell-foreground:#f4f7f3; --shell-muted:#b9d2ce;
+    --action:#f2b632; --action-foreground:#14211f;
+    --radius-sm:6px; --radius-md:10px; --radius-lg:12px; --radius-xl:16px; --radius-sheet:28px;
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; accent-color:var(--primary); }
+  body {
+    margin:0; padding:24px; background:#cfd5d0; color:var(--foreground);
+    font-family:"Readex Pro", system-ui, sans-serif; font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  ::selection { background:color-mix(in srgb, var(--primary) 28%, transparent); }
+  :focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+  button { font:inherit; color:inherit; }
+  svg.i { width:20px; height:20px; flex:none; }
+
+  /* Gallery chrome (hidden in single-frame views) */
+  .gallery-h { font-size:18px; margin:0 0 4px; }
+  .gallery-note { margin:0 0 20px; color:#33403d; font-size:14px; max-width:78ch; line-height:1.5; }
+  .row { display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; }
+  .label { font-size:12px; font-weight:600; margin:0 0 6px; color:#33403d; }
+  figure { margin:0; }
+  .phone {
+    position:relative; width:390px; height:844px; overflow:hidden; background:var(--background);
+    border-radius:28px; box-shadow:0 8px 30px rgb(0 0 0 / .18);
+  }
+  .strip { width:390px; background:var(--background); border-radius:20px; padding:16px; box-shadow:0 8px 30px rgb(0 0 0 / .12); }
+
+  html[data-only] body { padding:0; background:var(--background); }
+  html[data-only] .gallery-h, html[data-only] .gallery-note, html[data-only] .label, html[data-only] .sub-h { display:none; }
+  html[data-only] .row { display:block; }
+  html[data-only] figure:not(.is-only) { display:none; }
+  html[data-only] .phone, html[data-only] .strip { border-radius:0; box-shadow:none; }
+  .sub-h { flex-basis:100%; margin:16px 0 0; font-size:15px; }
+
+  /* Page scrolled to the block: content sits on the bottom bar and runs off the top */
+  .page {
+    position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-end; gap:24px;
+    padding:0 16px calc(84px + 20px);
+  }
+  .page > * { flex:none; }
+  .fade { position:absolute; top:0; inset-inline:0; height:48px; z-index:5; background:linear-gradient(var(--background), transparent); pointer-events:none; }
+
+  /* Settings section, same as passkeys-section */
+  .sec { display:flex; flex-direction:column; gap:8px; }
+  .sec-h { margin:0; font-size:17px; font-weight:600; line-height:1.5; }
+  [dir="rtl"] .sec-h { line-height:1.6; }
+  .help { margin:0; font-size:13px; line-height:1.4; color:var(--muted-foreground); }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-xl); overflow:hidden; }
+  .card > * + * { border-top:1px solid var(--border); }
+  .note { margin:0; padding:12px 16px; font-size:15px; line-height:1.5; color:var(--muted-foreground); }
+  .note.err { color:var(--over); }
+
+  /* Buttons (Button variants) */
+  .ghost-icon { all:unset; box-sizing:border-box; flex:none; width:44px; height:44px; display:grid; place-items:center; border-radius:var(--radius-lg); cursor:pointer; }
+  .ghost-icon:hover { background:var(--muted); }
+  .ghost-icon svg { width:16px; height:16px; }
+  .ghost-text {
+    all:unset; box-sizing:border-box; flex:none; height:44px; padding:0 12px; display:inline-flex; align-items:center;
+    border-radius:var(--radius-lg); font-size:15px; font-weight:500; color:var(--foreground); cursor:pointer;
+  }
+  .ghost-text:hover { background:var(--muted); }
+  .ghost-icon:focus-visible, .ghost-text:focus-visible, .copy:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }
+  .btn-lg {
+    all:unset; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    height:56px; padding:0 24px; border-radius:var(--radius-xl); border:1px solid transparent;
+    font-size:16px; font-weight:600; line-height:1; cursor:pointer; white-space:nowrap;
+  }
+  .btn-lg svg { width:16px; height:16px; }
+  .btn-outline { background:var(--background); border-color:var(--border); color:var(--foreground); }
+  .btn-destructive { background:color-mix(in srgb, var(--destructive) 10%, var(--card)); color:var(--destructive); }
+  .w-full { width:100%; }
+
+  /* Sign-in keys row (context) */
+  .key-row { display:flex; align-items:center; gap:4px; min-height:64px; padding-inline:16px 4px; }
+  .key-row > svg.i { color:var(--muted-foreground); margin-inline-end:8px; }
+  .grow { flex:1; min-width:0; padding-block:12px; }
+  .name { display:block; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta { display:block; font-size:13px; line-height:1.4; color:var(--muted-foreground); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* Rows of the sections above (context only) */
+  .grow0 { flex:1; min-width:0; }
+  .meta.wrap { white-space:normal; margin-top:2px; }
+  .toggle-row { display:flex; align-items:center; gap:16px; min-height:56px; padding:16px; }
+  .switch { flex:none; position:relative; width:44px; height:26px; border-radius:999px; background:var(--primary); }
+  .switch::after { content:""; position:absolute; top:3px; inset-inline-end:3px; width:20px; height:20px; border-radius:999px; background:#fff; }
+  .nav-row { display:flex; align-items:center; gap:12px; min-height:56px; padding:12px 16px; }
+  .nav-chev { width:16px; height:16px; color:var(--muted-foreground); }
+  [dir="rtl"] .nav-chev { transform:scaleX(-1); }
+
+  /* Connected app row */
+  .app-row { display:flex; align-items:center; gap:12px; min-height:68px; padding-inline:14px 6px; }
+  .chip { flex:none; width:40px; height:40px; border-radius:var(--radius-md); background:var(--secondary); color:var(--primary); display:grid; place-items:center; }
+
+  /* "Connect Claude" help: one disclosure inlay, open when nothing is connected */
+  .how > summary {
+    list-style:none; display:flex; align-items:center; gap:12px; min-height:56px; padding-inline:16px;
+    font-size:16px; font-weight:500; cursor:pointer;
+  }
+  .how > summary::-webkit-details-marker { display:none; }
+  .how > summary:hover { background:color-mix(in srgb, var(--accent) 50%, transparent); }
+  .how > summary:focus-visible { outline:2px solid var(--ring); outline-offset:-2px; }
+  .how > summary .lead-i { color:var(--primary); }
+  .how > summary .chev { width:16px; height:16px; margin-inline-start:auto; color:var(--muted-foreground); transition:transform .2s cubic-bezier(0.22,1,0.36,1); }
+  .how[open] > summary .chev { transform:rotate(180deg); }
+  .how-body { border-top:1px solid var(--border); padding:2px 16px 18px; }
+  .steps { list-style:none; margin:0; padding:0; }
+  .steps > li { display:grid; grid-template-columns:24px minmax(0,1fr); column-gap:12px; padding-top:14px; }
+  .num {
+    width:24px; height:24px; margin-top:0; border-radius:var(--radius-sm); background:var(--secondary);
+    display:grid; place-items:center; font-size:13px; font-weight:600; line-height:1; font-variant-numeric:tabular-nums;
+  }
+  .step-t { margin:0; font-size:15px; line-height:1.5; }
+  [dir="rtl"] .step-t { line-height:1.6; }
+  .step-t .term { font-weight:500; }
+  .field { grid-column:1 / -1; margin-top:10px; }
+  .field-k { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:20px; font-size:13px; line-height:1.4; color:var(--muted-foreground); }
+  .copied { display:inline-flex; align-items:center; gap:4px; color:var(--primary); font-weight:500; visibility:hidden; }
+  .copied svg { width:14px; height:14px; }
+  .field.is-copied .copied { visibility:visible; }
+  .well {
+    display:flex; align-items:stretch; margin-top:4px; min-height:48px;
+    background:var(--background); border:1px solid var(--border); border-radius:var(--radius-lg);
+  }
+  .val {
+    flex:1; min-width:0; padding:11px 12px; font-size:15px; font-weight:500; line-height:1.5;
+    direction:ltr; unicode-bidi:isolate; text-align:left; overflow-wrap:anywhere; font-variant-numeric:tabular-nums;
+    -webkit-user-select:all; user-select:all;
+  }
+  [dir="rtl"] .val { text-align:right; }
+  .copy {
+    all:unset; box-sizing:border-box; flex:none; width:46px; min-height:46px; display:grid; place-items:center; cursor:pointer;
+    border-inline-start:1px solid var(--border); border-start-end-radius:11px; border-end-end-radius:11px; color:var(--foreground);
+  }
+  .copy svg { width:18px; height:18px; }
+  .copy:hover { background:var(--muted); }
+  .field.is-copied .copy { color:var(--primary); background:var(--accent); }
+
+  /* Phone bottom bar (AppShell) */
+  .tabbar {
+    position:absolute; inset-inline:0; bottom:0; z-index:30; height:84px; padding:6px 6px 0; background:var(--shell);
+    display:grid; grid-template-columns:1fr 1fr 84px 1fr 1fr; align-items:start;
+  }
+  .tab { min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:12px; font-weight:500; line-height:1.3; color:var(--shell-muted); }
+  .tab svg { width:22px; height:22px; }
+  .add { margin-top:-28px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .add-btn { width:60px; height:60px; border-radius:20px; background:var(--action); color:var(--action-foreground); display:grid; place-items:center; box-shadow:0 4px 6px -1px rgb(0 0 0 / .1), 0 2px 4px -2px rgb(0 0 0 / .1); }
+  .add-btn svg { width:28px; height:28px; }
+  .add span { font-size:12px; font-weight:600; color:#fff; line-height:1.3; }
+
+  /* ConfirmSheet over the listed state */
+  .backdrop { position:absolute; inset:0; z-index:40; background:rgb(0 0 0 / .1); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
+  .sheet {
+    position:absolute; inset-inline:0; bottom:0; z-index:50; background:var(--card);
+    border-start-start-radius:var(--radius-sheet); border-start-end-radius:var(--radius-sheet);
+    border-top:1px solid var(--border); display:flex; flex-direction:column;
+  }
+  .handle { height:12px; display:flex; justify-content:center; align-items:flex-end; }
+  .handle::after { content:""; width:96px; height:4px; border-radius:999px; background:var(--muted); }
+  .sheet-body { padding:8px 16px 16px; }
+  .sheet-head { display:flex; align-items:center; justify-content:space-between; min-height:44px; gap:8px; }
+  .sheet-title { margin:0; font-size:17px; font-weight:600; line-height:1.4; }
+  .sheet-copy { margin-top:8px; display:flex; flex-direction:column; gap:12px; font-size:15px; line-height:1.5; }
+  [dir="rtl"] .sheet-copy { line-height:1.65; }
+  .sheet-copy p { margin:0; }
+  .sheet-copy .soft { color:var(--muted-foreground); }
+  .sheet-foot { border-top:1px solid var(--border); padding:10px 16px 12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration:.01ms !important; animation-duration:.01ms !important; } }
+</style>
+<script>
+  // #empty-en etc. shows one bare 390px frame (used for screenshots).
+  (function () {
+    var id = location.hash.slice(1);
+    if (!id) return;
+    document.documentElement.setAttribute("data-only", id);
+  })();
+</script>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- lucide icons, 24 grid -->
+    <symbol id="i-app" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-x"viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></symbol>
+    <symbol id="i-plus-b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></symbol>
+    <symbol id="i-house" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13"/></symbol>
+    <symbol id="i-pie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"/><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/></symbol>
+    <symbol id="i-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+  </defs>
+</svg>
+
+<h1 class="gallery-h">Settings: Connected apps</h1>
+<p class="gallery-note">A new section right after Sign-in keys, built like it: a titled section, one white list inlay, and the "Connect Claude" help as a second inlay that opens by itself when nothing is connected and stays folded once an app is. Each frame is Settings scrolled to the block. The address and app ID stay left-to-right in Arabic, wrap instead of cutting off, and select whole on a long press. In the empty frames the address shows its "Copied" state for two seconds after a tap. Remove is a quiet text button; the confirm sheet is the shared ConfirmSheet with its danger tone. The app chip is a generic icon, never a logo, as on the consent screen. Synthetic data only.</p>
+
+<div class="row" id="frames"></div>
+
+<script>
+var ADDRESS = "https://budget.example.test/mcp";
+var APP_ID = "7c1e2b9a-4f3d-4a6b-9c0e-2d5f8a1b3c4d";
+
+var COPY = {
+  en: {
+    dir: "ltr",
+    nav: { home: "Home", activity: "Activity", add: "Add", budgets: "Budgets", wallets: "Wallets", close: "Close" },
+    above: {
+      notifications: "Notifications", salaryEmail: "Salary summary email",
+      salaryEmailHelp: "When you press Got salary, email me the income, spending and balance of every wallet.",
+      manage: "Manage", categories: "Categories", categoriesHint: "Names, icons and order", currencies: "Currencies"
+    },
+    keys: {
+      title: "Sign-in keys",
+      help: "Sign in with your phone’s fingerprint, face or screen lock, or with a password manager. No password to type. Your password still works too.",
+      name: "iPhone", meta: "Added Oct 3, 2026 · Last used Nov 22, 2026",
+      rename: "Rename iPhone", remove: "Remove iPhone", add: "Add a sign-in key"
+    },
+    title: "Connected apps",
+    empty: "No apps connected yet.",
+    remove: "Remove",
+    removeConfirmTitle: "Remove {name}?",
+    removeConfirmBody: "{name} will no longer be able to see or change your budget.",
+    takesEffect: "This can take up to a minute to take effect.",
+    removed: "App removed",
+    loadFailed: "Could not load your connected apps. Try again.",
+    howTitle: "Connect Claude",
+    howStep1: "In Claude, add a custom connector.",
+    howStep2: "Paste this address as its URL.",
+    howStep3: "Open Advanced settings and paste this app ID as the {field}.",
+    address: "Connector address",
+    appId: "App ID",
+    copy: "Copy",
+    copied: "Copied",
+    approvedOn: "Allowed {date}",
+    cancel: "Cancel",
+    date: "Nov 20, 2026"
+  },
+  ar: {
+    dir: "rtl",
+    nav: { home: "الرئيسية", activity: "النشاط", add: "إضافة", budgets: "الميزانيات", wallets: "المحافظ", close: "إغلاق" },
+    above: {
+      notifications: "الإشعارات", salaryEmail: "رسالة ملخص الراتب",
+      salaryEmailHelp: "عند ضغط استلمت الراتب، أرسل لي بريداً بدخل كل محفظة ومصروفها ورصيدها.",
+      manage: "الإدارة", categories: "الفئات", categoriesHint: "الأسماء والأيقونات والترتيب", currencies: "العملات"
+    },
+    keys: {
+      title: "مفاتيح تسجيل الدخول",
+      help: "سجّل الدخول ببصمة هاتفك أو وجهك أو قفل الشاشة، أو عبر مدير كلمات المرور، دون كتابة كلمة مرور. وتبقى كلمة مرورك تعمل أيضاً.",
+      name: "iPhone", meta: "أُضيف في 3 تشرين الأول 2026 · آخر استخدام 22 تشرين الثاني 2026",
+      rename: "إعادة تسمية iPhone", remove: "إزالة iPhone", add: "أضف مفتاح تسجيل دخول"
+    },
+    title: "التطبيقات المتصلة",
+    empty: "لا توجد تطبيقات متصلة بعد.",
+    remove: "إزالة",
+    removeConfirmTitle: "إزالة {name}؟",
+    removeConfirmBody: "لن يتمكن {name} بعد الآن من رؤية ميزانيتك أو تغييرها.",
+    takesEffect: "قد يستغرق ذلك حتى دقيقة ليصبح نافذاً.",
+    removed: "تمت إزالة التطبيق",
+    loadFailed: "تعذّر تحميل تطبيقاتك المتصلة. حاول مرة أخرى.",
+    howTitle: "ربط Claude",
+    howStep1: "في Claude، أضف موصِّلاً مخصصاً.",
+    howStep2: "الصق هذا العنوان كرابط للموصِّل.",
+    howStep3: "افتح الإعدادات المتقدمة والصق معرّف التطبيق هذا في حقل {field}.",
+    address: "عنوان الموصِّل",
+    appId: "معرّف التطبيق",
+    copy: "نسخ",
+    copied: "تم النسخ",
+    approvedOn: "سُمح له في {date}",
+    cancel: "إلغاء",
+    date: "20 تشرين الثاني 2026"
+  }
+};
+
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function icon(id, cls) { return '<svg class="i' + (cls ? " " + cls : "") + '" aria-hidden="true"><use href="#' + id + '"/></svg>'; }
+function fill(tpl, vars) { return esc(tpl).replace(/\{(\w+)\}/g, function (_, k) { return vars[k]; }); }
+
+function aboveSections(c) {
+  var chev = '<svg class="i nav-chev" aria-hidden="true"><use href="#i-chev-r"/></svg>';
+  return '<section class="sec"><h2 class="sec-h">' + esc(c.above.notifications) + '</h2>' +
+      '<div class="card"><div class="toggle-row"><span class="grow0"><span class="name">' + esc(c.above.salaryEmail) + '</span>' +
+      '<span class="meta wrap">' + esc(c.above.salaryEmailHelp) + '</span></span><span class="switch" aria-hidden="true"></span></div></div></section>' +
+    '<section class="sec"><h2 class="sec-h">' + esc(c.above.manage) + '</h2>' +
+      '<div class="card">' +
+        '<div class="nav-row"><span class="grow0"><span class="name">' + esc(c.above.categories) + '</span><span class="meta">' + esc(c.above.categoriesHint) + '</span></span>' + chev + '</div>' +
+        '<div class="nav-row"><span class="grow0"><span class="name">' + esc(c.above.currencies) + '</span><span class="meta"><bdi dir="ltr">USD · LBP · SYP</bdi></span></span>' + chev + '</div>' +
+      '</div></section>';
+}
+
+function keysSection(c) {
+  return '<section class="sec" aria-labelledby="k-' + c.dir + '">' +
+    '<h2 class="sec-h" id="k-' + c.dir + '">' + esc(c.keys.title) + '</h2>' +
+    '<p class="help">' + esc(c.keys.help) + '</p>' +
+    '<div class="card"><div class="key-row">' + icon("i-key") +
+      '<div class="grow"><span class="name"><bdi>' + esc(c.keys.name) + '</bdi></span><span class="meta">' + esc(c.keys.meta) + '</span></div>' +
+      '<button class="ghost-icon" type="button" aria-label="' + esc(c.keys.rename) + '">' + icon("i-pencil") + '</button>' +
+      '<button class="ghost-icon" type="button" aria-label="' + esc(c.keys.remove) + '">' + icon("i-trash") + '</button>' +
+    '</div></div>' +
+    '<button class="btn-lg btn-outline w-full" type="button">' + icon("i-plus") + esc(c.keys.add) + '</button>' +
+  '</section>';
+}
+
+function field(c, uid, labelKey, value, copied) {
+  var lid = uid + "-" + labelKey;
+  return '<div class="field' + (copied ? " is-copied" : "") + '">' +
+    '<div class="field-k"><span id="' + lid + '">' + esc(c[labelKey]) + '</span>' +
+      '<span class="copied" aria-live="polite">' + icon("i-check") + (copied ? esc(c.copied) : esc(c.copied)) + '</span></div>' +
+    '<div class="well"><bdi class="val" dir="ltr">' + esc(value).replace(/\//g, "/<wbr>") + '</bdi>' +
+      '<button class="copy" type="button" aria-label="' + esc(c.copy) + '" aria-describedby="' + lid + '">' + icon(copied ? "i-check" : "i-copy") + '</button></div>' +
+  '</div>';
+}
+
+function how(c, uid, open, copiedAddress) {
+  return '<details class="card how"' + (open ? " open" : "") + '>' +
+    '<summary>' + icon("i-plug", "lead-i") + '<span>' + fill(c.howTitle, {}).replace("Claude", "<bdi>Claude</bdi>") + '</span>' + icon("i-chev", "chev") + '</summary>' +
+    '<div class="how-body"><ol class="steps">' +
+      '<li><span class="num" aria-hidden="true">1</span><p class="step-t">' + esc(c.howStep1).replace("Claude", "<bdi>Claude</bdi>") + '</p></li>' +
+      '<li><span class="num" aria-hidden="true">2</span><p class="step-t">' + esc(c.howStep2) + '</p>' + field(c, uid, "address", ADDRESS, copiedAddress) + '</li>' +
+      '<li><span class="num" aria-hidden="true">3</span><p class="step-t">' + fill(c.howStep3, { field: '<bdi class="term" dir="ltr">OAuth Client ID</bdi>' }) + '</p>' + field(c, uid, "appId", APP_ID, false) + '</li>' +
+    '</ol></div>' +
+  '</details>';
+}
+
+function appsSection(c, uid, state) {
+  var list;
+  if (state === "empty") list = '<p class="note">' + esc(c.empty) + '</p>';
+  else if (state === "failed") list = '<p class="note err" role="alert">' + esc(c.loadFailed) + '</p>';
+  else list = '<div class="app-row">' +
+      '<span class="chip" aria-hidden="true">' + icon("i-app") + '</span>' +
+      '<div class="grow"><span class="name" id="' + uid + '-name"><bdi>Claude</bdi></span><span class="meta">' + fill(c.approvedOn, { date: '<bdi>' + esc(c.date) + '</bdi>' }) + '</span></div>' +
+      '<button class="ghost-text" type="button" aria-describedby="' + uid + '-name">' + esc(c.remove) + '</button>' +
+    '</div>';
+  return '<section class="sec" aria-labelledby="' + uid + '-h">' +
+    '<h2 class="sec-h" id="' + uid + '-h">' + esc(c.title) + '</h2>' +
+    '<div class="card">' + list + '</div>' +
+    how(c, uid, state === "empty", state === "empty") +
+  '</section>';
+}
+
+function tabbar(c) {
+  function tab(id, label) { return '<span class="tab">' + icon(id) + '<span>' + esc(label) + '</span></span>'; }
+  return '<nav class="tabbar" aria-label="Main">' + tab("i-house", c.nav.home) + tab("i-list", c.nav.activity) +
+    '<span class="add"><span class="add-btn" aria-label="' + esc(c.nav.add) + '">' + icon("i-plus-b") + '</span><span aria-hidden="true">' + esc(c.nav.add) + '</span></span>' +
+    tab("i-pie", c.nav.budgets) + tab("i-wallet", c.nav.wallets) + '</nav>';
+}
+
+function sheet(c, uid) {
+  var name = '<bdi>Claude</bdi>';
+  return '<div class="backdrop"></div>' +
+    '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="' + uid + '-st">' +
+      '<div class="handle" aria-hidden="true"></div>' +
+      '<div class="sheet-body">' +
+        '<div class="sheet-head"><h2 class="sheet-title" id="' + uid + '-st">' + fill(c.removeConfirmTitle, { name: name }) + '</h2>' +
+          '<button class="ghost-icon" type="button" aria-label="' + esc(c.nav.close) + '">' + icon("i-x") + '</button></div>' +
+        '<div class="sheet-copy"><p>' + fill(c.removeConfirmBody, { name: name }) + '</p><p class="soft">' + esc(c.takesEffect) + '</p></div>' +
+      '</div>' +
+      '<div class="sheet-foot"><button class="btn-lg btn-outline" type="button">' + esc(c.cancel) + '</button>' +
+        '<button class="btn-lg btn-destructive" type="button">' + esc(c.remove) + '</button></div>' +
+    '</div>';
+}
+
+function phone(lang, state) {
+  var c = COPY[lang], uid = state + "-" + lang;
+  var appState = state === "remove" ? "listed" : state;
+  return '<div class="phone" lang="' + lang + '" dir="' + c.dir + '">' +
+    '<div class="page" ' + (state === "remove" ? 'inert' : '') + '>' + aboveSections(c) + keysSection(c) + appsSection(c, uid, appState) + '</div>' +
+    '<div class="fade"></div>' + tabbar(c) + (state === "remove" ? sheet(c, uid) : "") +
+  '</div>';
+}
+
+function strip(lang) {
+  var c = COPY[lang], uid = "failed-" + lang;
+  return '<div class="strip" lang="' + lang + '" dir="' + c.dir + '">' + appsSection(c, uid, "failed") + '</div>';
+}
+
+var LABELS = {
+  empty: "1 · No apps yet (help open)", listed: "2 · One app connected (help folded)", remove: "3 · Remove confirmation (bottom sheet)"
+};
+var html = "";
+["empty", "listed", "remove"].forEach(function (s) {
+  ["en", "ar"].forEach(function (l) {
+    html += '<figure id="' + s + "-" + l + '"><p class="label">' + LABELS[s] + " · " + l.toUpperCase() + '</p>' + phone(l, s) + '</figure>';
+  });
+});
+html += '<h2 class="sub-h">Could not load: one line in place of the list; the help stays reachable</h2>';
+["en", "ar"].forEach(function (l) {
+  html += '<figure id="failed-' + l + '"><p class="label">Could not load · ' + l.toUpperCase() + '</p>' + strip(l) + '</figure>';
+});
+document.getElementById("frames").innerHTML = html;
+
+var only = document.documentElement.getAttribute("data-only");
+if (only) { var f = document.getElementById(only); if (f) f.classList.add("is-only"); }
+</script>
+</body>
+</html>

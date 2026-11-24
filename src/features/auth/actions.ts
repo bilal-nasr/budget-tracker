@@ -1,7 +1,9 @@
 "use server";
 
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { siteBase } from "@/features/auth/redirect";
+import { forgetPendingAuthorization, hasPendingAuthorization, pendingAuthorizationAfterSignIn } from "@/features/connect/pending-authorization";
 import { forgetPendingJoin, hasPendingJoin, pendingJoinAfterSignIn } from "@/features/invoices/pending-join";
 import { redirect } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
@@ -55,6 +57,18 @@ const confirmUrl = (locale: string) =>
   `${siteBase(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000")}/auth/confirm?next=/${locale}/onboarding`;
 
 /**
+ * Where a sign-in continues when something was opened while signed out: a share link first,
+ * then an assistant app's authorization. Null means "go home as usual". Each lookup leaves its
+ * cookie in place for a new account, which finishes onboarding first, and a failing lookup
+ * never blocks the sign-in.
+ */
+async function pendingAfterSignIn(supabase: Pick<SupabaseClient, "from">, userId: string): Promise<string | null> {
+  const join = await pendingJoinAfterSignIn(supabase, userId).catch(() => null);
+  if (join) return join;
+  return pendingAuthorizationAfterSignIn(supabase, userId).catch(() => null);
+}
+
+/**
  * Sign-in with email and password. A wrong password and an unknown email give
  * the same message. An account that has not confirmed its email says so.
  */
@@ -78,24 +92,28 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
     return { error: error.code === "email_not_confirmed" ? "unconfirmed" : "credentials" };
   }
 
-  // A share link opened while signed out comes first; otherwise home, as before.
-  const next = data.user ? await pendingJoinAfterSignIn(supabase, data.user.id).catch(() => null) : null;
+  // A share link or an app authorization opened while signed out comes first; otherwise home, as before.
+  const next = data.user ? await pendingAfterSignIn(supabase, data.user.id) : null;
   redirect({ href: next ?? "/", locale: parsed.data.locale });
   return { error: null };
 }
 
 /**
- * The share link remembered before signing in, for sign-ins that finish in the browser
- * (a sign-in key) and for the end of onboarding. Null means "go home as usual".
+ * The share link or app authorization remembered before signing in, for sign-ins that finish
+ * in the browser (a sign-in key) and for the end of onboarding. Null means "go home as usual".
  */
 export async function afterSignInPath(): Promise<string | null> {
   if (!supabaseConfigured()) return null;
   try {
-    // Most people never open a share link: skip the auth round trip for them.
-    if (!(await hasPendingJoin())) return null;
+    // Most people never open a share link or connect an app: skip the auth round trip for them.
+    const [join, authorization] = await Promise.all([hasPendingJoin(), hasPendingAuthorization()]);
+    if (!join && !authorization) return null;
     const userId = await getUserId();
     if (!userId) return null;
-    return await pendingJoinAfterSignIn(await createClient(), userId);
+    const supabase = await createClient();
+    const path = join ? await pendingJoinAfterSignIn(supabase, userId) : null;
+    if (path) return path;
+    return authorization ? await pendingAuthorizationAfterSignIn(supabase, userId) : null;
   } catch {
     return null;
   }
@@ -206,7 +224,7 @@ export async function updatePassword(
     if (error.code === "weak_password" || error.code === "same_password") return { error: "weakPassword" };
     return { error: "failed" };
   }
-  const next = await pendingJoinAfterSignIn(supabase, userId).catch(() => null);
+  const next = await pendingAfterSignIn(supabase, userId);
   redirect({ href: next ?? "/", locale });
   return { error: null };
 }
@@ -234,7 +252,8 @@ export async function signOut(formData: FormData): Promise<void> {
     const supabase = await createClient();
     await supabase.auth.signOut();
   }
-  // A share link remembered for a sign-in must not outlive the person who opened it.
+  // A share link or app authorization remembered for a sign-in must not outlive the person who opened it.
   await forgetPendingJoin().catch(() => {});
+  await forgetPendingAuthorization().catch(() => {});
   redirect({ href: "/sign-in", locale });
 }

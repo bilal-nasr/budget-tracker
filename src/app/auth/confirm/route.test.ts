@@ -3,17 +3,21 @@ import { NextRequest } from "next/server";
 
 const verifyOtp = vi.hoisted(() => vi.fn());
 const pendingJoin = vi.hoisted(() => vi.fn());
+const pendingAuthorization = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { verifyOtp } }) }));
 vi.mock("@/features/invoices/pending-join", () => ({ pendingJoinAfterSignIn: pendingJoin }));
+vi.mock("@/features/connect/pending-authorization", () => ({ pendingAuthorizationAfterSignIn: pendingAuthorization }));
 import { GET } from "./route";
 
 const user = "ac000000-0000-4000-8000-000000000009";
 const token = "ab".repeat(32);
+const authorization = "3f1c6a2e-9b7d-4c1a-8e2f-0a1b2c3d4e5f";
 
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://budget.example");
   verifyOtp.mockReset().mockResolvedValue({ data: { user: { id: user } }, error: null });
   pendingJoin.mockReset().mockResolvedValue(null);
+  pendingAuthorization.mockReset().mockResolvedValue(null);
 });
 
 it.each(["en", "ar"])("%s: a confirmed, set-up account goes to the remembered share link", async (locale) => {
@@ -22,6 +26,31 @@ it.each(["en", "ar"])("%s: a confirmed, set-up account goes to the remembered sh
   expect(response.headers.get("location")).toBe(`https://budget.example/${locale}/invoices/join/${token}`);
   expect(pendingJoin).toHaveBeenCalledWith(expect.anything(), user);
   expect(response.headers.get("cache-control")).toContain("no-store");
+});
+
+it.each(["en", "ar"])("%s: with no share link, a confirmed, set-up account goes to the remembered authorization", async (locale) => {
+  pendingAuthorization.mockResolvedValue(`/connect?authorization_id=${authorization}`);
+  const response = await GET(new NextRequest(`https://internal.example/auth/confirm?type=email&token_hash=synthetic&next=/${locale}/onboarding`));
+  expect(response.headers.get("location")).toBe(`https://budget.example/${locale}/connect?authorization_id=${authorization}`);
+  expect(pendingAuthorization).toHaveBeenCalledWith(expect.anything(), user);
+});
+
+it("a remembered share link wins over a remembered authorization", async () => {
+  pendingJoin.mockResolvedValue(`/invoices/join/${token}`);
+  pendingAuthorization.mockResolvedValue(`/connect?authorization_id=${authorization}`);
+  const response = await GET(new NextRequest("https://internal.example/auth/confirm?type=email&token_hash=synthetic&next=/en/onboarding"));
+  expect(response.headers.get("location")).toBe(`https://budget.example/en/invoices/join/${token}`);
+  expect(pendingAuthorization).not.toHaveBeenCalled();
+});
+
+it("a reset link and a failed confirmation never take the remembered authorization", async () => {
+  pendingAuthorization.mockResolvedValue(`/connect?authorization_id=${authorization}`);
+  const reset = await GET(new NextRequest("https://internal.example/auth/confirm?type=recovery&token_hash=synthetic&next=/en/reset-password"));
+  expect(reset.headers.get("location")).toBe("https://budget.example/en/reset-password");
+  verifyOtp.mockResolvedValue({ data: { user: null }, error: { code: "otp_expired" } });
+  const failed = await GET(new NextRequest("https://internal.example/auth/confirm?type=email&token_hash=synthetic&next=/en/onboarding"));
+  expect(failed.headers.get("location")).toBe("https://budget.example/en/sign-in?error=link");
+  expect(pendingAuthorization).not.toHaveBeenCalled();
 });
 
 it("a new account still goes to onboarding (which uses the link when it finishes), and a reset link never takes it", async () => {

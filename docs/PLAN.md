@@ -143,6 +143,57 @@ Acceptance: report totals equal `month_summary`; charts usable by touch and keyb
 
 Acceptance: installs to the home screen on iPhone and Android and opens straight into the app; "Add expense" shortcut works; Lighthouse mobile ≥ 90 in Performance/Accessibility/Best Practices.
 
+## Phase 8: Claude connector (MCP) ◐
+
+Design: `docs/superpowers/specs/2026-11-24-mcp-connector-design.md`. Phase 1 below is built on the branch and proven locally only.
+
+### Connector phase 1: connect, sign in, read
+
+- [x] `/mcp` endpoint with bearer-token identity, no cookies; discovery route.
+- [x] Consent screen at `/[locale]/connect` (EN and AR) with sign-in return, built to the approved mockup.
+- [x] 17 read tools.
+- [x] `pnpm test:mcp` passes (16 groups now, see hardening below) against the local Supabase stack (401s, discovery, real and tampered tokens, cookie alone rejected, 17 tools, each tool, cross-account isolation, cleanup).
+- [x] Real local OAuth flow checked: register, sign in, Allow (code and token), Deny (`access_denied`), repeat authorize skips the screen, token accepted by `/mcp`.
+- [ ] Hosted switch-on (see "Hosted go-live checklist" in `docs/ARCHITECTURE.md` §10) and a real connection from Claude.
+- Clean-up from the build ledger and the final review:
+  - [x] `transactions_list`: settlement tender, extra tenders, change, item lines and a transfer's received amount formatted in their own currencies; description says which currency each amount is in.
+  - [x] `installments_list` no longer promises (or returns) a payment history it never fills.
+  - [x] `loans_list` / `loans_history` say archived and deleted rows are included and flagged; `invoices_folder_get` says the owner also sees removed members; `fixed_expenses_list` describes `paidOn` as the query computes it.
+  - [x] Database errors in tool reads (`fetchTransactions`, `getFixedExpenses`, `getSalaryReceiptDates`, `getProfile`) throw inside a connector request instead of answering "nothing"; browser behaviour unchanged.
+  - [x] A Supabase Auth outage while checking a token answers 500, not 401 `invalid_token`.
+  - [x] Discovery metadata fetch has a 5 s timeout; unknown well-known paths are a 404 before any fetch.
+  - [x] Consent screen cannot be framed (`frame-ancestors 'none'`, `X-Frame-Options: DENY`); the "remove its access later in Settings" line is gone until that screen exists.
+  - [x] Transaction cursor `createdAt` accepts timestamp characters only.
+  - [x] `pnpm test:mcp` confirms the app uses the local stack before running, proves its session cookie signs in on a page before checking it is refused at `/mcp`, and checks `wallets_list` shows the new balance formatted.
+  - [ ] "Expired claims" route test.
+- [x] Settings "Connected apps": list of approved apps with Remove behind a confirm sheet, and a "Connect Claude" help block (address and app id). Built to the approved mockup, EN and AR, with component and e2e tests.
+- [x] Authorization-id question decided: an id nobody has opened yet can be approved by the first signed-in person who opens it; once opened, other accounts get 404. Accepted and documented (`docs/ARCHITECTURE.md` §10). No repeatable test pins it.
+
+### Connector hardening (design §9): proven locally, hosted steps open
+
+- [x] Connected apps are read-only in the database: `connector_request_guard()` as the PostgREST pre-request hook, read-function allowlist, read-only transaction, share-link tokens hidden from apps; `supabase/tests/connector_read_only.test.sql` passes.
+- [x] Only registered apps are accepted (`connector_clients`, `pnpm connector:register`), by the database and by `/mcp`; dynamic registration is off locally.
+- [x] Removing an app cuts it off: the database refuses its token at once, `/mcp` within about a minute, the Auth API and refresh at once (measured by `pnpm test:mcp`, group f).
+- [x] `pnpm test:mcp` passes all 19 groups against the local stack with `MCP_ACCEPT_PASSWORD_RESIDUAL=1`, including all 17 tools with a real OAuth-issued token for a registered app. Without the flag the two password groups fail, as they should while the residual is open.
+- [x] Password and self-approval measured: with secure password change on, an app's token can change the password while its session is under 24 hours old, and it can approve a new authorization for its own app (a new session, a new window). "Require current password" closes the password case (measured on a temporary local Auth container; the reset link still works). Written down in `docs/ARCHITECTURE.md` §10.
+- [x] Global sign-out measured (`pnpm test:mcp`, group g): the app's token stops working, but Settings still lists the app. Behaviour unchanged; owner decides.
+- [x] `pnpm connector:smoke` proves the guard on a project with a throwaway user and app (local stack only so far).
+- [ ] Owner decision: turn on "Require current password when changing password" on hosted, or accept the account-takeover residual in writing.
+- [ ] Hosted: the go-live checklist in `docs/ARCHITECTURE.md` §10 (migrations, hook SQL check, dashboard settings, register Claude, deploy, `pnpm connector:smoke`).
+- [ ] Hosted: a real connection from Claude, then remove it in Settings and confirm access ends within about a minute.
+
+Acceptance: Claude connects to a publicly reachable instance and answers "what did I spend this month?" from the person's own data only.
+
+### Connector phase 2: everyday writes
+
+- [ ] Transactions, transfers, wallets, categories, budgets, shopping items.
+- [ ] Create tools take an optional `requestId`; revision-guarded actions require the `revision` from a read.
+- [ ] Deletes, voids and cancels marked destructive; a completeness test fails when a server action is neither a tool nor excluded.
+
+### Connector phase 3: everything else
+
+- [ ] Invoices, loans, installments, fixed expenses, pending payments, salary, currencies, profile.
+
 ---
 
 ## Later (not scheduled)

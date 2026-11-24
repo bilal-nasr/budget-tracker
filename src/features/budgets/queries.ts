@@ -4,6 +4,7 @@ import { getCategories } from "@/features/categories/queries";
 import { demoBudgetData } from "@/lib/demo-data";
 import { readMinor } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
+import { throwInConnector } from "@/lib/supabase/request-context";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import { buildMonthBudgets } from "./rows";
 import type { SpendCycle } from "./cycles";
@@ -28,7 +29,11 @@ export const getSalaryReceiptDates = cache(async (): Promise<string[]> => {
   const { data, error } = await supabase.from("transactions").select("occurred_on")
     .eq("source", "salary").eq("kind", "income").is("deleted_at", null)
     .order("occurred_on", { ascending: false }).limit(240);
-  if (error) { console.error("[getSalaryReceiptDates]", error.message); return []; }
+  if (error) {
+    console.error("[getSalaryReceiptDates]", error.message);
+    throwInConnector("Salary receipts unavailable");
+    return [];
+  }
   return (data ?? []).map((row) => row.occurred_on);
 });
 

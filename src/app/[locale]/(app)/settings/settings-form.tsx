@@ -35,7 +35,7 @@ function NavRow({ href, title, hint }: { href: "/settings/categories" | "/settin
   );
 }
 
-export function SettingsForm({ profile }: { profile: Profile }) {
+export function SettingsForm({ profile, connectedApps }: { profile: Profile; connectedApps?: React.ReactNode }) {
   const t = useTranslations("Settings");
   const { enabledCurrencies } = useAppData();
   const defaultCurrency = profile.defaultCurrency ?? null;
@@ -153,6 +153,8 @@ export function SettingsForm({ profile }: { profile: Profile }) {
       </section>
 
       <PasskeysSection />
+
+      {connectedApps}
 
       <ExportButton />
 

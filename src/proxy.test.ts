@@ -192,6 +192,66 @@ describe("session and locale response composition", () => {
     });
   });
 
+  describe("remembering an app authorization for a signed-out visitor", () => {
+    const id = "3f1c6a2e-9b7d-4c1a-8e2f-0a1b2c3d4e5f";
+
+    it.each(["en", "ar"])("%s: sends the visitor to sign in (without the id in the address) and remembers it for an hour", async (locale) => {
+      auth.email = null;
+      const response = await proxy(new NextRequest(`https://budget.example/${locale}/connect?authorization_id=${id}`));
+      expect(response.headers.get("location")).toBe(`https://budget.example/${locale}/sign-in`);
+      expect(response.cookies.get("connect_authorization")).toMatchObject({
+        value: id, path: "/", httpOnly: true, sameSite: "lax", maxAge: 3600, secure: true,
+      });
+      expect(response.cookies.has("join_invoice")).toBe(false);
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+      expectCookies(response);
+    });
+
+    it.each([
+      "/en/connect",
+      "/en/connect?authorization_id=",
+      "/en/connect?authorization_id=short",
+      "/en/connect?authorization_id=..%2F..%2Fevil",
+      `/en/connect/extra?authorization_id=${id}`,
+      `/en/wallets?authorization_id=${id}`,
+      `/fr/connect?authorization_id=${id}`,
+    ])("does not remember anything for %s", async (path) => {
+      auth.email = null;
+      const response = await proxy(new NextRequest(`https://budget.example${path}`));
+      expect(response.cookies.has("connect_authorization")).toBe(false);
+    });
+
+    it("is not a public page: a signed-out visitor never reaches it", async () => {
+      auth.email = null;
+      const response = await proxy(new NextRequest("https://budget.example/en/connect"));
+      expect(response.headers.get("location")).toBe("https://budget.example/en/sign-in");
+    });
+
+    it("lets a signed-in person open it without remembering it, with no referrer sent onwards", async () => {
+      const response = await proxy(new NextRequest(`https://budget.example/ar/connect?authorization_id=${id}`));
+      expect(response.headers.has("location")).toBe(false);
+      expect(response.cookies.has("connect_authorization")).toBe(false);
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    });
+
+    it("may not be framed by another site, signed in or not (redirects included)", async () => {
+      const framing = (response: Response) => [response.headers.get("content-security-policy"), response.headers.get("x-frame-options")];
+      auth.email = null;
+      const redirect = await proxy(new NextRequest(`https://budget.example/en/connect?authorization_id=${id}`));
+      expect(redirect.headers.get("location")).toBe("https://budget.example/en/sign-in");
+      expect(framing(redirect)).toEqual(["frame-ancestors 'none'", "DENY"]);
+      auth.email = "PERSON@example.test";
+      for (const path of [`/ar/connect?authorization_id=${id}`, "/en/connect/"]) {
+        expect(framing(await proxy(new NextRequest(`https://budget.example${path}`))), path).toEqual(["frame-ancestors 'none'", "DENY"]);
+      }
+      // Other pages keep today's headers.
+      const other = await proxy(new NextRequest("https://budget.example/en/wallets"));
+      expect(framing(other)).toEqual([null, null]);
+      const join = await proxy(new NextRequest("https://budget.example/en/invoices/join/" + "a".repeat(64)));
+      expect(framing(join)).toEqual([null, null]);
+    });
+  });
+
   it("keeps auth decisions private even when no token refresh writes cookies", async () => {
     auth.writes = [];
     auth.headers = {};

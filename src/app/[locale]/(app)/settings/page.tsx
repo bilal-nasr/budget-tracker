@@ -1,9 +1,10 @@
 import { useTranslations } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
-import { use } from "react";
+import { Suspense, use } from "react";
 import { PageBody } from "@/components/shell/page-body";
 import { ScreenHeader } from "@/components/shell/screen-header";
 import { getProfile } from "@/features/profile/queries";
+import { ConnectedAppsSection, ConnectedAppsSkeleton } from "./connected-apps-section";
 import { SettingsForm } from "./settings-form";
 
 function SettingsView({ profilePromise }: { profilePromise: ReturnType<typeof getProfile> }) {
@@ -13,7 +14,14 @@ function SettingsView({ profilePromise }: { profilePromise: ReturnType<typeof ge
     <>
       <ScreenHeader title={t("settings")} />
       <PageBody className="lg:max-w-[640px]">
-        <SettingsForm profile={profile} />
+        <SettingsForm
+          profile={profile}
+          connectedApps={
+            <Suspense fallback={<ConnectedAppsSkeleton />}>
+              <ConnectedAppsSection />
+            </Suspense>
+          }
+        />
       </PageBody>
     </>
   );

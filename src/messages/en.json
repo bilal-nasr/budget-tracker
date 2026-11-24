@@ -254,7 +254,33 @@
     "passkeyDomain": "Sign-in keys are not set up for this address yet.",
     "passkeyUnsupported": "This browser cannot use sign-in keys.",
     "passkeyFailed": "Could not complete that. Try again.",
-    "passkeyDisabled": "Sign-in keys are not turned on for this server yet."
+    "passkeyDisabled": "Sign-in keys are not turned on for this server yet.",
+    "connectedApps": {
+      "title": "Connected apps",
+      "empty": "No apps connected yet.",
+      "unnamedApp": "Unnamed app",
+      "approvedOn": "Allowed <bdi>{date}</bdi>",
+      "remove": "Remove",
+      "removeNamed": "Remove {name}",
+      "removeConfirmTitle": "Remove <bdi>{name}</bdi>?",
+      "removeConfirmBody": "<bdi>{name}</bdi> will no longer be able to see your budget.",
+      "takesEffect": "This can take up to a minute to take effect.",
+      "cancel": "Cancel",
+      "removed": "App removed",
+      "removeFailed": "Could not remove the app. Try again.",
+      "loadFailed": "Could not load your connected apps. Try again.",
+      "howTitle": "Connect <bdi>Claude</bdi>",
+      "howStep1": "In <bdi>Claude</bdi>, add a custom connector.",
+      "howStep2": "Paste this address as its URL.",
+      "howStep3": "Open Advanced settings and paste this app ID as the <term>OAuth Client ID</term>.",
+      "address": "Connector address",
+      "appId": "App ID",
+      "copyAddress": "Copy connector address",
+      "copyAppId": "Copy app ID",
+      "copyAppIdNamed": "Copy app ID for {name}",
+      "copied": "Copied",
+      "copyFailed": "Could not copy here. Select the text above and copy it yourself."
+    }
   },
   "CurrencySettings": {
     "title": "Currencies",
@@ -1423,5 +1449,21 @@
     "stillToPay": "Still to pay",
     "stillToPayLabel": "Still to pay by currency",
     "allPaid": "Everything is paid"
+  },
+  "connect": {
+    "title": "Allow this app to use your account?",
+    "intro": "If you allow it, this app can:",
+    "appName": "Name it gives itself",
+    "sendsTo": "Your approval is sent to",
+    "canRead": "See your wallets, activity, budgets, invoices and the rest of your budget.",
+    "removeLater": "You can remove its access later in Settings.",
+    "cannotSeePassword": "It cannot see your password.",
+    "signedInAs": "Signed in as <bdi>{email}</bdi>",
+    "allow": "Allow",
+    "deny": "Deny",
+    "failed": "Could not send your answer. Try again.",
+    "expiredTitle": "This link no longer works",
+    "expiredBody": "This link has expired. Go back to the app and start connecting again.",
+    "backHome": "Go to Budget Tracker"
   }
 }

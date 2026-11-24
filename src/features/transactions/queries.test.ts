@@ -3,7 +3,9 @@ const mock = vi.hoisted(() => ({ createClient: vi.fn(), configured: vi.fn(), fro
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mock.createClient }));
 vi.mock("@/lib/supabase/proxy", () => ({ supabaseConfigured: mock.configured }));
+import { runAsConnector } from "@/lib/supabase/request-context";
 import { fetchTransactions } from "./queries";
+import { cursorSchema } from "./schema";
 import { emptySettlementRow } from "./settlement-serialization";
 
 let query: Record<string, ReturnType<typeof vi.fn>>;
@@ -81,5 +83,51 @@ describe("complete transaction reads", () => {
     expect(page.rows[0]).toMatchObject({ amountMinor: 1250, kind: "expense", settlement: { tenderMinor: 2000, changes: [
       { amountMinor: 500, currency: "USD" }, { amountMinor: 223750, currency: "LBP" },
     ] } });
+  });
+});
+
+describe("database errors", () => {
+  const failing = () => query.then.mockImplementation((resolve) => Promise.resolve({ data: null, error: { message: "relation missing" } }).then(resolve));
+  it("an ordinary (browser) request keeps today's empty page", async () => {
+    failing();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(fetchTransactions({}, null)).resolves.toEqual({ rows: [], next: null });
+  });
+  it("a connector request throws instead of answering with an empty page", async () => {
+    failing();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(runAsConnector({ accessToken: "t", userId: "u" }, () => fetchTransactions({}, null))).rejects.toThrow(Error);
+  });
+});
+
+describe("cursor", () => {
+  it("the page's own next cursor (Supabase timestamptz text) parses as a cursor", async () => {
+    // What PostgREST returns for created_at: microseconds and an explicit offset.
+    query.then.mockImplementation((resolve) => Promise.resolve({ data: [
+      { ...row(1), created_at: "2026-11-04T12:00:01.123456+00:00" }, row(2),
+    ], error: null }).then(resolve));
+    const page = await fetchTransactions({}, null, 1);
+    expect(page.next).toEqual({ occurredOn: "2026-11-04", createdAt: "2026-11-04T12:00:01.123456+00:00", id: row(1).id });
+    expect(cursorSchema.parse(page.next)).toEqual(page.next);
+  });
+  it.each([
+    "2026-11-04T12:00:01Z", "2026-11-04T12:00:01.5+03:00", "2026-11-04 12:00:01.123456-05", "2026-11-04T12:00:01.123456+00:00",
+  ])("accepts the timestamp %s", (createdAt) => {
+    expect(cursorSchema.safeParse({ occurredOn: "2026-11-04", createdAt, id: row(1).id }).success).toBe(true);
+  });
+  it.each([
+    ['a quote', '2026-11-04T12:00:01Z"'],
+    ["a comma", "2026-11-04T12:00:01Z,id.gt.0"],
+    ["parentheses", "2026-11-04T12:00:01Z),or(id.gt.0"],
+    ["letters", "now"],
+    ["a backslash", "2026-11-04\\T12"],
+    ["over 40 characters", "2026-11-04T12:00:01.123456789012345678+00:00"],
+    ["nothing", ""],
+  ])("rejects %s in createdAt", (_name, createdAt) => {
+    expect(cursorSchema.safeParse({ occurredOn: "2026-11-04", createdAt, id: row(1).id }).success).toBe(false);
+  });
+  it("the other cursor fields are strict too", () => {
+    expect(cursorSchema.safeParse({ occurredOn: "2026-11-04,x", createdAt: "2026-11-04T12:00:01Z", id: row(1).id }).success).toBe(false);
+    expect(cursorSchema.safeParse({ occurredOn: "2026-11-04", createdAt: "2026-11-04T12:00:01Z", id: "x),or(id.gt.0" }).success).toBe(false);
   });
 });

@@ -4,26 +4,21 @@ import { hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import { routing } from "@/i18n/routing";
 import { HomeView, HomeBudgetSummary, HomeCommitments, HomeRecent } from "@/components/home/home-view";
-import { buildCycles, pickCycle } from "@/features/budgets/cycles";
-import { getMonthBudgets, getSalaryReceiptDates } from "@/features/budgets/queries";
+import { getSpendingSummary } from "@/features/budgets/summary";
 import { getFixedExpenses } from "@/features/fixed/queries";
 import { getCycleSummary } from "@/features/installments/queries";
 import { getProfile } from "@/features/profile/queries";
 import { salaryStatusFromReceipt } from "@/features/salary/schema";
-import { todayIn } from "@/features/transactions/group";
 import { fetchTransactions } from "@/features/transactions/queries";
 import { timed } from "@/lib/timing";
-import { getCurrencies } from "@/features/currencies/queries";
 
 type ProfilePromise = ReturnType<typeof getProfile>;
 
 async function BudgetData({ profile }: { profile: ProfilePromise }) {
   const { timezone } = await profile;
-  const month = todayIn(timezone).slice(0, 7);
-  const currencies = await getCurrencies();
-  const cycle = pickCycle(buildCycles(await getSalaryReceiptDates()), null);
-  const budgets = await Promise.all(currencies.filter((currency) => !currency.disabled).map((c) => timed("home.budgets", () => getMonthBudgets(cycle ? cycle.from.slice(0, 7) : month, c.code, cycle ?? undefined))));
-  return <HomeBudgetSummary cycle={cycle !== null} budgets={budgets.filter((b) => b.totalLimitMinor > 0)} />;
+  const { calendarMonth, salaryCycle } = await timed("home.budgets", () => getSpendingSummary(timezone, "active"));
+  const budgets = salaryCycle?.budgets ?? calendarMonth?.budgets ?? [];
+  return <HomeBudgetSummary cycle={salaryCycle !== null} budgets={budgets.filter((b) => b.totalLimitMinor > 0)} />;
 }
 
 async function CommitmentData({ profile }: { profile: ProfilePromise }) {

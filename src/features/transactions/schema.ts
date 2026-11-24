@@ -80,10 +80,14 @@ export function emptyTransactionMetadata() {
   };
 }
 
-/** Keyset cursor: the last row of the previous page. */
+/**
+ * Keyset cursor: the last row of the previous page. `createdAt` is spliced into a PostgREST
+ * `or()` filter, so it accepts timestamp characters only (as Supabase returns timestamptz,
+ * e.g. 2026-11-04T12:00:01.123456+00:00): no quotes, commas, parentheses or letters.
+ */
 export const cursorSchema = z.object({
   occurredOn: isoDate,
-  createdAt: z.string().min(1),
+  createdAt: z.string().regex(/^[0-9T :.+Z-]{1,40}$/),
   id: z.uuid(),
 });
 export type Cursor = z.infer<typeof cursorSchema>;

@@ -26,7 +26,10 @@ pnpm test:e2e       # Playwright (mobile-small, iphone, android, desktop × en/a
 pnpm db:start       # supabase start (local stack, Docker)
 pnpm db:reset       # re-apply migrations + seed
 pnpm db:types       # supabase gen types → src/lib/supabase/database.types.ts
+pnpm test:mcp       # connector end-to-end check on the local Supabase stack; needs the app running against it
 pnpm owner:create   # create a confirmed account without email (needs SUPABASE_SECRET_KEY)
+pnpm connector:register "<name>"   # register an app that may connect to /mcp (--remove <id> to remove)
+pnpm connector:smoke    # prove the connector's database guard on the project .env.local points at (throwaway user + app, always deleted)
 ```
 
 (Scripts are added in Phase 0; keep this list in sync with `package.json`.)
@@ -54,6 +57,12 @@ pnpm owner:create   # create a confirmed account without email (needs SUPABASE_S
 - RLS on every table (`user_id = (select auth.uid())`). App code uses the publishable key + user session; the secret key is for scripts only and never imported under `src/`.
 - Reads in Server Components; writes in Server Actions validated with zod.
 - Open sign-up with email verification: an account works only after its confirmation link is opened (`/auth/confirm`). RLS on `user_id` isolates accounts; `supabase/tests/isolation.test.sql` pins it. There is no owner allowlist.
+
+**Connector** (`docs/ARCHITECTURE.md` §10)
+- Connector requests never use cookies; the bearer token is the only identity.
+- Every tool goes through `defineTool` in a feature's `mcp.ts` and is registered in `src/lib/mcp/registry.ts`.
+- Connected apps are read-only in the database; a new write must be opened in the request guard (`connector_request_guard()`, `supabase/migrations/20261209000000_connector_read_only.sql`).
+- Errors the model sees are fixed English sentences via `ToolError`, never database text.
 
 **UI process**
 - Use the `impeccable` skill before any UI work (global rule). New screens get a mockup/screenshot for the owner before full build.

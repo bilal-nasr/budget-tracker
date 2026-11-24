@@ -1,6 +1,7 @@
 import "server-only";
 import { demoPage } from "@/lib/demo-data";
 import { createClient } from "@/lib/supabase/server";
+import { throwInConnector } from "@/lib/supabase/request-context";
 import { supabaseConfigured } from "@/lib/supabase/proxy";
 import type { Cursor, Filters, Page, Transaction } from "./schema";
 import { readMinor } from "@/lib/money";
@@ -114,6 +115,7 @@ export async function fetchTransactions(
   const { data, error } = await query;
   if (error || !data) {
     console.error("[fetchTransactions]", error?.message);
+    throwInConnector("Transactions unavailable");
     return { rows: [], next: null };
   }
 

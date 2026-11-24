@@ -1,5 +1,6 @@
 import createIntlMiddleware from "next-intl/middleware";
 import { NextResponse, type NextRequest } from "next/server";
+import { rememberAuthorization } from "./features/connect/pending-authorization";
 import { rememberJoin } from "./features/invoices/pending-join";
 import { routing } from "./i18n/routing";
 import { copySessionResponse, refreshSession, supabaseConfigured } from "./lib/supabase/proxy";
@@ -13,6 +14,9 @@ const PUBLIC = /^\/(en|ar)\/(sign-in|sign-up|check-email|forgot-password)\/?$/;
 const AUTHENTICATED_API = /^\/(en|ar)\/settings\/export\/?$/;
 // A share link. A signed-out visitor's link is remembered so they come back to it after signing in.
 const JOIN_LINK = /^\/(en|ar)\/invoices\/join\/([0-9a-f]{64})\/?$/;
+// The consent screen for an assistant app asking to connect. Not public: a signed-out visitor's
+// authorization id is remembered so they come back to it after signing in.
+const CONNECT = /^\/(en|ar)\/connect\/?$/;
 
 /**
  * Whether the visitor reached the app over HTTPS. The app is self-hosted behind a TLS-terminating
@@ -35,8 +39,15 @@ export async function proxy(request: NextRequest) {
   // sees the rotated cookies and does not try to refresh the old token again.
   const response = intl(request);
   const finish = (target: NextResponse) => {
-    // The share link's token is in the address, so nothing opened from that page may be told where it came from.
-    if (JOIN_LINK.test(request.nextUrl.pathname)) target.headers.set("Referrer-Policy", "no-referrer");
+    // The share link's token and the authorization id are in the address, so nothing opened
+    // from those pages (including the app the approval is sent to) may be told where it came from.
+    const { pathname } = request.nextUrl;
+    if (JOIN_LINK.test(pathname) || CONNECT.test(pathname)) target.headers.set("Referrer-Policy", "no-referrer");
+    // The consent screen must never be framed by another site, or Allow could be clickjacked.
+    if (CONNECT.test(pathname)) {
+      target.headers.set("Content-Security-Policy", "frame-ancestors 'none'");
+      target.headers.set("X-Frame-Options", "DENY");
+    }
     return copySessionResponse(sessionResponse, target);
   };
 
@@ -51,10 +62,18 @@ export async function proxy(request: NextRequest) {
       : routing.defaultLocale;
     const url = request.nextUrl.clone();
     url.pathname = `/${target}/sign-in`;
+    const join = JOIN_LINK.exec(pathname);
+    const connect = CONNECT.test(pathname);
+    // The authorization id is remembered in a cookie; it has no business in the sign-in address.
+    if (connect) url.search = "";
     const targetResponse = NextResponse.redirect(url);
     response.cookies.getAll().forEach((cookie) => targetResponse.cookies.set(cookie));
-    const join = JOIN_LINK.exec(pathname);
-    const remembered = join ? rememberJoin(join[2], { secure: viaHttps(request) }) : null;
+    const secure = viaHttps(request);
+    const remembered = join
+      ? rememberJoin(join[2], { secure })
+      : connect
+        ? rememberAuthorization(request.nextUrl.searchParams.get("authorization_id") ?? "", { secure })
+        : null;
     if (remembered) targetResponse.cookies.set(remembered);
     return finish(targetResponse);
   }

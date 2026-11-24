@@ -1,6 +1,6 @@
 import { TileBand } from "@/components/tiles/tile-band";
 
-/** Teal header with a title and a narrow form column, shared by sign-in, sign-up and check-email. */
+/** Teal header with a title and a narrow form column, shared by sign-in, sign-up, check-email and connect. */
 export function AuthShell({
   appName,
   title,
@@ -9,7 +9,7 @@ export function AuthShell({
 }: {
   appName: string;
   title: string;
-  body: string;
+  body: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -17,8 +17,9 @@ export function AuthShell({
       <header className="bg-shell text-shell-foreground">
         <div className="mx-auto max-w-[440px] px-4 pt-[calc(2.5rem+var(--safe-top))] pb-8">
           <p className="text-[15px] text-shell-muted">{appName}</p>
-          <h1 className="mt-1 text-[28px] leading-tight font-bold tracking-tight">{title}</h1>
-          <p className="mt-2 text-[15px] text-shell-muted">{body}</p>
+          {/* Arabic letters join, so the Latin tightening is dropped and the line opened up in RTL. */}
+          <h1 className="mt-1 text-[28px] leading-tight font-bold tracking-tight text-balance rtl:leading-[1.4] rtl:tracking-normal">{title}</h1>
+          {body ? <p className="mt-2 text-[15px] text-shell-muted">{body}</p> : null}
         </div>
         <TileBand />
       </header>

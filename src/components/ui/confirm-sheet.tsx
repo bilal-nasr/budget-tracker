@@ -20,7 +20,7 @@ export function ConfirmSheet({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   confirmLabel: string;
   cancelLabel: string;
