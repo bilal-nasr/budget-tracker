@@ -61,7 +61,8 @@ pnpm connector:smoke    # prove the connector's database guard on the project .e
 **Connector** (`docs/ARCHITECTURE.md` §10)
 - Connector requests never use cookies; the bearer token is the only identity.
 - Every tool goes through `defineTool` in a feature's `mcp.ts` and is registered in `src/lib/mcp/registry.ts`.
-- Connected apps are read-only in the database; a new write must be opened in the request guard (`connector_request_guard()`, `supabase/migrations/20261209000000_connector_read_only.sql`).
+- In the database a connected app may read and make only the writes listed in the request guard (`connector_request_guard()`, latest definition in `supabase/migrations/20261210000000_connector_writes.sql`); a new write tool needs a new migration that adds it to the list, with a case in `supabase/tests/connector_writes.test.sql`.
+- Write tools call the feature's existing Server Action, convert its result with `unwrap()`, take a strict input, and make creates retry-safe with `requestId` (`src/lib/mcp/write.ts`).
 - Errors the model sees are fixed English sentences via `ToolError`, never database text.
 
 **UI process**

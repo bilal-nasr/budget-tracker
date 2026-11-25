@@ -1,4 +1,4 @@
-import { AppWindow, Eye, Globe, Lock } from "lucide-react";
+import { AppWindow, Eye, Globe, Lock, Pencil } from "lucide-react";
 import { redirect as redirectAway } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { AuthShell } from "@/components/shell/auth-shell";
@@ -80,6 +80,10 @@ export default async function ConnectPage({ params, searchParams }: PageProps<"/
           <li className="flex items-start gap-3">
             <Eye aria-hidden className="mt-px size-5 flex-none text-primary" strokeWidth={1.75} />
             <span>{t("canRead")}</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <Pencil aria-hidden className="mt-px size-5 flex-none text-primary" strokeWidth={1.75} />
+            <span>{t("canChange")}</span>
           </li>
         </ul>
         <p className="mt-3.5 flex items-start gap-3 border-t border-border pt-3.5 text-[15px] leading-normal text-muted-foreground">

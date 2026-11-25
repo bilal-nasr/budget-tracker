@@ -1,8 +1,10 @@
 // End-to-end check of the /mcp connector endpoint with real Supabase tokens: auth gate,
-// discovery, the 17 read-only tools, account isolation between two fresh users, and the
+// discovery, the 55 tools (17 read, 38 write), account isolation between two fresh users, and the
 // approved-apps-only hardening with a real OAuth-issued token (no browser): /mcp and the
-// database API accept a registered app's token for reads only, removing the app shuts it
-// out, self-registration is off, and all 17 tools work with that token too (through the guard).
+// database API accept a registered app's token for reads and for the listed writes only, removing
+// the app shuts it out, self-registration is off, all 17 read tools work with that token (through
+// the guard), and the write tools change A's data with it: retry keys never post twice, balances
+// come back, B's account is untouched and B cannot change A's rows.
 // What the app's token can do to the account through Supabase Auth is measured: whether it can
 // change the password, and whether it can approve a new authorization request for its own app
 // (self-approval, which would give it a fresh session). Either one FAILS the run unless
@@ -44,12 +46,27 @@ import { createClient } from "@supabase/supabase-js";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { claimsOf, codeFromRedirect, exchangeCode, headlessAppTokens, refreshAppTokens, startAuthorization } from "./lib/connector-oauth.mjs";
 
-const EXPECTED_TOOLS = [
+const READ_TOOLS = [
   "profile_get", "currencies_list", "wallets_list", "categories_list", "transactions_list", "summary_get",
   "budgets_get", "fixed_expenses_list", "installments_list", "salary_status_get", "loans_list", "loans_history",
   "pending_payments_list", "pending_payments_receipts", "shopping_items_list", "invoices_folders_list",
   "invoices_folder_get",
 ];
+// Deletes, voids and balance adjustments: the client is told to ask first (destructiveHint).
+const DESTRUCTIVE_TOOLS = [
+  "wallets_delete", "wallets_adjust_balance", "transactions_delete", "categories_delete", "budgets_delete",
+  "fixed_expenses_delete", "installments_delete", "loans_delete", "loans_delete_payment", "pending_payments_delete",
+  "shopping_items_delete", "invoices_folders_delete",
+];
+const WRITE_TOOLS = [
+  "wallets_create", "wallets_update", "transactions_create", "transactions_update", "transactions_restore",
+  "categories_create", "categories_update", "categories_restore", "budgets_set", "fixed_expenses_create",
+  "fixed_expenses_update", "installments_create", "installments_update", "loans_create", "loans_update",
+  "loans_record_payment", "pending_payments_create", "pending_payments_update", "pending_payments_record_receipt",
+  "salary_update", "salary_mark_received", "profile_update", "shopping_items_create", "shopping_items_update",
+  "invoices_folders_create", "invoices_folders_update",
+];
+const EXPECTED_TOOLS = [...READ_TOOLS, ...WRITE_TOOLS, ...DESTRUCTIVE_TOOLS];
 const NO_INPUT_TOOLS = [
   "profile_get", "currencies_list", "wallets_list", "categories_list", "summary_get", "fixed_expenses_list",
   "installments_list", "salary_status_get", "loans_list", "pending_payments_list", "shopping_items_list",
@@ -273,7 +290,7 @@ function data(result, name) {
 }
 
 /**
- * Calls each of the 17 tools once through `client`: every no-input tool, transactions_list {},
+ * Calls each of the 17 read tools once through `client`: every no-input tool, transactions_list {},
  * budgets_get for a listed currency, and the id tools with unknown ids (empty pages /
  * "Folder not found."). Returns the collector's `finish` and the currency used, so the caller
  * names the group.
@@ -308,7 +325,7 @@ async function allTools(client) {
     check(missing.isError === true && textOf(missing) === FOLDER_NOT_FOUND, `unknown id: ${short(missing)}`);
   });
   await attempt("every tool called", async () => {
-    const missing = EXPECTED_TOOLS.filter((name) => !called.has(name));
+    const missing = READ_TOOLS.filter((name) => !called.has(name));
     check(missing.length === 0, `not called: ${short(missing)}`);
   });
   return { currencyCode, finish };
@@ -480,7 +497,7 @@ try {
     ok(`A's @supabase/ssr session cookie (${cookie.split("=")[0]}) signs A in on a browser page (GET /en/wallets → ${page.status}${landed ? ` ${landed}` : ""}), yet the same cookie with no Authorization header is 401 at /mcp`);
   });
 
-  // 5. Exactly the 17 tools, all read-only.
+  // 5. Exactly the 55 tools, each with the hints of its kind.
   const clientA = await connect(a);
   clients.push(clientA);
   const clientB = await connect(b);
@@ -496,15 +513,21 @@ try {
     const names = tools.map((tool) => tool.name).sort();
     check(JSON.stringify(names) === JSON.stringify([...EXPECTED_TOOLS].sort()),
       `tool list mismatch. extra: ${short(names.filter((n) => !EXPECTED_TOOLS.includes(n)))} missing: ${short(EXPECTED_TOOLS.filter((n) => !names.includes(n)))}`);
-    const notReadOnly = tools.filter((tool) => tool.annotations?.readOnlyHint !== true).map((tool) => tool.name);
-    check(notReadOnly.length === 0, `tools without readOnlyHint: true: ${short(notReadOnly)}`);
-    ok(`listTools as A (bearer via requestInit.headers) returns exactly the ${EXPECTED_TOOLS.length} expected tools, each readOnlyHint: true`);
+    const wrong = tools.filter((tool) => {
+      const hints = tool.annotations ?? {};
+      if (READ_TOOLS.includes(tool.name)) return hints.readOnlyHint !== true;
+      return hints.readOnlyHint !== false || hints.destructiveHint !== DESTRUCTIVE_TOOLS.includes(tool.name);
+    }).map((tool) => tool.name);
+    check(wrong.length === 0, `tools with the wrong hints: ${short(wrong)}`);
+    const loose = tools.filter((tool) => !READ_TOOLS.includes(tool.name) && tool.inputSchema?.additionalProperties !== false).map((tool) => tool.name);
+    check(loose.length === 0, `write tools whose input schema allows unknown keys: ${short(loose)}`);
+    ok(`listTools as A (bearer via requestInit.headers) returns exactly the ${EXPECTED_TOOLS.length} expected tools: ${READ_TOOLS.length} readOnlyHint true, ${WRITE_TOOLS.length} writes (destructiveHint false), ${DESTRUCTIVE_TOOLS.length} destructiveHint true; every write tool's input schema refuses unknown keys`);
   });
 
   // 6. Every tool works for a fresh account (password session; group (a2) repeats it with the app's token).
   await group(async () => {
     const { currencyCode, finish } = await allTools(clientA);
-    finish(`all 17 tools answer for fresh account A: ${NO_INPUT_TOOLS.length} no-input tools + transactions_list {} + budgets_get {currency: ${currencyCode}} without isError; id tools with unknown ids give empty pages / "${FOLDER_NOT_FOUND}"`);
+    finish(`all 17 read tools answer for fresh account A: ${NO_INPUT_TOOLS.length} no-input tools + transactions_list {} + budgets_get {currency: ${currencyCode}} without isError; id tools with unknown ids give empty pages / "${FOLDER_NOT_FOUND}"`);
   });
 
   // 7. A wallet and an expense for A (through the app's own RPCs, as A); A sees it with amount.text, B sees nothing.
@@ -624,7 +647,7 @@ try {
   ok("registered a throwaway public PKCE app (admin API, localhost redirect), recorded it in connector_clients, and got a real OAuth token for A (authorize → approveAuthorization → code exchange); the token carries the app's client_id");
   const appA = { label: "a (app)", token: appToken };
 
-  // (a) /mcp accepts the registered app's token: the 17 tools, and a read works through the database guard.
+  // (a) /mcp accepts the registered app's token: the 55 tools, and a read works through the database guard.
   await group(async () => {
     const appClient = await connect(appA);
     clients.push(appClient);
@@ -645,10 +668,281 @@ try {
     const appClient = await connect(appA);
     clients.push(appClient);
     const { currencyCode, finish } = await allTools(appClient);
-    finish(`(a2) all 17 tools answer with A's OAuth app token (through the database guard): ${NO_INPUT_TOOLS.length} no-input tools + transactions_list {} + budgets_get {currency: ${currencyCode}} without isError; id tools with unknown ids give empty pages / "${FOLDER_NOT_FOUND}"`);
+    finish(`(a2) all 17 read tools answer with A's OAuth app token (through the database guard): ${NO_INPUT_TOOLS.length} no-input tools + transactions_list {} + budgets_get {currency: ${currencyCode}} without isError; id tools with unknown ids give empty pages / "${FOLDER_NOT_FOUND}"`);
   });
 
-  // (b) The same token on the database API directly: reads yes, writes refused, nothing written.
+  // (w) The write tools, with A's OAuth app token (so every write passes the database guard).
+  // Money is followed on one USD balance in integer cents: `expected` is what the balance must be
+  // after each step, read back through wallets_list. Retry keys are sent twice. B (a password
+  // session) must neither see nor change any of it.
+  await group(async () => {
+    const appClient = await connect(appA);
+    clients.push(appClient);
+    const { attempt, finish } = collector();
+    const run = async (name, args) => data(await call(appClient, name, args), name);
+    const refused = async (client, name, args) => {
+      try {
+        const result = await call(client, name, args);
+        return result.isError === true ? textOf(result) : null;
+      } catch (error) {
+        return `protocol error: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    };
+    const dbA = asUser(a);
+    const today = new Date().toISOString().slice(0, 10);
+    const tag = randomBytes(3).toString("hex");
+    const cat = async (kind) => {
+      const row = await dbA.from("categories").select("id").eq("kind", kind).is("parent_id", null).is("archived_at", null).order("position").limit(1).single();
+      check(!row.error && row.data?.id, `read A's ${kind} category: ${short(row.error)}`);
+      return row.data.id;
+    };
+    const expenseCategory = await cat("expense");
+    const incomeCategory = await cat("income");
+    let walletId, balanceId, otherBalanceId, txId, txRevision;
+    let expected = 0;
+    const balanceNow = async () => {
+      const wallets = await run("wallets_list");
+      const found = wallets.wallets.flatMap((w) => w.balances).find((b) => b.id === balanceId);
+      check(found, "the test balance is not in wallets_list");
+      return found.balanceMinor;
+    };
+    const balanceIs = async (label) => {
+      const now = await balanceNow();
+      check(now === expected, `${label}: balance is ${now}, expected ${expected}`);
+    };
+    const inResult = (result, label) => {
+      const found = (result.balances ?? []).flatMap((w) => w.balances).find((b) => b.id === balanceId);
+      check(found && found.balanceMinor === expected && found.amount?.minor === expected && found.amount?.currency === "USD",
+        `${label}: the result's balances do not show ${expected} USD cents for the balance: ${short(found)}`);
+    };
+
+    await attempt("wallets_create (requestId sent twice)", async () => {
+      const requestId = randomUUID();
+      const args = { requestId, name: `MCP write ${tag}`, kind: "cash", currency: "USD", openingBalanceMinor: 10000 };
+      const first = await run("wallets_create", args);
+      const second = await run("wallets_create", args);
+      check(first.wallet?.id && second.wallet?.id === first.wallet.id && second.replayed === true && first.replayed === undefined,
+        `a repeat did not replay the first wallet: ${short({ first: first.wallet?.id, second: second.wallet?.id, replayed: second.replayed })}`);
+      const made = await admin.from("wallets").select("id", { count: "exact", head: true }).eq("user_id", a.id).eq("name", args.name);
+      check(made.count === 1, `expected exactly one wallet named for this run, found ${made.count}`);
+      walletId = first.wallet.id;
+      balanceId = first.wallet.balances.find((b) => b.currency === "USD")?.id;
+      check(balanceId, "the new wallet has no USD balance");
+      expected = 10000;
+      await balanceIs("after wallets_create");
+      const other = await run("wallets_create", { name: `MCP other ${tag}`, kind: "bank", currency: "USD" });
+      otherBalanceId = other.wallet.balances.find((b) => b.currency === "USD")?.id;
+      const renamed = await run("wallets_update", { walletId, name: `MCP renamed ${tag}`, kind: "card", position: 0 });
+      check(renamed.wallet.name === `MCP renamed ${tag}` && renamed.wallet.kind === "card", `wallets_update did not return the new name and kind: ${short(renamed.wallet)}`);
+      const order = (await run("wallets_list")).wallets.map((w) => w.id);
+      check(order[0] === walletId, "wallets_update position 0 did not move the wallet first");
+    });
+
+    await attempt("transactions_create expense (requestId sent twice), update, delete, restore", async () => {
+      const requestId = randomUUID();
+      const args = { requestId, kind: "expense", balanceId, amountMinor: 2500, categoryId: expenseCategory, occurredOn: today, note: `mcp write ${tag}` };
+      const first = await run("transactions_create", args);
+      const second = await run("transactions_create", args);
+      check(first.transaction?.id && second.transaction?.id === first.transaction.id, "a repeated transactions_create did not return the first transaction");
+      const made = await admin.from("transactions").select("id", { count: "exact", head: true }).eq("user_id", a.id).eq("note", args.note);
+      check(made.count === 1, `expected exactly one transaction for the repeated request, found ${made.count}`);
+      check(first.transaction.amount?.minor === 2500 && first.transaction.amount?.currency === "USD", `the created transaction's amount: ${short(first.transaction.amount)}`);
+      expected -= 2500;
+      inResult(first, "transactions_create");
+      await balanceIs("after transactions_create");
+      txId = first.transaction.id;
+      const updated = await run("transactions_update", { id: txId, revision: first.transaction.revision, amountMinor: 3000 });
+      check(updated.transaction.amountMinor === 3000 && updated.transaction.note === args.note && updated.transaction.revision > first.transaction.revision,
+        `transactions_update result: ${short(updated.transaction)}`);
+      expected -= 500;
+      inResult(updated, "transactions_update");
+      const stale = await refused(appClient, "transactions_update", { id: txId, revision: first.transaction.revision, amountMinor: 1 });
+      check(stale && /changed since it was read/.test(stale), `an old revision was not refused as a conflict: ${short(stale)}`);
+      const removed = await run("transactions_delete", { id: txId, revision: updated.transaction.revision });
+      check(removed.deleted === true && removed.id === txId && Number.isInteger(removed.revision), `transactions_delete result: ${short(removed)}`);
+      expected += 3000;
+      inResult(removed, "transactions_delete");
+      const restored = await run("transactions_restore", { id: txId, revision: removed.revision });
+      expected -= 3000;
+      inResult(restored, "transactions_restore");
+      txRevision = restored.transaction.revision;
+      await balanceIs("after delete and restore");
+    });
+
+    await attempt("transactions_create transfer and income", async () => {
+      const moved = await run("transactions_create", { requestId: randomUUID(), kind: "transfer", sourceBalanceId: balanceId, destinationBalanceId: otherBalanceId, sentMinor: 1000, occurredOn: today });
+      expected -= 1000;
+      inResult(moved, "transfer");
+      const arrived = moved.balances.flatMap((w) => w.balances).find((b) => b.id === otherBalanceId);
+      check(arrived?.balanceMinor === 1000, `the destination balance is ${arrived?.balanceMinor}, expected 1000`);
+      const income = await run("transactions_create", { requestId: randomUUID(), kind: "income", balanceId, amountMinor: 700, categoryId: incomeCategory, occurredOn: today });
+      expected += 700;
+      inResult(income, "income");
+    });
+
+    await attempt("wallets_adjust_balance (up, then again: nothing to do)", async () => {
+      const before = expected;
+      const set = await run("wallets_adjust_balance", { targets: [{ balanceId, targetMinor: 12345 }], occurredOn: today });
+      const one = set.results?.[0];
+      check(one && one.previousMinor === before && one.targetMinor === 12345 && one.matched === true && typeof one.transactionId === "string",
+        `wallets_adjust_balance result: ${short(one)}`);
+      expected = 12345;
+      inResult(set, "wallets_adjust_balance");
+      await balanceIs("after wallets_adjust_balance");
+      const again = await run("wallets_adjust_balance", { targets: [{ balanceId, targetMinor: 12345 }] });
+      check(again.results[0].transactionId === null && again.results[0].matched === true, `a repeated adjust posted again: ${short(again.results[0])}`);
+      const down = await run("wallets_adjust_balance", { targets: [{ balanceId, targetMinor: 12000 }], occurredOn: today });
+      check(down.results[0].matched === true, "adjusting down did not match");
+      expected = 12000;
+      const corrections = await dbA.from("categories").select("kind").eq("name_en", "Balance correction");
+      check(!corrections.error && corrections.data.length === 2, `expected one "Balance correction" category per kind, found ${corrections.data?.length}`);
+      await balanceIs("after adjusting down");
+    });
+
+    await attempt("categories and budgets", async () => {
+      const requestId = randomUUID();
+      const args = { requestId, kind: "expense", nameEn: `MCP cat ${tag}`, tile: 3, color: "teal" };
+      const created = await run("categories_create", args);
+      const repeat = await run("categories_create", args);
+      check(created.category?.id && repeat.category?.id === created.category.id && repeat.replayed === true, "a repeated categories_create did not replay");
+      const categoryId = created.category.id;
+      const renamed = await run("categories_update", { id: categoryId, nameEn: `MCP cat2 ${tag}` });
+      check(JSON.stringify(renamed.category).includes(`MCP cat2 ${tag}`), "categories_update did not return the new name");
+      const month = today.slice(0, 7);
+      const budget = await run("budgets_set", { month, currency: "USD", limits: [{ categoryId, limitMinor: 5000 }] });
+      check(JSON.stringify(budget).includes(categoryId) && JSON.stringify(budget).includes("5000"), `budgets_set does not return the new limit: ${short(budget)}`);
+      const cleared = await run("budgets_delete", { month, currency: "USD", categoryId });
+      check(cleared.deleted === true, "budgets_delete did not report deleted");
+      const removed = await run("categories_delete", { id: categoryId });
+      check(removed.deleted === true && ["deleted", "archived"].includes(removed.outcome), `categories_delete result: ${short(removed)}`);
+    });
+
+    await attempt("fixed expenses and installments", async () => {
+      const fixed = await run("fixed_expenses_create", { requestId: randomUUID(), name: `MCP rent ${tag}`, amountMinor: 40000, balanceId, categoryId: expenseCategory, dueDay: 5 });
+      check(fixed.expense?.id, `fixed_expenses_create did not return the new expense: ${short(fixed)}`);
+      const changed = await run("fixed_expenses_update", { id: fixed.expense.id, amountMinor: 45000 });
+      check(JSON.stringify(changed.expense).includes("45000"), "fixed_expenses_update did not return the new amount");
+      check((await run("fixed_expenses_delete", { id: fixed.expense.id })).deleted === true, "fixed_expenses_delete");
+      const plan = await run("installments_create", { requestId: randomUUID(), name: `MCP phone ${tag}`, totalMinor: 60000, balanceId, categoryId: expenseCategory, monthlyMinor: 5000 });
+      check(plan.installment?.id, `installments_create did not return the new installment: ${short(plan)}`);
+      const edited = await run("installments_update", { id: plan.installment.id, name: `MCP phone2 ${tag}` });
+      check(JSON.stringify(edited.installment).includes(`MCP phone2 ${tag}`), "installments_update did not return the new name");
+      check((await run("installments_delete", { id: plan.installment.id })).deleted === true, "installments_delete");
+      await balanceIs("templates move no money");
+    });
+
+    await attempt("loans and pending payments", async () => {
+      const lent = await run("loans_create", { requestId: randomUUID(), name: `MCP loan ${tag}`, direction: "borrowed", principalMinor: 20000, feeBps: 0, balanceId, feeCategoryId: expenseCategory, openedOn: today });
+      check(lent.loan?.id, `loans_create did not return the loan: ${short(lent)}`);
+      expected += 20000;
+      inResult(lent, "loans_create");
+      const paid = await run("loans_record_payment", { requestId: randomUUID(), loanId: lent.loan.id, balanceId, amountMinor: 5000, occurredOn: today });
+      expected -= 5000;
+      inResult(paid, "loans_record_payment");
+      check(paid.payment?.transactionId && Number.isInteger(paid.payment?.revision), `loans_record_payment did not return the payment's id and revision: ${short(paid.payment)}`);
+      const voided = await run("loans_delete_payment", { loanId: lent.loan.id, transactionId: paid.payment.transactionId, revision: paid.payment.revision });
+      expected += 5000;
+      inResult(voided, "loans_delete_payment");
+      const renamedLoan = await run("loans_update", { id: lent.loan.id, name: `MCP loan2 ${tag}` });
+      check(renamedLoan.loan.name === `MCP loan2 ${tag}`, "loans_update did not return the new name");
+      const job = await run("pending_payments_create", { requestId: randomUUID(), client: `MCP client ${tag}`, project: "Site", currency: "USD", totalMinor: 30000 });
+      check(job.payment?.id && Number.isInteger(job.payment?.revision), `pending_payments_create result: ${short(job)}`);
+      const edited = await run("pending_payments_update", { id: job.payment.id, revision: job.payment.revision, project: "Site v2" });
+      check(edited.payment.project === "Site v2", "pending_payments_update did not return the new project");
+      const receipt = await run("pending_payments_record_receipt", { requestId: randomUUID(), paymentId: job.payment.id, balanceId, categoryId: incomeCategory, amountMinor: 12000, occurredOn: today });
+      expected += 12000;
+      inResult(receipt, "pending_payments_record_receipt");
+      const spare = await run("pending_payments_create", { requestId: randomUUID(), client: `MCP spare ${tag}`, project: "None", currency: "USD", totalMinor: 100 });
+      check((await run("pending_payments_delete", { id: spare.payment.id, revision: spare.payment.revision })).deleted === true, "pending_payments_delete");
+      await balanceIs("after loans and pending payments");
+    });
+
+    await attempt("salary and profile", async () => {
+      const saved = await run("salary_update", { amountMinor: 150000, balanceId });
+      check(JSON.stringify(saved).includes("150000") && JSON.stringify(saved).includes(balanceId), `salary_update did not return the saved salary: ${short(saved)}`);
+      const status = await run("salary_status_get");
+      const requestId = randomUUID();
+      const args = { requestId, expectedReceiptId: status.receiptId ?? null };
+      const got = await run("salary_mark_received", args);
+      const repeat = await run("salary_mark_received", args);
+      check(got.receipt?.id && repeat.receipt?.id === got.receipt.id, "a repeated salary_mark_received did not return the first receipt");
+      expected += 150000;
+      inResult(got, "salary_mark_received");
+      await balanceIs("salary received once for a repeated request");
+      const profile = await run("profile_update", { theme: "dark", salaryEmail: false });
+      check(profile.theme === "dark", `profile_update did not return the new theme: ${short(profile)}`);
+      check((await run("profile_get")).theme === "dark", "profile_get does not show the new theme");
+    });
+
+    await attempt("shopping items and invoice folders (requestId is the row id)", async () => {
+      const itemId = randomUUID();
+      const itemArgs = { requestId: itemId, name: `MCP milk ${tag}`, currency: "USD", priceMinor: 250, quantity: 2 };
+      await run("shopping_items_create", itemArgs);
+      await run("shopping_items_create", itemArgs);
+      const items = (await run("shopping_items_list")).items.filter((item) => item.name === itemArgs.name);
+      check(items.length === 1 && items[0].id === itemId, `expected one shopping item with the request's id, found ${items.length}`);
+      const edited = await run("shopping_items_update", { itemId, quantity: 3 });
+      check(JSON.stringify(edited).includes(itemId), "shopping_items_update did not return the item");
+      check((await run("shopping_items_delete", { itemId })).deleted === true, "shopping_items_delete");
+      const folderId = randomUUID();
+      const folderArgs = { requestId: folderId, name: `MCP build ${tag}` };
+      await run("invoices_folders_create", folderArgs);
+      await run("invoices_folders_create", folderArgs);
+      const folders = (await run("invoices_folders_list")).folders.filter((folder) => folder.id === folderId);
+      check(folders.length === 1, `expected one folder with the request's id, found ${folders.length}`);
+      const renamed = await run("invoices_folders_update", { folderId, name: `MCP build2 ${tag}` });
+      check(JSON.stringify(renamed).includes(`MCP build2 ${tag}`), "invoices_folders_update did not return the new name");
+      check((await run("invoices_folders_delete", { folderId })).deleted === true, "invoices_folders_delete");
+      const gone = await refused(appClient, "invoices_folder_get", { folderId });
+      check(gone === FOLDER_NOT_FOUND, `the deleted folder is still readable: ${short(gone)}`);
+    });
+
+    await attempt("strict inputs and wallets_delete", async () => {
+      const extra = await refused(appClient, "transactions_create", { kind: "expense", balanceId, amountMinor: 100, categoryId: expenseCategory, user_id: b.id });
+      check(extra, "an unknown input key was accepted");
+      const float = await refused(appClient, "transactions_create", { kind: "expense", balanceId, amountMinor: 1.5, categoryId: expenseCategory });
+      check(float, "a non-integer amount was accepted");
+      const nonzero = await refused(appClient, "wallets_delete", { walletId });
+      check(nonzero && /zero/.test(nonzero), `deleting a wallet with money in it was not refused: ${short(nonzero)}`);
+      await balanceIs("after refused calls");
+    });
+
+    await attempt("B neither sees nor changes A's rows", async () => {
+      const walletsB = JSON.stringify(data(await call(clientB, "wallets_list"), "wallets_list (B)"));
+      check(!walletsB.includes(walletId) && !walletsB.includes(tag), "B's wallets_list shows A's wallet");
+      const rowsB = data(await call(clientB, "transactions_list", {}), "transactions_list (B)");
+      check(rowsB.rows.length === 0, `B has ${rowsB.rows.length} transactions after A's writes`);
+      for (const [name, args] of [
+        ["transactions_update", { id: txId, revision: txRevision, amountMinor: 1 }],
+        ["transactions_delete", { id: txId, revision: txRevision }],
+        ["wallets_update", { walletId, name: "Taken" }],
+        ["wallets_delete", { walletId }],
+        ["wallets_adjust_balance", { targets: [{ balanceId, targetMinor: 0 }] }],
+        ["transactions_create", { kind: "expense", balanceId, amountMinor: 100, categoryId: expenseCategory, occurredOn: today }],
+      ]) {
+        const answer = await refused(clientB, name, args);
+        check(answer, `B's ${name} on A's row was not refused`);
+        check(!answer.includes(tag) && !answer.includes(a.id), `B's ${name} refusal mentions A's data: ${short(answer)}`);
+      }
+      await balanceIs("after B's attempts");
+      const still = await admin.from("wallets").select("name, deleted_at").eq("id", walletId).single();
+      check(still.data?.name === `MCP renamed ${tag}` && still.data?.deleted_at === null, "A's wallet changed after B's attempts");
+    });
+
+    await attempt("the app token on the database API: a listed write is allowed", async () => {
+      const result = await fetch(`${apiUrl}/rest/v1/rpc/create_wallet`, {
+        method: "POST",
+        headers: { apikey: publishable, authorization: `Bearer ${appToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ p_name: `MCP direct ${tag}`, p_kind: "cash", p_default_currency: "USD", p_opening_minor: 0 }),
+      });
+      await result.body?.cancel();
+      check(result.status === 200, `POST /rest/v1/rpc/create_wallet with the app token: ${result.status}`);
+    });
+
+    finish(`(w) write tools with A's OAuth app token through /mcp and the database guard: wallets, transactions (expense, income, transfer; update, delete, restore), balance adjustment, categories, budgets, fixed expenses, installments, loans and payments, pending payments and receipts, salary, profile, shopping items and invoice folders all change A's data and return it; repeated requestIds posted once; the USD balance followed to ${expected} cents; strict inputs; B sees none of it and every attempt by B on A's rows is refused`);
+  });
+
+  // (b) The same token on the database API directly: reads yes; writes that no tool makes are refused, nothing written.
   await group(async () => {
     const { attempt, finish } = collector();
     const count = async (table) => {
@@ -672,24 +966,30 @@ try {
       });
       check(forbidden(result), `expected 403 connector.forbidden, got ${result.status} ${short(result.json?.code)} ${short(result.json?.message)}`);
     });
-    await attempt("POST /rest/v1/rpc/save_transaction", async () => {
-      const result = await rest(appToken, "POST", "rpc/save_transaction", {
-        p_id: randomUUID(), p_expected_revision: null,
-        p_input: { kind: "expense", occurredOn: today, balanceId, amountMinor: 99, categoryId: category.data?.id, note: "app write" },
-        p_items: null, p_settlement: null,
+    await attempt("PATCH /rest/v1/transactions", async () => {
+      const result = await rest(appToken, "PATCH", "transactions?id=not.is.null", { amount_minor: 1 });
+      check(forbidden(result), `expected 403 connector.forbidden, got ${result.status} ${short(result.json?.code)} ${short(result.json?.message)}`);
+    });
+    await attempt("DELETE /rest/v1/wallets", async () => {
+      const result = await rest(appToken, "DELETE", "wallets?id=not.is.null");
+      check(forbidden(result), `expected 403 connector.forbidden, got ${result.status} ${short(result.json?.code)} ${short(result.json?.message)}`);
+    });
+    for (const [name, body] of [
+      ["create_currency", { p_code: "APP", p_symbol: "A", p_decimal_places: 2 }],
+      ["settle_and_delete_wallet", { p_request_id: randomUUID(), p_wallet_id: randomUUID(), p_settlements: [] }],
+      ["rotate_invoice_link", { p_folder: randomUUID(), p_owner_name: "App" }],
+    ]) {
+      await attempt(`POST /rest/v1/rpc/${name}`, async () => {
+        const result = await rest(appToken, "POST", `rpc/${name}`, body);
+        check(forbidden(result), `expected 403 connector.forbidden, got ${result.status} ${short(result.json?.code)} ${short(result.json?.message)}`);
       });
-      check(forbidden(result), `expected 403 connector.forbidden, got ${result.status} ${short(result.json?.code)} ${short(result.json?.message)}`);
-    });
-    await attempt("POST /rest/v1/rpc/create_wallet", async () => {
-      const result = await rest(appToken, "POST", "rpc/create_wallet", { p_name: "App wallet", p_kind: "cash", p_default_currency: "USD", p_opening_minor: 0 });
-      check(forbidden(result), `expected 403 connector.forbidden, got ${result.status} ${short(result.json?.code)} ${short(result.json?.message)}`);
-    });
+    }
     await attempt("no row written", async () => {
       const after = { transactions: await count("transactions"), wallets: await count("wallets") };
       check(after.transactions === before.transactions && after.wallets === before.wallets,
         `rows changed: transactions ${before.transactions} → ${after.transactions}, wallets ${before.wallets} → ${after.wallets}`);
     });
-    finish(`(b) A's OAuth token on the database API: GET /rest/v1/wallets 200 (A's ${before.wallets} wallet); POST /rest/v1/transactions, /rpc/save_transaction and /rpc/create_wallet each 403 connector.forbidden; A still has ${before.transactions} transaction(s) and ${before.wallets} wallet(s)`);
+    finish(`(b) A's OAuth token on the database API: GET /rest/v1/wallets 200 (A's ${before.wallets} wallet); POST and PATCH /rest/v1/transactions, DELETE /rest/v1/wallets, and /rpc/create_currency, /rpc/settle_and_delete_wallet, /rpc/rotate_invoice_link each 403 connector.forbidden; A still has ${before.transactions} transaction(s) and ${before.wallets} wallet(s)`);
   });
 
   // (e) What the app's token can do to the password (Auth API; secure_password_change = true).
@@ -1058,7 +1358,16 @@ try {
   }
   // Deleting the auth user cascades to every row the user owns.
   for (const id of users) {
-    const removed = await admin.auth.admin.deleteUser(id);
+    // Known app defect, not the connector's: Supabase Auth cannot delete an account that has a
+    // budget row or loan entries. The cascade fires triggers that run as the Auth role, which may
+    // not read public.currencies (ledger_private.budget_disabled_dependency_guard) or public.loans.
+    // Group (w) creates both, so when the admin API fails the user is deleted as postgres in the
+    // local database container (this script only ever runs against the local stack).
+    let removed = await admin.auth.admin.deleteUser(id);
+    if (removed.error && UUID.test(String(id)) && localSql(`delete from auth.users where id = '${id}' returning 1`) !== null) {
+      console.log("     (the admin API could not delete a test user with budgets/loans; deleted it in the local database instead)");
+      removed = { error: null };
+    }
     const gone = await admin.auth.admin.getUserById(id);
     if (removed.error || gone.data?.user) {
       cleaned = false;

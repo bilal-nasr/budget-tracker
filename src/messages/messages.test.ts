@@ -19,10 +19,12 @@ describe("message catalogs", () => {
     expect(keys(ar.Settings).sort()).toEqual(keys(en.Settings).sort());
   });
 
-  it("the consent screen points to Settings, and promises no changes, now that Connected apps exists", () => {
+  it("the consent screen points to Settings and says the app can change data, now that write tools exist", () => {
     for (const catalog of [en, ar]) {
       expect(Object.keys(catalog.connect)).toContain("removeLater");
-      expect(Object.keys(catalog.connect)).not.toContain("canChange");
+      expect(Object.keys(catalog.connect)).toContain("canRead");
+      expect(Object.keys(catalog.connect)).toContain("canChange");
     }
+    expect(en.connect.canChange).toMatch(/Add, change and delete/);
   });
 });

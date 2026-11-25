@@ -186,13 +186,17 @@ Acceptance: Claude connects to a publicly reachable instance and answers "what d
 
 ### Connector phase 2: everyday writes
 
-- [ ] Transactions, transfers, wallets, categories, budgets, shopping items.
-- [ ] Create tools take an optional `requestId`; revision-guarded actions require the `revision` from a read.
-- [ ] Deletes, voids and cancels marked destructive; a completeness test fails when a server action is neither a tool nor excluded.
+- [x] Transactions, transfers, wallets (with `wallets_adjust_balance`), categories, budgets, shopping items.
+- [x] Create tools take an optional `requestId` (native request ids where the action has one, `connector_requests` otherwise); revision-guarded actions require the `revision` from a read.
+- [x] Deletes, voids and balance adjustment marked destructive (pinned in `src/lib/mcp/tool.test.ts`).
+- [x] The database guard allows exactly the writes the tools make (`20261210000000_connector_writes.sql`, `connector_writes.test.sql`); `pnpm test:mcp` group (w) drives every write area with a real app token on the local stack.
+- [ ] A completeness test that fails when a server action is neither a tool nor excluded.
+- [ ] Production: apply `20261210000000_connector_writes.sql`, deploy, `pnpm connector:smoke`, refresh the connector in Claude (55 tools).
 
 ### Connector phase 3: everything else
 
-- [ ] Invoices, loans, installments, fixed expenses, pending payments, salary, currencies, profile.
+- [x] Loans and loan payments, installments, fixed expenses, pending payments and receipts, salary, profile, invoice folders.
+- [ ] Invoice rows, categories, paying and sharing; currencies; paying a fixed expense or installment; cashier settlements; loan cancel/archive.
 
 ---
 

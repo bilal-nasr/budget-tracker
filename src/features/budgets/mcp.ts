@@ -4,10 +4,13 @@ import { getCurrencies } from "@/features/currencies/queries";
 import { currencyCodeSchema } from "@/features/currencies/schema";
 import { todayIn } from "@/features/transactions/group";
 import { getProfile } from "@/features/profile/queries";
+import { currencyIntent } from "@/lib/currency-intent";
 import { amountFormatter } from "@/lib/mcp/amounts";
-import { defineTool } from "@/lib/mcp/tool";
+import { defineTool, ToolError } from "@/lib/mcp/tool";
+import { ACTION_ERROR_TEXT, unwrap } from "@/lib/mcp/write";
+import { saveBudgets } from "./actions";
 import { getMonthBudgets } from "./queries";
-import type { MonthBudgets } from "./schema";
+import { budgetEditSchema, type MonthBudgets } from "./schema";
 import { getSpendingSummary } from "./summary";
 
 type Amount = ReturnType<typeof amountFormatter>;
@@ -26,6 +29,25 @@ function withAmounts(budgets: MonthBudgets, amount: Amount) {
     totalLimit: amount(budgets.totalLimitMinor, currency),
     totalSpent: amount(budgets.totalSpentMinor, currency),
   };
+}
+
+const monthField = budgetEditSchema.shape.month.describe("Month the limit starts in, YYYY-MM. Later months inherit it until changed again; earlier months keep their old limit.");
+const currencyField = currencyCodeSchema.describe("Currency code from currencies_list. Limits in different currencies are separate.");
+const limitItem = budgetEditSchema.shape.limits.element;
+const limitMinorField = limitItem.shape.limitMinor.unwrap().describe("The limit in integer minor units of `currency` (for example cents), at least 1.");
+const categoryIdField = limitItem.shape.categoryId.describe("Category id from categories_list (an active expense category).");
+
+/** The month's budgets as budgets_get gives them, re-read after a change. */
+async function budgetsOut(month: string, currency: string) {
+  const currencies = await getCurrencies();
+  return withAmounts(await getMonthBudgets(month, currency), amountFormatter(currencies));
+}
+
+/** Currency-intent header for the one currency a limit is in, built from the person's own list. */
+async function intentFor(currency: string) {
+  const definition = (await getCurrencies()).find((c) => c.code === currency);
+  if (!definition) throw new ToolError(ACTION_ERROR_TEXT.currencyUnavailable);
+  return currencyIntent(definition);
 }
 
 export const budgetTools = [
@@ -67,6 +89,50 @@ export const budgetTools = [
       const [profile, currencies] = await Promise.all([getProfile(), getCurrencies()]);
       const budgets = await getMonthBudgets(month ?? todayIn(profile.timezone).slice(0, 7), currency);
       return withAmounts(budgets, amountFormatter(currencies));
+    },
+  }),
+  defineTool({
+    name: "budgets_set",
+    title: "Set budget limits",
+    description:
+      "Create or change the spending limit of one or more categories in one currency, starting from `month` (YYYY-MM): earlier months keep their old limit, later months inherit this one until it is changed again. " +
+      "Category ids come from categories_list, currency codes from currencies_list. Limits are integer minor units of that one currency (for example cents for USD). " +
+      "Returns the month's budgets in the shape budgets_get gives, with the new limits in the rows.",
+    kind: "write",
+    input: z
+      .strictObject({
+        month: monthField,
+        currency: currencyField,
+        limits: z
+          .array(z.strictObject({ categoryId: categoryIdField, limitMinor: limitMinorField }))
+          .min(1)
+          .max(200)
+          .describe("One entry per category whose limit changes."),
+      })
+      .refine((input) => new Set(input.limits.map((l) => l.categoryId)).size === input.limits.length, {
+        message: "Each category may appear once",
+        path: ["limits"],
+      }),
+    run: async ({ month, currency, limits }) => {
+      unwrap(await saveBudgets({ expectedUnits: await intentFor(currency), month, currency, limits }));
+      return budgetsOut(month, currency);
+    },
+  }),
+  defineTool({
+    name: "budgets_delete",
+    title: "Remove a budget limit",
+    description:
+      "Remove one category's spending limit in one currency from `month` (YYYY-MM) on: earlier months keep their limit, this and later months have none. " +
+      "Category ids come from categories_list. Returns { deleted: true, id (the category id), budgets } where budgets is the month in the shape budgets_get gives.",
+    kind: "destructive",
+    input: z.strictObject({
+      month: monthField.describe("First month with no limit, YYYY-MM."),
+      currency: currencyField,
+      categoryId: categoryIdField.describe("Category id from categories_list whose limit is removed."),
+    }),
+    run: async ({ month, currency, categoryId }) => {
+      unwrap(await saveBudgets({ expectedUnits: await intentFor(currency), month, currency, limits: [{ categoryId, limitMinor: null }] }));
+      return { deleted: true, id: categoryId, budgets: await budgetsOut(month, currency) };
     },
   }),
 ];

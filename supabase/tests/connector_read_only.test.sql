@@ -1,5 +1,6 @@
--- Connected apps (OAuth clients) can only read, enforced by the API pre-request
--- guard public.connector_request_guard(). Synthetic fixtures only; run with pnpm db:test.
+-- Connected apps (OAuth clients): who the API pre-request guard public.connector_request_guard()
+-- lets in, that reads run read-only, and that everything not listed is refused. The writes it
+-- does allow are in connector_writes.test.sql. Synthetic fixtures only; run with pnpm db:test.
 begin;
 create extension if not exists pgtap with schema extensions;
 select no_plan();
@@ -181,9 +182,13 @@ select is(pg_temp.guard((select session from c), 'POST', '/rpc/create_wallet', '
   $q$select public.create_wallet('Fine', 'cash', 'USD', 0)$q$),
   'allowed read-write', 'session: the same security definer write runs');
 
--- Registered app: every table write is refused.
+-- Registered app: a table write that no tool makes is refused (transactions and categories
+-- deletes among them: money moves only through the listed functions).
 select is(pg_temp.guard((select known from c), 'POST', '/transactions'), '42501 connector.forbidden', 'known app: POST table');
-select is(pg_temp.guard((select known from c), 'PATCH', '/wallets'), '42501 connector.forbidden', 'known app: PATCH table');
+select is(pg_temp.guard((select known from c), 'PATCH', '/transactions'), '42501 connector.forbidden', 'known app: PATCH table');
+select is(pg_temp.guard((select known from c), 'DELETE', '/transactions'), '42501 connector.forbidden', 'known app: DELETE transactions');
+select is(pg_temp.guard((select known from c), 'POST', '/wallets'), '42501 connector.forbidden', 'known app: POST wallets (only PATCH is listed)');
+select is(pg_temp.guard((select known from c), 'DELETE', '/wallets'), '42501 connector.forbidden', 'known app: DELETE wallets');
 select is(pg_temp.guard((select known from c), 'PUT', '/wallets'), '42501 connector.forbidden', 'known app: PUT table');
 select is(pg_temp.guard((select known from c), 'DELETE', '/categories'), '42501 connector.forbidden', 'known app: DELETE table');
 select is(pg_temp.guard((select known from c), 'OPTIONS', '/wallets'), '42501 connector.forbidden', 'known app: other method');
@@ -199,9 +204,12 @@ select is(pg_temp.guard((select known from c), 'POST', '/rpc/installment_cycle_s
   'select public.installment_cycle_summary()'), 'allowed read-only', 'known app: installment_cycle_summary');
 select is(pg_temp.guard((select known from c), 'GET', '/rpc/month_budgets'), 'allowed read-only', 'known app: GET read rpc');
 
--- Registered app: any function not on the allowlist is refused, writes and reads alike.
-select is(pg_temp.guard((select known from c), 'POST', '/rpc/save_transaction'), '42501 connector.forbidden', 'known app: save_transaction');
-select is(pg_temp.guard((select known from c), 'POST', '/rpc/create_wallet'), '42501 connector.forbidden', 'known app: create_wallet');
+-- Registered app: any function not on an allowlist is refused, writes and reads alike.
+select is(pg_temp.guard((select known from c), 'POST', '/rpc/create_currency'), '42501 connector.forbidden', 'known app: create_currency');
+select is(pg_temp.guard((select known from c), 'POST', '/rpc/settle_and_delete_wallet'), '42501 connector.forbidden', 'known app: settle_and_delete_wallet');
+select is(pg_temp.guard((select known from c), 'POST', '/rpc/rotate_invoice_link'), '42501 connector.forbidden', 'known app: rotate_invoice_link');
+select is(pg_temp.guard((select known from c), 'POST', '/rpc/join_invoice_folder'), '42501 connector.forbidden', 'known app: join_invoice_folder');
+select is(pg_temp.guard((select known from c), 'POST', '/rpc/mark_invoice_items_paid'), '42501 connector.forbidden', 'known app: mark_invoice_items_paid');
 select is(pg_temp.guard((select known from c), 'POST', '/rpc/invoice_link_preview'), '42501 connector.forbidden',
   'known app: a stable function not on the allowlist');
 select is(pg_temp.guard((select known from c), 'POST', '/rpc/installment_cycle_snapshot'), '42501 connector.forbidden',

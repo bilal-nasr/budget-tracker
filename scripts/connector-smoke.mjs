@@ -1,6 +1,7 @@
-// Proves the connector's database guard on a Supabase project: a registered app's token can read
-// and cannot write. Run it after every deploy and every Supabase upgrade (the guard lives in a role
-// setting; if that setting is lost, app tokens FAIL OPEN and can write).
+// Proves the connector's database guard on a Supabase project: a registered app's token can read,
+// can make a write the connector's tools make, and cannot make any other write. Run it after every
+// deploy and every Supabase upgrade (the guard lives in a role setting; if that setting is lost, app
+// tokens FAIL OPEN to everything a signed-in session can do).
 //
 //   pnpm connector:smoke
 //
@@ -14,9 +15,11 @@
 // that user without a browser, and checks, one PASS/FAIL line each:
 //   1. an ordinary sign-in session reads the database (control: ordinary sessions are untouched);
 //   2. the app token reads (GET /rest/v1/wallets → 200);
-//   3. the app token cannot write (POST /rest/v1/rpc/create_wallet → 403 connector.forbidden) and no row is written;
+//   3. the app token cannot make a write that is not listed (POST /rest/v1/rpc/create_currency and
+//      PATCH /rest/v1/transactions → 403 connector.forbidden), and a listed write works
+//      (POST /rest/v1/rpc/create_wallet → 200, one wallet for the throwaway user);
 //   4. GraphQL refuses the app token (or GraphQL is not exposed on this project);
-//   5. a refreshed app token still carries client_id and session_id and is still read-only;
+//   5. a refreshed app token still carries client_id and session_id and is still held to the list;
 //   6. after the person removes the app (revokeGrant), the database refuses the token.
 // The user and the app are deleted in `finally`, whatever happened. It never prints keys or tokens.
 // Exit code 0 means every check passed.
@@ -155,18 +158,26 @@ try {
     "A 403 here means the guard refuses this app's reads: its owner cannot read auth.sessions, or auth.sessions.oauth_client_id is not the app's client id " +
     "(connector_clients.client_id must be its lower-case uuid text), or request.path has a shape the guard does not parse (it expects /name or /rpc/name). Roll back and report it.");
 
-  // 3. The app token cannot write, and nothing is written.
+  // 3. A write that is not listed is refused; a listed one works.
+  const closedWrite = (token) => rest(token, "POST", "rpc/create_currency", { p_code: "SMOKE", p_symbol: "S", p_decimal_places: 2 });
   const count = async () => {
     const result = await admin.from("wallets").select("id", { count: "exact", head: true }).eq("user_id", userId);
     if (result.error) throw new Error(`could not count the throwaway user's wallets: ${short(result.error.message)}`);
     return result.count;
   };
   const before = await count();
+  const refusedRpc = await closedWrite(tokens.accessToken);
+  const refusedTable = await rest(tokens.accessToken, "PATCH", "transactions?id=not.is.null", { note: "smoke" });
+  const currencies = await admin.from("currencies").select("code", { count: "exact", head: true }).eq("user_id", userId).eq("code", "SMOKE");
+  report(forbidden(refusedRpc) && forbidden(refusedTable) && currencies.count === 0,
+    `app token, writes no tool makes: POST /rest/v1/rpc/create_currency → ${describe(refusedRpc)}; PATCH /rest/v1/transactions → ${describe(refusedTable)}`,
+    "Anything but 403 connector.forbidden means the pre-request hook is NOT running and app tokens can do everything a session can (fail open). " +
+    "Set it again at once: alter role authenticator set pgrst.db_pre_request = 'public.connector_request_guard'; notify pgrst, 'reload config';");
   const write = await rest(tokens.accessToken, "POST", "rpc/create_wallet", { p_name: "Smoke wallet", p_kind: "cash", p_default_currency: "USD", p_opening_minor: 0 });
   const after = await count();
-  report(forbidden(write) && after === before, `app token: POST /rest/v1/rpc/create_wallet → ${describe(write)}; wallets ${before} → ${after}`,
-    "Anything but 403 connector.forbidden means the pre-request hook is NOT running and app tokens can write (fail open). " +
-    "Set it again at once: alter role authenticator set pgrst.db_pre_request = 'public.connector_request_guard'; notify pgrst, 'reload config';");
+  report(write.status >= 200 && write.status < 300 && after === before + 1, `app token, a listed write: POST /rest/v1/rpc/create_wallet → ${describe(write)}; wallets ${before} → ${after}`,
+    "A 403 here means the write migration (20261210000000_connector_writes.sql) is not applied or the API has not reloaded: the connector's write tools will fail. " +
+    "Apply it, then: notify pgrst, 'reload config';");
 
   // 4. GraphQL: refused for the app; an ordinary session shows whether it is exposed at all.
   const gqlSession = await graphql(session.access_token);
@@ -190,17 +201,19 @@ try {
     const next = claimsOf(refreshed.accessToken);
     const keeps = next.client_id === clientId && next.session_id === claims.session_id && next.sub === userId;
     const nextRead = await rest(refreshed.accessToken, "GET", "wallets?select=id");
-    const nextWrite = await rest(refreshed.accessToken, "POST", "rpc/create_wallet", { p_name: "Smoke wallet", p_kind: "cash", p_default_currency: "USD", p_opening_minor: 0 });
+    const nextWrite = await closedWrite(refreshed.accessToken);
     report(keeps && nextRead.status === 200 && forbidden(nextWrite),
-      `refreshed app token: client_id ${next.client_id === clientId ? "kept" : "LOST"}, session_id ${next.session_id === claims.session_id ? "kept" : "CHANGED"}; read → ${nextRead.status}; create_wallet → ${describe(nextWrite)}`,
+      `refreshed app token: client_id ${next.client_id === clientId ? "kept" : "LOST"}, session_id ${next.session_id === claims.session_id ? "kept" : "CHANGED"}; read → ${nextRead.status}; create_currency → ${describe(nextWrite)}`,
       "If client_id is lost the token looks like an ordinary session (and /mcp refuses it); if the read is 403 the session check fails after a refresh. Roll back and report it.");
   }
 
   // 6. The person removes the app: the database refuses the app's earlier token at once.
   const revoked = await person.auth.oauth.revokeGrant({ clientId });
   const afterRevoke = await rest(tokens.accessToken, "GET", "wallets?select=id");
-  report(!revoked.error && forbidden(afterRevoke), `after revokeGrant: app token GET /rest/v1/wallets → ${describe(afterRevoke)}${revoked.error ? ` (revokeGrant failed: ${short(revoked.error.message)})` : ""}`,
-    "The token still reads after the app was removed: the guard's session check is not working. Report it.");
+  const writeAfterRevoke = await rest(tokens.accessToken, "POST", "rpc/create_wallet", { p_name: "Smoke wallet 2", p_kind: "cash", p_default_currency: "USD", p_opening_minor: 0 });
+  report(!revoked.error && forbidden(afterRevoke) && forbidden(writeAfterRevoke),
+    `after revokeGrant: app token GET /rest/v1/wallets → ${describe(afterRevoke)}; POST /rest/v1/rpc/create_wallet → ${describe(writeAfterRevoke)}${revoked.error ? ` (revokeGrant failed: ${short(revoked.error.message)})` : ""}`,
+    "The token still works after the app was removed: the guard's session check is not working. Report it.");
 } catch (error) {
   failures += 1;
   console.log(`FAIL setup: ${error instanceof Error ? error.message : String(error)}`);

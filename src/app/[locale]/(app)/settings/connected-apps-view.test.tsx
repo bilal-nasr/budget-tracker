@@ -121,13 +121,12 @@ async function openSheet() {
   return screen.findByRole("dialog");
 }
 
-it("the remove sheet names the app, says it can see the budget, and the delay of up to a minute", async () => {
+it("the remove sheet names the app, says it can see or change the budget, and the delay of up to a minute", async () => {
   view({ apps: [APP] });
   const dialog = await openSheet();
-  expect(within(dialog).getByText(/will no longer be able to see your budget\./)).toBeTruthy();
+  expect(within(dialog).getByText(/will no longer be able to see or change your budget\./)).toBeTruthy();
   expect(within(dialog).getByText(copy.takesEffect)).toBeTruthy();
   expect(copy.takesEffect).toContain("a minute");
-  expect(copy.removeConfirmBody).not.toContain("change");
   expect(revoke).not.toHaveBeenCalled();
 });
 
