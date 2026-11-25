@@ -17,13 +17,14 @@
 //   2. the app token reads (GET /rest/v1/wallets → 200);
 //   3. the app token cannot make a write that is not listed (POST /rest/v1/rpc/create_currency and
 //      PATCH /rest/v1/transactions → 403 connector.forbidden), and a listed write works
-//      (POST /rest/v1/rpc/create_wallet → 200, one wallet for the throwaway user);
+//      (POST /rest/v1/connector_requests → 201, one retry key for the throwaway user; it needs
+//      no wallets or currencies, which a throwaway account may not have);
 //   4. GraphQL refuses the app token (or GraphQL is not exposed on this project);
 //   5. a refreshed app token still carries client_id and session_id and is still held to the list;
 //   6. after the person removes the app (revokeGrant), the database refuses the token.
 // The user and the app are deleted in `finally`, whatever happened. It never prints keys or tokens.
 // Exit code 0 means every check passed.
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { createClient } from "@supabase/supabase-js";
 import { claimsOf, headlessAppTokens, refreshAppTokens } from "./lib/connector-oauth.mjs";
@@ -161,8 +162,8 @@ try {
   // 3. A write that is not listed is refused; a listed one works.
   const closedWrite = (token) => rest(token, "POST", "rpc/create_currency", { p_code: "SMOKE", p_symbol: "S", p_decimal_places: 2 });
   const count = async () => {
-    const result = await admin.from("wallets").select("id", { count: "exact", head: true }).eq("user_id", userId);
-    if (result.error) throw new Error(`could not count the throwaway user's wallets: ${short(result.error.message)}`);
+    const result = await admin.from("connector_requests").select("request_id", { count: "exact", head: true }).eq("user_id", userId);
+    if (result.error) throw new Error(`could not count the throwaway user's retry keys: ${short(result.error.message)} (is 20261210000000_connector_writes.sql applied?)`);
     return result.count;
   };
   const before = await count();
@@ -173,9 +174,9 @@ try {
     `app token, writes no tool makes: POST /rest/v1/rpc/create_currency → ${describe(refusedRpc)}; PATCH /rest/v1/transactions → ${describe(refusedTable)}`,
     "Anything but 403 connector.forbidden means the pre-request hook is NOT running and app tokens can do everything a session can (fail open). " +
     "Set it again at once: alter role authenticator set pgrst.db_pre_request = 'public.connector_request_guard'; notify pgrst, 'reload config';");
-  const write = await rest(tokens.accessToken, "POST", "rpc/create_wallet", { p_name: "Smoke wallet", p_kind: "cash", p_default_currency: "USD", p_opening_minor: 0 });
+  const write = await rest(tokens.accessToken, "POST", "connector_requests", { request_id: randomUUID(), tool: "wallets_create" });
   const after = await count();
-  report(write.status >= 200 && write.status < 300 && after === before + 1, `app token, a listed write: POST /rest/v1/rpc/create_wallet → ${describe(write)}; wallets ${before} → ${after}`,
+  report(write.status >= 200 && write.status < 300 && after === before + 1, `app token, a listed write: POST /rest/v1/connector_requests → ${describe(write)}; retry keys ${before} → ${after}`,
     "A 403 here means the write migration (20261210000000_connector_writes.sql) is not applied or the API has not reloaded: the connector's write tools will fail. " +
     "Apply it, then: notify pgrst, 'reload config';");
 
