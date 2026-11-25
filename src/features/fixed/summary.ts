@@ -11,6 +11,10 @@ export type BalanceNeed = {
   unpaidMinor: number;
   /** How much the balance lacks to cover the unpaid part; 0 when it has enough. */
   shortMinor: number;
+  /** The balance right now. */
+  balanceMinor: number;
+  /** The balance once the unpaid part is paid; negative when it cannot cover it. */
+  afterMinor: number;
 };
 
 export type FixedSummary = {
@@ -60,6 +64,8 @@ export function summarizeFixed(
       totalMinor: 0,
       unpaidMinor: 0,
       shortMinor: 0,
+      balanceMinor: balance.balanceMinor,
+      afterMinor: 0,
       position: balance.position,
       balance: balance.balanceMinor,
     };
@@ -76,6 +82,8 @@ export function summarizeFixed(
       totalMinor: n.totalMinor,
       unpaidMinor: n.unpaidMinor,
       shortMinor: Math.max(0, sumMinor([n.unpaidMinor, -n.balance])),
+      balanceMinor: n.balance,
+      afterMinor: sumMinor([n.balance, -n.unpaidMinor]),
     }));
 
   const salaryWallet = salary ? balanceById(salary.balanceId) : undefined;

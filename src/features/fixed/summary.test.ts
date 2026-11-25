@@ -26,8 +26,8 @@ describe("summarizeFixed", () => {
     expect(s.total).toEqual({ USD: 47500 });
     expect(s.left).toEqual({ USD: 7500 });
     expect(s.byBalance).toEqual([
-      { balanceId: "cashUsd", currency: "USD", totalMinor: 4500, unpaidMinor: 4500, shortMinor: 0 },
-      { balanceId: "bank", currency: "USD", totalMinor: 43000, unpaidMinor: 3000, shortMinor: 0 },
+      { balanceId: "cashUsd", currency: "USD", totalMinor: 4500, unpaidMinor: 4500, shortMinor: 0, balanceMinor: 23000, afterMinor: 18500 },
+      { balanceId: "bank", currency: "USD", totalMinor: 43000, unpaidMinor: 3000, shortMinor: 0, balanceMinor: 184630, afterMinor: 181630 },
     ]);
     expect(s.salaryAfter).toEqual({ currency: "USD", minor: 132500, excludedCurrencies: [] });
   });
@@ -61,6 +61,7 @@ describe("summarizeFixed", () => {
     const poor = wallet("cashUsd", "USD", 2000, 1);
     const s = summarizeFixed(demo, (id) => (id === "cashUsd" ? poor : byId(id)), salary);
     expect(s.byBalance[0].shortMinor).toBe(2500);
+    expect(s.byBalance[0].afterMinor).toBe(-2500);
   });
 
   it("counts an installment's monthly amount on its default wallet", () => {

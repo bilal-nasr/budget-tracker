@@ -18,7 +18,7 @@ import type { Installment } from "@/features/installments/schema";
 import { deleteTransaction } from "@/features/transactions/actions";
 import { todayIn } from "@/features/transactions/group";
 import { summarizeFixed } from "@/features/fixed/summary";
-import { formatAmount } from "@/lib/money";
+import { formatAmount, sumMinor } from "@/lib/money";
 import { ExpenseBreakdown } from "@/components/transactions/expense-breakdown";
 import { useExpenseBreakdownLabels } from "@/components/add/expense-breakdown-labels";
 
@@ -82,7 +82,18 @@ export function FixedCard({
   };
 
   // Currencies are never combined.
-  const summary = summarizeFixed(items, balanceChoiceById, salary, installments, catalog.map((currency) => currency.code));
+  // Until the server refresh lands, a just-paid item is already off its balance here too.
+  const serverPaid = new Set(serverItems.filter((i) => i.paidOn !== null).map((i) => i.id));
+  const pendingByBalance = new Map<string, number>();
+  for (const i of items) {
+    if (i.paidOn !== null && !serverPaid.has(i.id)) pendingByBalance.set(i.balanceId, sumMinor([pendingByBalance.get(i.balanceId) ?? 0, i.amountMinor]));
+  }
+  const liveBalance = (id: string) => {
+    const choice = balanceChoiceById(id);
+    const paying = pendingByBalance.get(id);
+    return choice && paying ? { ...choice, balanceMinor: sumMinor([choice.balanceMinor, -paying]) } : choice;
+  };
+  const summary = summarizeFixed(items, liveBalance, salary, installments, catalog.map((currency) => currency.code));
   const left = summary.left;
   const leftCurrencies = catalog.map((currency) => currency.code).filter((c) => left[c] > 0);
   const currencies = catalog.map((currency) => currency.code).filter((c) => summary.total[c] > 0);
@@ -220,17 +231,31 @@ export function FixedCard({
               {summary.byBalance.map((need) => {
                 const w = balanceChoiceById(need.balanceId);
                 return (
-                  <li key={need.balanceId} className="flex items-baseline justify-between gap-3 text-[15px]">
-                    <span className="min-w-0 truncate"><bdi>{w?.name}</bdi></span>
-                    <span className="flex shrink-0 flex-wrap items-baseline justify-end gap-x-2 text-end">
-                      {need.shortMinor > 0 ? (
-                        <span className="flex items-center gap-1 text-[13px] text-over">
-                          <TriangleAlert aria-hidden className="size-3.5" />
-                          {t("short", { amount: formatAmount(need.shortMinor, definition(need.currency), { digits }) })}
+                  <li key={need.balanceId} className="flex flex-col text-[15px]">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate"><bdi>{w?.name}</bdi></span>
+                      <span className="flex shrink-0 flex-wrap items-baseline justify-end gap-x-2 text-end">
+                        {need.shortMinor > 0 ? (
+                          <span className="flex items-center gap-1 text-[13px] text-over">
+                            <TriangleAlert aria-hidden className="size-3.5" />
+                            {t("short", { amount: formatAmount(need.shortMinor, definition(need.currency), { digits }) })}
+                          </span>
+                        ) : null}
+                        <Amount minor={need.totalMinor} currency={need.currency} className="font-semibold" />
+                      </span>
+                    </div>
+                    <p className="flex flex-wrap gap-x-1.5 text-[13px] text-muted-foreground">
+                      <span className="whitespace-nowrap">
+                        {t("walletBalance")} <Amount minor={need.balanceMinor} currency={need.currency} className="text-foreground" />
+                      </span>
+                      {need.unpaidMinor > 0 ? (
+                        <span className="whitespace-nowrap">
+                          <span aria-hidden>· </span>
+                          {t("walletAfter")}{" "}
+                          <Amount minor={need.afterMinor} currency={need.currency} className={need.afterMinor < 0 ? "font-medium text-over" : "font-medium text-foreground"} />
                         </span>
                       ) : null}
-                      <Amount minor={need.totalMinor} currency={need.currency} className="font-semibold" />
-                    </span>
+                    </p>
                   </li>
                 );
               })}

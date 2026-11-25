@@ -853,6 +853,8 @@
     "left": "Left to pay",
     "total": "Total fixed",
     "perWallet": "Per wallet",
+    "walletBalance": "Balance",
+    "walletAfter": "after paying",
     "short": "short {amount}",
     "salaryAfter": "Salary after fixed",
     "salaryShort": "Salary short by",

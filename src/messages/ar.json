@@ -853,6 +853,8 @@
     "left": "المتبقي للدفع",
     "total": "مجموع الثابت",
     "perWallet": "حسب المحفظة",
+    "walletBalance": "الرصيد",
+    "walletAfter": "بعد الدفع",
     "short": "ينقص {amount}",
     "salaryAfter": "الراتب بعد الثابت",
     "salaryShort": "الراتب ينقص بمقدار",
